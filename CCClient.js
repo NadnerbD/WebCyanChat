@@ -481,6 +481,10 @@ function shutdown() {
 	send_cc("80");
 }
 
+function reload() {
+	send_cc("90");
+}
+
 function toggletimes() {
 	if(timestamps.checked) {
 		vis = "inline";

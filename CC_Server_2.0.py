@@ -432,30 +432,6 @@ class HTTP_Server:
 		pass
 
 class CC_Server:
-	# 0 - still bad with * inserted and leaded and ended by letters
-	# 1 - bad if standalone with no inserted chars, warnable if led or ended with letters
-	# 2 - only bad if standalone contiguous
-	# 3 - warnable only
-	# (interleaved chars, contiguous with leading/trailing chars, 
-	badWords = {\
-		"fuck": 0, \
-		"shit": 1, \
-		"bitch": 0, \
-		"cunt": 0, \
-		"anus": 2, \
-		"penis": 0, \
-		"vagina": 0, \
-		"tits": 0, \
-		"asshole": 0, \
-		"bastard": 0, \
-		"hell": 3, \
-		"slut": 0, \
-		"whore": 0, \
-		"nigger": 0, \
-		"pussy": 0, \
-		"dickhead": 1, \
-	}
-	
 	class connectionList:
 		def __init__(self, parent):
 			self.broadcastLock = threading.Lock()
@@ -661,6 +637,7 @@ class CC_Server:
 			"cc_port": 1812, \
 			"http_port": 81, \
 			"welcome_file": "CCWelcome.conf", \
+			"word_file": "BadWords.conf", \
 			"enable_bans": 0, \
 			"censor_level": 1, \
 			"debug_mode": 0, \
@@ -669,6 +646,30 @@ class CC_Server:
 			"auth_1": "huru", \
 			"auth_2": "tia", \
 		}
+		# 0 - still bad with * inserted and leaded and ended by letters
+		# 1 - bad if standalone with no inserted chars, warnable if led or ended with letters
+		# 2 - only bad if standalone contiguous
+		# 3 - warnable only
+		# (interleaved chars, contiguous with leading/trailing chars, 
+		self.badWords = {\
+			"fuck": 0, \
+			"shit": 1, \
+			"bitch": 0, \
+			"cunt": 0, \
+			"anus": 2, \
+			"penis": 0, \
+			"vagina": 0, \
+			"tits": 0, \
+			"asshole": 0, \
+			"bastard": 0, \
+			"hell": 3, \
+			"slut": 0, \
+			"whore": 0, \
+			"nigger": 0, \
+			"pussy": 0, \
+			"dickhead": 1, \
+		}
+	
 	
 	def chatServer(level=2):
 		server = CC_Server.CC_Connection(None, ('', ''))
@@ -687,6 +688,8 @@ class CC_Server:
 			if(newPrefs[pref].isdigit()):
 				newPrefs[pref] = int(newPrefs[pref])
 		self.prefs.update(newPrefs)
+		self.readWelcome()
+		self.readWordList()
 	
 	def readWelcome(self, filename=None):
 		if(not filename):
@@ -702,6 +705,17 @@ class CC_Server:
 				parts[part] = parts[part].strip()
 			welcomeParams[param] = parts
 		self.welcomeParams = welcomeParams
+
+	def readWordList(self, filename=None):
+		if(not filename):
+			filename = self.prefs["word_file"]
+		wordFile = file(filename, 'r')
+		wordData = wordFile.read()
+		wordFile.close()
+		newWords = parseToDict(wordData, ':', '\n')
+		for word in newWords:
+			newWords[word] = int(newWords[word])
+		self.badWords.update(newWords)
 	
 	def parseAuth(self):
 		authLevel = 1
@@ -880,6 +894,9 @@ class CC_Server:
 			if(connection.authLevel > 1):
 				self.connections.sendChat(self.chatServer(2), "Warning: Server is now shutting down")
 				self.quit.set()
+		elif(cmd == 90): # reload config
+			if(connection.authLevel > 1):
+				self.readPrefs()
 	
 	def handleServCmd(self, connection, msg):
 		if(msg == "?"):
@@ -1237,7 +1254,6 @@ for arg in sys.argv:
 if(serverClass):
 	Server = serverClass()
 	Server.readPrefs()
-	Server.readWelcome()
 	Server.start()
 else:
 	print "usage: python %s [%s]" % (sys.argv[0], '|'.join(serverClasses.keys()))
