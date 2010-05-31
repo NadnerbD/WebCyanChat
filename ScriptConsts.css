@@ -1,0 +1,33 @@
+/* These style rules are required (and/or modifed) by the script */
+.op {
+	visibility:hidden;
+}
+.admin {
+	visibility:hidden;
+}
+.timestamp {
+	color:#aaaaaa;
+	display:none;
+}
+/* nick colors */
+.server {
+	color:#00ff00;
+}
+.client {
+	color:#ff0000;
+}
+.cyane {
+	color:#00ffff;
+}
+.guest {
+	color:#ffc800;
+}
+.pretext {
+	color:#ff00ff;
+}
+.msg {
+	color:#aaaaaa;
+}
+.action {
+	color:#ffff00;
+}

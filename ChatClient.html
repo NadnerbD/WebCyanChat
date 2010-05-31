@@ -1,0 +1,49 @@
+<html>
+	<head>
+		<title>[CyanChat]WebCC</title>
+		<!--<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />-->
+		<link rel="stylesheet" type="text/css" href="ClientTheme.css" />
+		<link rel="stylesheet" type="text/css" href="CyanChat.css" />
+		<link rel="stylesheet" type="text/css" href="ScriptConsts.css" />
+		<script src="XmlHttpSock.js"></script>
+		<script src="CCClient.js"></script>
+	</head>
+	<body onload="init()" onfocus="disableFlash()" onblur="enableFlash()">
+		<div id="titlebar">
+			<a id="title">[CyanChat]</a><a id="green">WebCC</a>
+			<div id="nav">
+				<a href="http://nadru.servegame.org/CyanChatStats.html" class="nav">Stats</a> 
+				<a href="http://nadru.servegame.org/CyanChatSurvey.php" class="nav">Survey</a> 
+				<a href="http://nadru.servegame.org/CyanChatClients.html" class="nav">Clients</a> 
+				<a href="http://nadru.servegame.org:81/" class="nav" id="current">WebCC</a> 
+				<a href="http://ccr.mwitkowski.net" class="nav-ext">CCR</a> 
+				<a href="http://cho.cyan.com/chat" class="nav-ext">Cho</a> 
+			</div>
+		</div>
+		<div id="interface">
+			<input type="button" value="Link In" onclick="setname(textin.value);textin.value='';" />
+			<input type="button" value="Link Out" onclick="disconnect()" />
+			<input type="button" value="SendPrivate" onclick="sendprivate(wholist.value, textin.value);textin.value='';" />
+			<input type="button" value="PrivateChat" onclick="openprivate(wholist.value)" />
+			<input type="button" value="Ignore" onclick="ignoreUser(wholist.value)" />
+			<a id="connectstatusid">Browser does not support Javascript</a>
+			<input type="text" id="input" onkeypress="chatenter(event)" />
+			<span style="float:right;display:block;"><input type="checkbox" id="timestampsid" onclick="toggletimes()" style="width:1em;display:inline;" />Show Timestamps</span>
+			<div id="output">
+				<!-- output goes here -->
+			</div>
+			<select id="wholistid" size="20">
+				<!-- regular users -->
+			</select>
+			<!-- <select id="cyanlistid" size=10>
+				cyan and guests -->
+			<!-- </select> -->
+			<input type="button" value="MakeMeCyan" onclick="setmylevel(1)" class="op" style="color:#00ffff;" />
+			<input type="button" value="MakeGuest" onclick="setlevel(wholist.value, 4)" class="op" style="color:#ffc800;" />
+			<input type="button" value="MakeNormal" onclick="setlevel(wholist.value, 0)" class="op" />
+			<input type="button" value="Kick/Ban" onclick="kickuser(wholist.value)" class="op" />
+			<input type="button" value="ServMsg" onclick="servmsg(textin.value);textin.value=''" class="admin" style="color:#00ff00;" />
+			<input type="button" value="Shutdown" onclick="shutdown()" class="admin" style="color:#ff0000;" />
+		</div>
+	</body>
+</html>

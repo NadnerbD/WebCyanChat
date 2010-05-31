@@ -1,0 +1,15 @@
+<html>
+	<head>
+		<title>[CyanChat]WebCC</title>
+		<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+		<link rel="stylesheet" type="text/css" href="ClientTheme.css" />
+		<link rel="stylesheet" type="text/css" href="ScriptConsts.css" />
+                <script src="PMClient.js"></script>
+        </head>
+        <body onload="init()" onfocus="disableFlash()" onblur="enableFlash()">
+		<input type="text" id="input" onkeypress="chatenter(event)" style="width: 100%" />
+		<div id="output" style="width: 100%;">
+			<!-- output goes here -->
+		</div>
+        </body>
+</html>

@@ -1,0 +1,126 @@
+body {
+	background-color: #000000;
+	color: #FFFFFF;
+	margin: 0px;
+	padding: 0px;
+}
+div#titlebar {
+	text-align: center;
+	font-weight: bold;
+	font-family: trebuchet ms;
+	width: 100%;
+	background-color: #333333;
+	padding-bottom: 8px;
+	background: -webkit-gradient(linear, left top, left bottom, from(#151515), to(#303030));
+	background: -moz-linear-gradient(top, #151515, #303030);
+}
+a#title {
+	font-size: 32pt;
+	color: #00FFFF;
+	text-shadow: #00ffff 0px 0px 3px;
+}
+a#green {
+	font-size: 32pt;
+	color: #00FF00;
+	text-shadow: #00ff00 0px 0px 3px;
+}
+table {
+	background-color: #330000;
+	margin-top: 10px;
+	border-collapse: collapse;
+	width: 100%;
+}
+table.survey {
+	text-align: center;
+}
+td {
+	border-style: solid;
+	border-width: 3px;
+	border-color: #000000;
+}
+/* cells with a bar image must be aligned left */
+td.bar {
+	text-align:left;
+}
+div#sidebar {
+	font-family: trebuchet ms;
+	background-color: #333333;
+	text-align: left;
+	position: absolute;
+	padding-right: 30px;
+	top: 80px;
+	right: 10px;
+}
+div#container {
+	font-family: trebuchet ms;
+	position: absolute;
+	width: 600px;
+	left: 50%;
+	margin-left: -300px;
+}
+div#nav {
+	margin-top:12px;
+}
+a:link {
+	color:white;
+}
+/* visited defined first so hovers will take precedence */
+a:visited {
+	color:green;
+}
+/* override the green color */
+a.nav:visited, a.nav-ext:visited {
+	color:white;
+}
+/* get hover colors on ALL */
+a:hover, a.nav-ext:hover, a.nav:hover {
+	color:gray;
+	text-shadow: #000000 0px 0px 3px;
+}
+a.nav {
+	padding: 8px;
+	padding-left: 20px;
+	padding-right: 20px;
+	text-decoration: none;
+	background-color: #222222;
+	-moz-border-radius-topleft: 13px;
+	-moz-border-radius-topright: 13px;
+	-webkit-border-top-left-radius: 13px;
+	-webkit-border-top-right-radius: 13px;
+	background: -webkit-gradient(linear, left top, left bottom, from(#151515), to(#222222));
+	background: -moz-linear-gradient(top, #151515, #222222);
+}
+a.nav-ext {
+	padding: 4px;
+	padding-left: 20px;
+	padding-right: 20px;
+	text-decoration: none;
+	background-color: #222222;
+	-webkit-border-radius: 5px;
+	-moz-border-radius: 5px;
+	background: -webkit-gradient(linear, left top, left bottom, from(#151515), to(#222222));
+	background: -moz-linear-gradient(top, #151515, #222222);
+}
+/* this is the 'current page' link in nav */
+a#current {
+	background-color: #000000;
+	text-shadow: #ffffff 0px 0px 3px;
+	background: -webkit-gradient(linear, left top, left bottom, from(#151515), to(#000000));
+	background: -moz-linear-gradient(top, #151515, #000000);
+}
+/* our image style */
+img.thumb {
+	float: right;
+	border-width: 10px;
+	border-color: #333333;
+	border-style: solid;
+	margin-left: 10px;
+}
+img.thumb:hover {
+	border-color: #222222;
+}
+/*li {
+	background-color: #330000;
+	padding: 10px;
+	list-style-type: none;
+}*/

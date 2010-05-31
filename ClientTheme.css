@@ -1,0 +1,32 @@
+/* The interface stylesheet, not required by script */
+body {
+	background-color: black;
+	color: white;
+}
+input {
+	background-color: black;
+	color: white;
+	width: 15%;
+	float: left;
+}
+input#input {
+	width: 85%;
+}
+div#output {
+	width: 85%;
+	height: 100%;
+	overflow: auto;
+	float: left;
+	font-family: monospace;
+}
+select {
+	color: white;
+	background-color: black;
+	float: right;
+	width: 15%;
+	height: 100%;
+}
+div#interface {
+	margin: 20px;
+	height: 70%;
+}

@@ -1,0 +1,60 @@
+<html>
+	<head>
+		<title>[CyanChat]WebTIA</title>
+		<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+		<link rel="stylesheet" type="text/css" href="TIAClientTheme.css" />
+		<link rel="stylesheet" type="text/css" href="CyanChat.css" />
+		<link rel="stylesheet" type="text/css" href="ScriptConsts.css" />
+		<script src="XmlHttpSock.js"></script>
+		<script src="TIAClient.js"></script>
+	</head>
+	<body onload="init()" onfocus="disableFlash()" onblur="enableFlash()">
+		<div id="titlebar">
+			<!--<a id="title">[CyanChat]</a><a id="green">WebTIA</a>-->
+			<div id="nav">
+				<a href="#" onclick="showChatMap(event, 1)" class="nav admin">Chat</a>  
+				<a href="#" onclick="showChatMap(event, 0)" class="nav" id="current">Map</a> 
+				<a href="#" class="nav-ext">Wiki</a> 
+			</div>
+		</div>
+		<div id="interface">
+			<input type="button" value="Link In" onclick="setname(textin.value);textin.value='';" />
+			<input type="button" value="Link Out" onclick="disconnect()" />
+			<input type="button" value="SendPrivate" onclick="sendprivate(wholist.value, textin.value);textin.value='';" />
+			<input type="button" value="PrivateChat" onclick="openprivate(wholist.value)" />
+			<input type="button" value="Ignore" onclick="ignoreUser(wholist.value)" />
+			<a id="connectstatusid">Browser does not support Javascript</a>
+			<input type="text" id="input" onkeypress="chatenter(event)" />
+			<span style="float:right;display:block;"><input type="checkbox" id="timestampsid" onclick="toggletimes()" style="width:1em;display:inline;" />Show Timestamps</span>
+			<div id="output" class="showchat">
+				<!-- output goes here -->
+			</div>
+			<div id="mappane" class="showmap">
+				<div id="tilemap">
+					<!-- tilemap goes here -->
+				</div>
+				<!-- entities go here -->
+			</div>
+			<select id="wholistid" size="20">
+				<!-- regular users -->
+			</select>
+			<select id="imgpalette" size="20" class="op">
+				<!-- list of available tile images goes here -->
+			</select>
+			<!-- <select id="cyanlistid" size=10>
+				cyan and guests -->
+			<!-- </select> -->
+			<input type="button" value="MakeMeCyan" onclick="setmylevel(1)" class="op" style="color:#00ffff;" />
+			<input type="button" value="MakeGuest" onclick="setlevel(wholist.value, 4)" class="op" style="color:#ffc800;" />
+			<input type="button" value="MakeNormal" onclick="setlevel(wholist.value, 0)" class="op" />
+			<input type="button" value="Kick/Ban" onclick="kickuser(wholist.value)" class="op" />
+			<input type="button" value="ServMsg" onclick="servmsg(textin.value);textin.value=''" class="admin" style="color:#00ff00;" />
+			<input type="button" value="Shutdown" onclick="shutdown()" class="admin" style="color:#ff0000;" />
+			<iframe name="tile-upload-frame" style="display: none;"></iframe>
+			<form action="/file-upload" target="tile-upload-frame" accept-charset="utf-8" method="post" enctype="multipart/form-data" class="admin" id="uploadForm">
+				<input type="file" size="10" name="tile-data"/>
+				<input type="submit" name="submit" value="upload"/>
+			</form>
+		</div>
+	</body>
+</html>

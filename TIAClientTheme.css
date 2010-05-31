@@ -1,0 +1,61 @@
+/* The interface stylesheet, not required by script */
+body {
+	background-color: black;
+	color: white;
+}
+input {
+	background-color: black;
+	color: white;
+	width: 15%;
+	float: left;
+}
+input#input {
+	width: 85%;
+}
+div#nav {
+	margin-top: 0px !important;
+	padding-top: 20px;
+}
+div#output {
+	width: 85%;
+	height: 100%;
+	overflow: scroll;
+	float: left;
+	font-family: monospace;
+}
+div#mappane {
+	width: 85%;
+	height: 100%;
+	overflow: hidden;
+	float: left;
+	position: relative;
+}
+div#tilemap {
+	margin: 0px;
+	padding: 0px;
+	border-width: 0px;
+	position: absolute;
+}
+img.mapimg {
+	position: absolute;
+	border-width: 0px;
+	height: 64px;
+	width: 64px;
+}
+select {
+	color: white;
+	background-color: black;
+	float: right;
+	width: 15%;
+	height: 50%;
+}
+div#interface {
+	margin: 20px;
+	height: 70%;
+}
+.showchat {
+	display: none;
+}
+.showmap {
+	display: block;
+}
