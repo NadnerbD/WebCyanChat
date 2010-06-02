@@ -678,6 +678,7 @@ class CC_Server:
 	chatServer = staticmethod(chatServer)
 	
 	def readPrefs(self, filename="CCServer.conf"):
+		global logging
 		log(self, "reading %s" % filename)
 		prefsFile = file(filename, 'r')
 		prefsData = prefsFile.read()
@@ -687,6 +688,8 @@ class CC_Server:
 			newPrefs[pref] = newPrefs[pref].strip()
 			if(newPrefs[pref].isdigit()):
 				newPrefs[pref] = int(newPrefs[pref])
+			if(pref == "log_level"):
+				logging = newPrefs.pop(pref)
 		self.prefs.update(newPrefs)
 		self.readWelcome()
 		self.readWordList()
