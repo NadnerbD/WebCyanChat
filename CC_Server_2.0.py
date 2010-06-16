@@ -1,8 +1,14 @@
 from cStringIO import *
 import socket
 import threading
+import struct
 import time
 import sys
+
+try:
+	import hashlib
+except:
+	import md5 as hashlib
 
 # Logging level reference
 # 0: Chat and join/leave messages only
@@ -318,8 +324,8 @@ class HTTP_Server:
 			sock.send("%s: %s\r\n" % header)
 		for key in headers:
 			sock.send("%s: %s\r\n" % (key, headers[key]))
-		#if(body):
-		sock.send("\r\n%s" % body)
+		if(body):
+			sock.send("\r\n%s" % body)
 	writeHTTP = staticmethod(writeHTTP)
 
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions):
@@ -342,19 +348,59 @@ class HTTP_Server:
 		else:
 			mimeType = "application/octet-stream"
 		if(method == "GET" and resource == "/web-socket"):
-			responseHeaders = [ \
-				("Upgrade", "WebSocket"), \
-				("Connection", "Upgrade"), \
-				("WebSocket-Origin", headers["Origin"]), \
-				("WebSocket-Location", "ws://%s/web-socket" % headers["Host"]), \
-			]
-			if(headers.has_key("WebSocket-Protocol")):
-				responseHeaders.append(("WebSocket-Protocol", headers["WebSocket-Protocol"]))
-			log(self, "got WebSocket from (%s, %s)" % addr, 3)
-			self.writeHTTP(sock, 101, {}, None, responseHeaders)
-			self.sessionAcceptQueue.insert((self.WebSocket(sock), addr))
-			# now get out of the socket loop and let the cc server take over
-			raise Exception
+			if(headers.has_key("WebSocket-Protocol")): # protocol draft 75
+				responseHeaders = [ \
+					("Upgrade", "WebSocket"), \
+					("Connection", "Upgrade"), \
+					("WebSocket-Origin", headers["Origin"]), \
+					("WebSocket-Location", "ws://%s/web-socket" % headers["Host"]), \
+					("WebSocket-Protocol", headers["WebSocket-Protocol"]), \
+				]
+				log(self, "got WebSocket from (%s, %s)" % addr, 3)
+				self.writeHTTP(sock, 101, {}, None, responseHeaders)
+				sock.send("\r\n")
+				self.sessionAcceptQueue.insert((self.WebSocket(sock), addr))
+				# now get out of the socket loop and let the cc server take over
+				raise Exception
+			elif(headers.has_key("Sec-WebSocket-Protocol")): # protocol draft 76
+				responseHeaders = [ \
+					("Upgrade", "WebSocket"), \
+					("Connection", "Upgrade"), \
+					("Sec-WebSocket-Origin", headers["Origin"]), \
+					("Sec-WebSocket-Location", "ws://%s/web-socket" % headers["Host"]), \
+					("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+				]
+				# now we have to figure out the key
+				Value1 = 0
+				Spaces1 = 0
+				for char in headers["Sec-WebSocket-Key1"]:
+					if(char.isdigit()):
+						Value1 *= 10
+						Value1 += int(char)
+					elif(char == ' '):
+						Spaces1 += 1
+				Value1 /= Spaces1
+				Value2 = 0
+				Spaces2 = 0
+				for char in headers["Sec-WebSocket-Key2"]:
+					if(char.isdigit()):
+						Value2 *= 10
+						Value2 += int(char)
+					elif(char == ' '):
+						Spaces2 += 1
+				Value2 /= Spaces2
+				Value3 = sock.recv(8)
+				# finish the handshake
+				log(self, "got Sec-WebSocket from (%s, %s)" % addr, 3)
+				self.writeHTTP(sock, 101, {}, None, responseHeaders)
+				sock.send("\r\n" + hashlib.md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
+				self.sessionAcceptQueue.insert((self.WebSocket(sock), addr))
+				# now get out of the socket loop and let the cc server take over
+				raise Exception
+			else:
+				self.writeHTTP(sock, 400) #Bad Request
+				log(self, "bad websocket request from %s" % addr, 3);
+				return
 		elif(method == "GET"):
 			try:
 				resourceFile = file(".%s" % resource, "rb")
