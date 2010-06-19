@@ -470,6 +470,9 @@ class HTTP_Server:
 			except IOError:
 				log(self, "socket closed (%s, %s)" % addr, 3)
 				return
+			except Exception:
+				log(self, "WebSocket passed as session", 3)
+				return
 			log(self, "%s %s from (%s, %s)" % (method, resource, addr[0], addr[1]), 3)
 			self.handleReq(sock, addr, method, resource, protocol, headers, body, getOptions)
 	
@@ -1046,15 +1049,17 @@ class CC_Relay(CC_Server):
 		def insert(self, connection):
 			CC_Server.connectionList.insert(self, connection)
 			connection.relaySock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			if 1: #try:
+			try: #try:
 				connection.relaySock.connect((self.parent.prefs["relay_addr"], self.parent.prefs["relay_port"]))
 				connection.connectEvent.set()
 				relayRecvThread = threading.Thread(None, self.parent.relayRecvLoop, "relayRecvLoop", (connection,))
 				relayRecvThread.setDaemon(1)
 				relayRecvThread.start()
-			else: #except Exception as error:
-				print error
+			except: #except Exception as error:
+				#print error
 				log(self, "error connecting to relay target %s" % self.parent.prefs["relay_addr"], 2)
+				self.sendPM(CC_Server.chatServer(3), connection, "Error connecting to relay target", 1)
+				connection.connectEvent.set() #allow the loop to run, but it will throw errors on every forward
 		
 		def sendUserList(self):
 			pass
@@ -1157,7 +1162,7 @@ class CC_Relay(CC_Server):
 	
 	def handleMsg(self, connection, cmd, msg):
 		if(connection.status == 2 and cmd != 40):
-			self.connections.sendPM(self.chatServer(3), connection, "Access denied.", 1)
+			self.connections.sendPM(CC_Server.chatServer(3), connection, "Access denied.", 1)
 		elif(cmd == 40): # announce
 			connection.version = int(msg)
 			if(connection.status == 2):
