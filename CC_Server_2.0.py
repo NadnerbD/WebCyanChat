@@ -454,7 +454,12 @@ class HTTP_Server:
 	
 	def acceptLoop(self, port=80): #Threaded per-server
 		listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		listener.bind(('', port))
+		try:
+			listener.bind(('', port))
+		except:
+			log(self, "failed to bind port %d" % port)
+			self.quit.set()
+			return
 		log(self, "listening on port %d" % port)
 		while 1:
 			listener.listen(1)
@@ -822,7 +827,12 @@ class CC_Server:
 	
 	def acceptLoop(self, port=1812): #Threaded per-server
 		listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		listener.bind(('', port))
+		try:
+			listener.bind(('', port))
+		except:
+			log(self, "failed to bind port %d" % port)
+			self.quit.set()
+			return
 		log(self, "listening on port %d" % port)
 		while 1:
 			listener.listen(1)
