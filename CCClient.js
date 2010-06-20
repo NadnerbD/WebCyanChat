@@ -17,6 +17,7 @@ var flashstate = 0;
 var title = "[CyanChat]WebCC";
 var ignoreList = [];
 var level = 0;
+var authKey = "";
 var lastPMWindowOpenUser = "";
 
 function init() {
@@ -183,7 +184,8 @@ function recv_cc(line) {
 			break;
 			case "13":
 				// the auth acceptance message
-				level = parseInt(line.split("|")[1]);
+				level = parseInt(pipelist[1]);
+				authKey = pipelist[2];
 				if(level > 1) {
 					changeRule(".admin", "visibility", "visible");
 					changeRule(".op", "visibility", "visible");

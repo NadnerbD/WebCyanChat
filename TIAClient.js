@@ -17,6 +17,7 @@ var flashstate = 0;
 var title = "[CyanChat]WebCC";
 var ignoreList = [];
 var level = 0;
+var authKey = "";
 var lastPMWindowOpenUser = "";
 var imgurls = [];
 var players = [];
@@ -513,7 +514,8 @@ function recv_cc(line) {
 			break;
 			case "13":
 				// the auth acceptance message
-				level = parseInt(line.split("|")[1]);
+				level = parseInt(pipelist[1]);
+				authKey = pipelist[2];
 				if(level > 1) {
 					changeRule(".admin", "visibility", "visible");
 					changeRule(".op", "visibility", "visible");
@@ -525,7 +527,7 @@ function recv_cc(line) {
 					changeRule(".op", "visibility", "hidden");
 				}
 				refreshGUIUserList(userstring);
-				document.getElementById("uploadForm").action = "/file-upload?sid=" + sid
+				document.getElementById("uploadForm").action = "/file-upload?authkey=" + authKey;
 			break;
 			default:
 				addTextOut("ChatServer", 2, line, "1");

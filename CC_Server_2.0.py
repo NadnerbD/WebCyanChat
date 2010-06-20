@@ -1,6 +1,7 @@
 from cStringIO import *
 import socket
 import threading
+import random
 import struct
 import time
 import sys
@@ -153,7 +154,6 @@ class HTTP_Server:
 			self.recvLock = threading.Lock()
 			self.sendLock = threading.Lock()
 			self.waitLock = threading.Event()
-			self.authLevel = 0
 			self.sendBuffer = StringIO()
 			self.recvBuffer = StringIO()
 			self.sendSock = None
@@ -274,7 +274,7 @@ class HTTP_Server:
 		self.sessionAcceptQueue = self.acceptQueue()
 		self.redirects = dict()
 	
-	def readHTTP(sock):
+	def readHTTP(self, sock):
 		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
 		if(not data):
 			raise IOError
@@ -293,12 +293,12 @@ class HTTP_Server:
 				body += sock.recv(int(headers["Content-Length"]) - len(body))
 		if(headers.has_key("Content-Type") and headers["Content-Type"].startswith("multipart/form-data")):
 			formHeaders = parseToDict(headers["Content-Type"], '=', "; ")
-			log(None, "multipart/form-data boundary: %s" % formHeaders["boundary"], 3)
+			log(self, "multipart/form-data boundary: %s" % formHeaders["boundary"], 3)
 			if(body):
-				log(None, "Nice client gave us a Content-Length: %s" % headers["Content-Length"], 3)
+				log(self, "Nice client gave us a Content-Length: %s" % headers["Content-Length"], 3)
 			else:# didn't send us a goddamn Content-Length
 				body = readTo(sock, "--%s--" % formHeaders["boundary"], [])
-				log(None, "No Content-Length, read multipart from sock using boundary, length: %d" % len(formData), 3)
+				log(self, "No Content-Length, read multipart from sock using boundary, length: %d" % len(formData), 3)
 			body = body.split("--%s" % formHeaders["boundary"])[1:-1]
 			output = list()
 			for data in body:
@@ -309,7 +309,6 @@ class HTTP_Server:
 				output.append({"headers": dataHeaders, "data": data})
 			body = output
 		return (method, resource, protocol, headers, body, getOptions)
-	readHTTP = staticmethod(readHTTP)
 		
 	def writeHTTP(sock, code, headers={}, body=None, orderedHeaders=[]):
 		if(not body and HTTP_Server.defaultResponseData.has_key(code)):
@@ -361,7 +360,7 @@ class HTTP_Server:
 				sock.send("\r\n")
 				self.sessionAcceptQueue.insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
-				raise Exception
+				raise self.WebSocket(None)
 			elif(headers.has_key("Sec-WebSocket-Protocol")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
@@ -396,10 +395,10 @@ class HTTP_Server:
 				sock.send("\r\n" + hashlib.md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
 				self.sessionAcceptQueue.insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
-				raise Exception
+				raise self.WebSocket(None)
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
-				log(self, "bad websocket request from %s" % addr, 3);
+				log(self, "bad websocket request from (%s, %s)" % addr, 3);
 				return
 		elif(method == "GET"):
 			try:
@@ -413,23 +412,22 @@ class HTTP_Server:
 			self.writeHTTP(sock, 200, {"Content-Type": mimeType}, resourceData)
 			log(self, "served %s" % resource, 3)
 		elif(method == "POST" and resource == "/file-upload"):
-			if(getOptions.has_key("sid") and self.sessionList.findBySID(getOptions["sid"])):
-				log(self, "attempted file upload from: %s" % getOptions["sid"], 3)
-				if(self.sessionList.findBySID(getOptions["sid"]).authLevel > 1):
-					log(self, "file upload authorized, looking for file", 3)
-					for part in body:
-						if(part["headers"]["Content-Disposition"].has_key("filename")):
-							filename = part["headers"]["Content-Disposition"]["filename"]
-							newFileURI = "images/%s" % filename[1:-1] # filename is quoted
-							outputFile = file(newFileURI, "wb")
-							outputFile.write(part["data"])
-							outputFile.close()
-							log(self, "sucessfully uploaded file: %s" % filename, 3)
-							self.writeHTTP(sock, 201, {}, newFileURI)
-							self.fileUploaded(newFileURI)
-							return
-				log(self, "upload denied, session does not have sufficient authLevel: %s" % self.sessionList.findBySID(getOptions["sid"]).authLevel, 3)
-			self.writeHTTP(sock, 403)
+			if(getOptions.has_key("authkey") and self.isAuthorized(getOptions["authkey"])):
+				log(self, "authorized file upload from (%s, %s), looking for file" % addr, 3)
+				for part in body:
+					if(part["headers"]["Content-Disposition"].has_key("filename")):
+						filename = part["headers"]["Content-Disposition"]["filename"]
+						newFileURI = "images/%s" % filename[1:-1] # filename is quoted
+						outputFile = file(newFileURI, "wb")
+						outputFile.write(part["data"])
+						outputFile.close()
+						log(self, "sucessfully uploaded file: %s" % filename, 3)
+						self.writeHTTP(sock, 201, {}, newFileURI)
+						self.fileUploaded(newFileURI)
+						return
+			else:
+				log(self, "unauthorized upload attempt from (%s, %s)" % addr, 3)
+				self.writeHTTP(sock, 403)
 		elif(method == "POST" and resource == "/chat-data"):
 			if(getOptions.has_key("sid") and getOptions.has_key("action")):
 				if(getOptions["sid"] == "0"):
@@ -458,7 +456,6 @@ class HTTP_Server:
 			listener.bind(('', port))
 		except:
 			log(self, "failed to bind port %d" % port)
-			self.quit.set()
 			return
 		log(self, "listening on port %d" % port)
 		while 1:
@@ -475,15 +472,20 @@ class HTTP_Server:
 			except IOError:
 				log(self, "socket closed (%s, %s)" % addr, 3)
 				return
-			except Exception:
+			log(self, "%s %s from (%s, %s)" % (method, resource, addr[0], addr[1]), 3)
+			try:
+				self.handleReq(sock, addr, method, resource, protocol, headers, body, getOptions)
+			except self.WebSocket:
 				log(self, "WebSocket passed as session", 3)
 				return
-			log(self, "%s %s from (%s, %s)" % (method, resource, addr[0], addr[1]), 3)
-			self.handleReq(sock, addr, method, resource, protocol, headers, body, getOptions)
 	
 	def fileUploaded(self, filename):
 		# this is an event handler to be overloaded by subclasses who actually care if this happens
 		pass
+
+	def isAuthorized(self, authKey):
+		# this is used to check for file upload authoriziation should be overloaded by subclasses
+		return False
 
 class CC_Server:
 	class connectionList:
@@ -636,6 +638,7 @@ class CC_Server:
 			self.named = 0
 			self.version = 0 # client version
 			self.authLevel = 0
+			self.authKey = str()
 		
 		def __repr__(self):
 			return "[%s] (%s, %s)" % (self.name, self.addr[0], self.addr[1])
@@ -700,16 +703,16 @@ class CC_Server:
 			"auth_1": "huru", \
 			"auth_2": "tia", \
 		}
-		# 0 - still bad with * inserted and leaded and ended by letters
-		# 1 - bad if standalone with no inserted chars, warnable if led or ended with letters
-		# 2 - only bad if standalone contiguous
-		# 3 - warnable only
-		# (interleaved chars, contiguous with leading/trailing chars, 
+		# dict levels
+		# 0 - still bad with * inserted and leaded and ended by letters ("fuck", "fluck", "pairofducks")
+		# 1 - bad if standalone with no inserted chars, warnable if led or ended with letters ("shit" kills, but "shits" warns)
+		# 2 - bad if standalone with no inserted chars (ie "cunt" but not "count")
+		# 3 - warnable if standalone with no inserted chars (ie "hell" but not "hello")
 		self.badWords = {\
 			"fuck": 0, \
 			"shit": 1, \
 			"bitch": 0, \
-			"cunt": 0, \
+			"cunt": 1, \
 			"anus": 2, \
 			"penis": 0, \
 			"vagina": 0, \
@@ -839,10 +842,18 @@ class CC_Server:
 			(sock, addr) = listener.accept()
 			self.addConnection(sock, addr)
 	
+	def watchHTTP(self):
+		self.HTTPServThread.join()
+		log(self, "HTTP server thread terminated")
+		self.quit.set() #Terminate the server if the HTTP server dies
+
 	def acceptHTTP(self, port=81): #Threaded per-server
 		self.HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (port,))
 		self.HTTPServThread.setDaemon(1)
 		self.HTTPServThread.start()
+		self.HTTPWatchdogThread = threading.Thread(None, self.watchHTTP, "HTTPWatchdogThread", ())
+		self.HTTPWatchdogThread.setDaemon(1)
+		self.HTTPWatchdogThread.start()
 		while 1:
 			(sock, addr) = self.HTTPServ.sessionAcceptQueue.acceptHTTPSession()
 			self.addConnection(sock, addr)
@@ -926,9 +937,8 @@ class CC_Server:
 		if(cmd == 12): # auth
 			if(self.authDict.has_key(msg)):
 				connection.authLevel = self.authDict[msg]
-				if(hasattr(connection.sock, 'authLevel')):
-					connection.sock.authLevel = connection.authLevel
-				connection.send("13|%d" % connection.authLevel)
+				connection.authKey = hex(random.randint(0, 0x7FFFFFFF))[2:]
+				connection.send("13|%d|%s" % (connection.authLevel, connection.authKey))
 			else:
 				log(self, "invalid password %s attempted by %s" % (msg, connection), 2)
 				self.connections.kick(connection)
@@ -993,10 +1003,10 @@ class CC_Server:
 	
 	def censor(self, line):
 		# dict levels
-		# 0 - still bad with * inserted and leaded and ended by letters
-		# 1 - bad if standalone with no inserted chars, warnable if led or ended with letters
-		# 2 - only bad if standalone contiguous
-		# 3 - warnable only
+		# 0 - still bad with * inserted and leaded and ended by letters ("fuck", "fluck", "pairofducks")
+		# 1 - bad if standalone with no inserted chars, warnable if led or ended with letters ("shit" kills, but "shits" warns)
+		# 2 - bad if standalone with no inserted chars (ie "cunt" but not "count")
+		# 3 - warnable if standalone with no inserted chars (ie "hell" but not "hello")
 		matches = []
 		for key in self.badWords:
 			for startIndex in range(len(line)):
@@ -1004,7 +1014,7 @@ class CC_Server:
 				matchChars = 0
 				endIndex = startIndex
 				while nonMatchChars < 2 and matchChars < len(key) and endIndex < len(line):
-					if(line[endIndex] == key[matchChars]):
+					if(line[endIndex].lower() == key[matchChars].lower()):
 						matchChars += 1
 					elif(startIndex == endIndex):
 						break
@@ -1012,24 +1022,30 @@ class CC_Server:
 						nonMatchChars += 1
 					endIndex += 1
 				if(matchChars == len(key)):
+					# we have a match, find out if it has leading or trailing chars
+					lead = ' '
+					if(startIndex - 1 >= 0):
+						lead = line[startIndex - 1]
+					trail = ' '
+					if(endIndex < len(line)):
+						trail = line[endIndex]
+					ltchars = False
+					if(lead != ' ' or trail != ' '):
+						ltchars = True
+					# now we have all our data, let's determine what to do about it
+					# matches format: [start, end, warn]
 					if(self.badWords[key] == 0):
-						# start, end, warn
 						matches.append([startIndex, endIndex, 0])
-					else:
-						if(startIndex - 1 >= 0):
-							lead = line[startIndex - 1]
-						else:
-							lead = ' '
-						if(endIndex + 1 < len(line)):
-							trail = line[endIndex + 1]
-						else:
-							trail = ' '
-						if(nonMatchChars == 0 and lead == ' ' and trail == ' '):
-							if(self.badWords[key] == 3):
-								matches.append([startIndex, endIndex, 1])
-							else:
-								matches.append([startIndex, endIndex, 0])
-						elif(nonMatchChars == 0 and not self.badWords[key] == 2):
+					elif(self.badWords[key] == 1):
+						if(nonMatchChars == 0 and ltchars == False):
+							matches.append([startIndex, endIndex, 0])
+						elif(nonMatchChars == 0):
+							matches.append([startIndex, endIndex, 1])
+					elif(self.badWords[key] == 2):
+						if(nonMatchChars == 0 and ltchars == False):
+							matches.append([startIndex, endIndex, 0])
+					elif(self.badWords[key] == 3):
+						if(nonMatchChars == 0 and ltchars == False):
 							matches.append([startIndex, endIndex, 1])
 		# censor levels
 		# 0 - no censor (unless in relay mode, then switch to 1)
@@ -1038,7 +1054,6 @@ class CC_Server:
 		# 3 - kick/ban (unless in relay mode, then switch to 2)
 		if(self.prefs["censor_level"] == 1):
 			for match in matches:
-				print match
 				fill = ''
 				for i in range(match[1] - match[0]):
 					fill += '*'
@@ -1059,7 +1074,7 @@ class CC_Relay(CC_Server):
 		def insert(self, connection):
 			CC_Server.connectionList.insert(self, connection)
 			connection.relaySock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			try: #try:
+			try:
 				connection.relaySock.connect((self.parent.prefs["relay_addr"], self.parent.prefs["relay_port"]))
 				connection.connectEvent.set()
 				relayRecvThread = threading.Thread(None, self.parent.relayRecvLoop, "relayRecvLoop", (connection,))
@@ -1240,6 +1255,7 @@ class TIA_Server(CC_Server):
 		self.tileGrid = list()
 		self.imageList = list()
 		self.HTTPServ.redirects['/'] = "TIAClient.html"
+		self.HTTPServ.isAuthorized = self.checkAuthKey
 		self.HTTPServ.fileUploaded = self.addNewTile
 		tiaPrefs = { \
 			"grid_filename": "tileGrid.dat", \
@@ -1300,6 +1316,13 @@ class TIA_Server(CC_Server):
 		imgsOut.write('\n'.join(self.imageList))
 		imgsOut.close()
 		self.connections.sendChat(self.chatServer(2), "tileImgList|%d|%s" % (len(self.imageList), '|'.join(self.imageList)))
+
+	def checkAuthKey(self, authKey):
+		log(self, "checking authkey: %s" % authKey, 3)
+		for connection in self.connections.connections:
+			if(connection.authKey != "" and connection.authKey == authKey):
+				return True
+		return False	
 		
 	def updateGridFile(self):
 		gridOut = file(self.prefs["grid_filename"], 'w')
