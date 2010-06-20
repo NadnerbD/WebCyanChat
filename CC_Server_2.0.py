@@ -416,8 +416,12 @@ class HTTP_Server:
 				log(self, "authorized file upload from (%s, %s), looking for file" % addr, 3)
 				for part in body:
 					if(part["headers"]["Content-Disposition"].has_key("filename")):
-						filename = part["headers"]["Content-Disposition"]["filename"]
-						newFileURI = "images/%s" % filename[1:-1] # filename is quoted
+						filename = part["headers"]["Content-Disposition"]["filename"][1:-1] # filename is quoted
+						if(filename == ""):
+							log(self, "empty filename", 3)
+							self.writeHTTP(sock, 400, {}, "empty filename")
+							return
+						newFileURI = "images/%s" % filename
 						outputFile = file(newFileURI, "wb")
 						outputFile.write(part["data"])
 						outputFile.close()
@@ -425,6 +429,8 @@ class HTTP_Server:
 						self.writeHTTP(sock, 201, {}, newFileURI)
 						self.fileUploaded(newFileURI)
 						return
+				log(self, "no file found", 3)
+				self.writeHTTP(sock, 400, {}, "no file in post")
 			else:
 				log(self, "unauthorized upload attempt from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 403)
