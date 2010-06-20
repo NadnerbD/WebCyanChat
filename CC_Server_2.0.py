@@ -412,7 +412,7 @@ class HTTP_Server:
 			self.writeHTTP(sock, 200, {"Content-Type": mimeType}, resourceData)
 			log(self, "served %s" % resource, 3)
 		elif(method == "POST" and resource == "/file-upload"):
-			if(getOptions.has_key("authkey") and self.isAuthorized(getOptions["authkey"])):
+			if(getOptions.has_key("authkey") and self.isAuthorized(getOptions["authkey"]) > 1):
 				log(self, "authorized file upload from (%s, %s), looking for file" % addr, 3)
 				for part in body:
 					if(part["headers"]["Content-Disposition"].has_key("filename")):
@@ -595,6 +595,13 @@ class CC_Server:
 			connection.name = str(level) + connection.name[1:]
 			self.sendUserList()
 			self.accessLock.release()
+		
+		def checkAuthKey(self, authKey):
+			log(self, "checking authkey: %s" % authKey, 3)
+			for connection in self.connections:
+				if(connection.authKey != "" and connection.authKey == authKey):
+					return connection.authLevel
+			return 0
 		
 		def kick(self, target):
 			if(target.authLevel < 2):
@@ -1255,7 +1262,7 @@ class TIA_Server(CC_Server):
 		self.tileGrid = list()
 		self.imageList = list()
 		self.HTTPServ.redirects['/'] = "TIAClient.html"
-		self.HTTPServ.isAuthorized = self.checkAuthKey
+		self.HTTPServ.isAuthorized = self.connections.checkAuthKey
 		self.HTTPServ.fileUploaded = self.addNewTile
 		tiaPrefs = { \
 			"grid_filename": "tileGrid.dat", \
@@ -1317,13 +1324,6 @@ class TIA_Server(CC_Server):
 		imgsOut.close()
 		self.connections.sendChat(self.chatServer(2), "tileImgList|%d|%s" % (len(self.imageList), '|'.join(self.imageList)))
 
-	def checkAuthKey(self, authKey):
-		log(self, "checking authkey: %s" % authKey, 3)
-		for connection in self.connections.connections:
-			if(connection.authKey != "" and connection.authKey == authKey):
-				return True
-		return False	
-		
 	def updateGridFile(self):
 		gridOut = file(self.prefs["grid_filename"], 'w')
 		gridOut.write('|'.join(self.tileGrid))
