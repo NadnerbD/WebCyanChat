@@ -1,6 +1,6 @@
 // this uses long-polling to simulate a WebSocket if one is not available
 
-function XmlHttpSock(server_url) {
+function XmlHttpSock(server_url, protocol) {
 	var sid = "0"; // session id, identifies us to the server
 	var xmlhttp_recv; // always held open, occasionally pinged
 	var xmlhttp_send; // only used when sending messages
@@ -34,7 +34,7 @@ function XmlHttpSock(server_url) {
 			self.onclose();
 		}
 		xmlhttp_recv.onreadystatechange = recv_xml;
-		xmlhttp_recv.open("POST", server_url + "?sid=" + sid + "&action=recv", true);
+		xmlhttp_recv.open("POST", server_url + "?sid=" + sid + "&protocol=" + protocol + "&action=recv", true);
 		xmlhttp_recv.send(sdata);
 	}
 	
@@ -49,7 +49,7 @@ function XmlHttpSock(server_url) {
 			self.onclose();
 		}
 		xmlhttp_send.onreadystatechange = recv_ack;
-		xmlhttp_send.open("POST", server_url + "?sid=" + sid + "&action=send", true);
+		xmlhttp_send.open("POST", server_url + "?sid=" + sid + "&protocol=" + protocol + "&action=send", true);
 		xmlhttp_send.send(sdata);
 	}
 	

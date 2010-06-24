@@ -65,7 +65,7 @@ function connect() {
 	if(window.WebSocket) {
 		connection = new WebSocket("ws://" + window.location.host + "/web-socket", "cyanchat");
 	}else{
-		connection = new XmlHttpSock("/chat-data");
+		connection = new XmlHttpSock("/chat-data", "cyanchat");
 	}
 	connection.onopen = function () {
 		// update the notifications
