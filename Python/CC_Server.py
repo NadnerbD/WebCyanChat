@@ -273,7 +273,7 @@ class CC_Server:
 			if(newPrefs[pref].isdigit()):
 				newPrefs[pref] = int(newPrefs[pref])
 			if(pref == "log_level"):
-				logging = newPrefs.pop(pref)
+				logging = int(newPrefs[pref])
 		self.prefs.update(newPrefs)
 		self.readWelcome()
 		self.readWordList()
