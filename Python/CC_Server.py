@@ -465,7 +465,7 @@ class CC_Server:
 		if(cmd == 12): # auth
 			if(self.authDict.has_key(msg)):
 				connection.authLevel = self.authDict[msg]
-				connection.authKey = hex(random.randint(0, 0x7FFFFFFF))[2:]
+				connection.authKey = hex(random.randint(0, 0x7FFFFFFE))[2:]
 				connection.send("13|%d|%s" % (connection.authLevel, connection.authKey))
 			else:
 				log(self, "invalid password %s attempted by %s" % (msg, connection), 2)

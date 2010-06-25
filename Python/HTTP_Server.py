@@ -3,6 +3,10 @@ from Utils import *
 
 import socket
 import time
+try:
+	import hashlib
+except:
+	import md5 as hashlib
 
 class HTTP_Server:
 	statusCodes = { \
