@@ -2,6 +2,7 @@ from Logger import *
 from Utils import *
 
 import socket
+import struct
 import time
 try:
 	import hashlib
