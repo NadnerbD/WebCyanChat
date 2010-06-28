@@ -38,6 +38,30 @@ class IRC_Server:
 				out += " :%s" % self.trail
 			return out
 
+		def __repr__(self):
+			return self.toString()
+
+	class IRC_Flags:
+		def __init__(self, flagstring=""):
+			self.flags = list()
+			for flag in flagstring:
+				if(not flag in self.flags):
+					self.flags.append(flag)
+
+		def change(self, changestring):
+			for flag in changestring[1:]:
+				if(changestring[0] == "+"):
+					if(not flag in self.flags):
+						self.flags.append(flag)
+				elif(changestring[0] == "-"):
+					if(flag in self.flags):	
+						self.flags.remove(flag)
+
+		def __repr__(self):
+			return "+%s" % ''.join(self.flags)
+
+		def __contains__(self, flag):
+			return flag in self.flags
 
 	class IRC_Connection:
 		# type flags
@@ -82,7 +106,7 @@ class IRC_Server:
 				self.hostname = args[1]
 			self.realname = str()
 			self.servername = str()
-			self.flags = ""
+			self.flags = IRC_Server.IRC_Flags()
 			self.hopcount = hopcount
 			# this is either the connection to the client
 			# or the connection to the server the client is
@@ -99,7 +123,7 @@ class IRC_Server:
 				return self.nick
 
 		def __repr__(self):
-			return "<%s +%s>" % (self.fullUser(), self.flags)
+			return "<%s %s>" % (self.fullUser(), self.flags)
 	
 	class IRC_Server:
 		def __init__(self, connection, hostname):
@@ -110,12 +134,12 @@ class IRC_Server:
 		class Channel_User:
 			def __init__(self, user):
 				self.user = user
-				self.flags = ""
+				self.flags = IRC_Server.IRC_Flags()
 
 			def sigil(self):
-				if(self.flags.find("v") != -1):
+				if('v' in self.flags):
 					return "+"
-				if(self.flags.find("o") != -1):
+				if('o' in self.flags):
 					return "@"
 				return ""
 
@@ -128,11 +152,11 @@ class IRC_Server:
 		def __init__(self, name):
 			self.name = name
 			self.topic = str()
-			self.flags = ""
+			self.flags = IRC_Server.IRC_Flags()
 			self.users = list()
 
 		def __repr__(self):
-			return "<%s +%s>" % (self.name, self.flags)
+			return "<%s %s>" % (self.name, self.flags)
 
 		def addUser(self, user):
 			self.users.append(self.Channel_User(user))
@@ -145,11 +169,19 @@ class IRC_Server:
 					break
 			user.channels.remove(self)
 
-		def broadcast(self, msg, exclude=None):
+		def findCUser(self, nick):
+			nick = nick.split("!")[0]
+			for cuser in self.users:
+				if(cuser.user.nick == nick):
+					return cuser
+			return None
+
+		def broadcast(self, msg, exclude=None, localOnly=False):
 			connections = list()
 			for cuser in self.users:
 				connection = cuser.user.connection
-				if((not connection in connections) and connection != exclude):
+				if((not connection in connections) and connection != exclude and \
+				(localOnly == False or connection.type == IRC_Server.IRC_Connection.CLIENT)):
 					connections.append(connection)
 			for connection in connections:
 				connection.send(msg.toString())
@@ -170,27 +202,28 @@ class IRC_Server:
 		self.channels = list()
 
 	def findUser(self, nick):
-		log(self, "Looking for %s in %s" % (nick, self.users), 3)
+		log(self, "Looking for %s in %s" % (nick, self.users), 4)
 		nick = nick.split("!")[0]
 		for user in self.users:
 			if(user.nick == nick):
-				log(self, "Found user %s" % user, 3)
+				log(self, "Found user %s" % user, 4)
 				return user
-		log(self, "Didn't find user", 3)
+		log(self, "Didn't find user", 4)
 		return None
 
 	def findChannel(self, name):
-		log(self, "Looking for %s in %s" % (name, self.channels), 3)
+		log(self, "Looking for %s in %s" % (name, self.channels), 4)
 		for channel in self.channels:
 			if(channel.name == name):
-				log(self, "Found channel %s" % channel, 3)
+				log(self, "Found channel %s" % channel, 4)
 				return channel
-		log(self, "Didn't find channel", 3)
+		log(self, "Didn't find channel", 4)
 		return None
 
 	def removeUser(self, user):
 		# perform all the cleanup that needs to be done to get a user out of the system
-		self.connections.remove(user.connection)
+		if(not user):
+			return
 		self.users.remove(user)
 		for channel in user.channels:
 			channel.removeUser(user)
@@ -246,18 +279,49 @@ class IRC_Server:
 				connection.send(msg.toString())
 		self.broadcastLock.release()
 
-	def localBroadcast(self, msg, relUser):
+	def localBroadcast(self, msg, relUser, excludeConn=None):
 		localUsers = list()
 		for channel in relUser.channels:
 			for cuser in channel.users:
-				if((not cuser.user in localUsers) and cuser.user.connection.type == self.IRC_Connection.CLIENT):
-					localUsers.append(cuser.user)
+				user = cuser.user
+				connection = cuser.user.connection
+				if((not user in localUsers) and connection.type == self.IRC_Connection.CLIENT and connection != excludeConn):
+					localUsers.append(user)
 		for user in localUsers:
 			user.connection.send(msg.toString())
+
+	def sendMOTD(self, connection):
+		msg = self.IRC_Message("001 :Welcome, %s" % connection.user.nick) # WTF: Unknown reply type
+		msg.params.append(connection.user.nick)
+		msg.prefix = self.hostname
+		connection.send(msg.toString())
+		msg = self.IRC_Message("375 :- %s Message of the day -" % self.hostname) # RPL_MOTDSTART
+		msg.params.append(connection.user.nick)
+		msg.prefix = self.hostname
+		connection.send(msg.toString())
+		msg = self.IRC_Message("372 :- awesome text goes here") # RPL_MOTD
+		msg.params.append(connection.user.nick)
+		msg.prefix = self.hostname
+		connection.send(msg.toString())
+		msg = self.IRC_Message("376 :End of /MOTD command") # RPL_ENDOFMOTD
+		msg.params.append(connection.user.nick)
+		msg.prefix = self.hostname
+		connection.send(msg.toString())
+	
+	def sendTopic(self, connection, channel):
+		if(channel.topic):
+			msg = self.IRC_Message("332") # RPL_TOPIC
+			msg.trail = channel.topic
+		else:
+			msg = self.IRC_Message("331 :No topic is set") # RPL_NOTOPIC
+		msg.prefix = self.hostname
+		msg.params = [connection.user.nick, channel.name]
+		connection.send(msg.toString())
 	
 	def handleMsg(self, connection, msg):
 		log(self, "command: %s from %s" % (msg.command, connection), 2)
 		if(msg.command == "PASS"):
+			# if only all the commands were this simple :(
 			connection.password = msg.params[0]
 		elif(msg.command == "NICK"):
 			if(connection.type == self.IRC_Connection.SERVER):
@@ -293,59 +357,68 @@ class IRC_Server:
 				msg.params.remove(msg.params[1])
 				self.localBroadcast(msg, user)
 			elif(connection.type == self.IRC_Connection.CLIENT):
-				# this is a name change
 				if(self.findUser(msg.params[0])):
 					# check that nobody's taken the nick already
-					connection.send(ERR_NICKCOLLISION)
+					errmsg = self.IRC_Message("433 :Nickname is already in use")
+					errmsg.prefix = self.hostname
+					#TODO: WTF is the star for?
+					errmsg.params = ["*", msg.params[0]]
+					connection.send(errmsg.toString())
 					return
-				# get this connections previous username and set it as the sender of the nick msg
-				msg.prefix = connection.user.fullUser()
+				if(connection.user.nick):
+					# get this connections previous username and set it as the sender of the nick msg
+					msg.prefix = connection.user.fullUser()
+					connection.user.nick = msg.params[0]
+				else:
+					connection.user.nick = msg.params[0]
+					self.sendMOTD(connection)
 				# forward the nick msg to the servers
 				msg.params.append("0")
 				self.broadcast(msg, None, self.IRC_Connection.SERVER)
 				# now we can change the name of the user locally
-				connection.user.nick = msg.params[0]
 				# forward the nick msg to local users who need to know
 				msg.params.remove(msg.params[1])
 				self.localBroadcast(msg, connection.user)
 			elif(connection.type == self.IRC_Connection.UNKNOWN):
+				# check that the name isn't already taken
+				if(self.findUser(msg.params[0])):
+					# check that nobody's taken the nick already
+					errmsg = self.IRC_Message("433 :Nickname is already in use")
+					errmsg.prefix = self.hostname
+					#TODO: WTF is the star for?
+					errmsg.params = ["*", msg.params[0]]
+					connection.send(errmsg.toString())
+					return
 				# now we know it's a client
 				connection.type = self.IRC_Connection.CLIENT
 				connection.user = self.IRC_User(connection, msg.params[0])
 				self.users.append(connection.user)
-				msg = self.IRC_Message("375 :- %s Message of the day -" % self.hostname) # RPL_MOTDSTART
-				msg.params.append(connection.user.nick)
-				msg.prefix = self.hostname
-				connection.send(msg.toString())
-				msg = self.IRC_Message("372 :- awesome text goes here") # RPL_MOTD
-				msg.params.append(connection.user.nick)
-				msg.prefix = self.hostname
-				connection.send(msg.toString())
-				msg = self.IRC_Message("376 :End of /MOTD command") # RPL_ENDOFMOTD
-				msg.params.append(connection.user.nick)
-				msg.prefix = self.hostname
-				connection.send(msg.toString())
+				self.sendMOTD(connection)
 		elif(msg.command == "USER"):
-			# we should only recieve this from a user (client connection)
-			connection.type = self.IRC_Connection.CLIENT
-			if(not connection.user):
+			# if this is the first message from a connection, it's a client
+			if(connection.type == self.IRC_Connection.UNKNOWN):
+				connection.type = self.IRC_Connection.CLIENT
 				connection.user = self.IRC_User(connection)
-			connection.user.username = msg.params[0]
-			connection.user.hostname = msg.params[1]
-			connection.user.servername = msg.params[2]
-			connection.user.realname = msg.trail
+				self.users.append(connection.user)
+			# if this comes from a server, we'll get a prefix
+			if(connection.type == self.IRC_Connection.CLIENT):
+				msg.prefix = connection.user.fullUser()
+			user = self.findUser(msg.prefix)
+			user.username = msg.params[0]
+			user.hostname = msg.params[1]
+			user.servername = msg.params[2]
+			user.realname = msg.trail
 			if(connection.user.nick):
-				# now we can send the user to the servers
-				user = connection.user
+				# now we can send the user to the other servers
 				nickMsg = self.IRC_Message("NICK")
 				nickMsg.prefix = self.hostname
 				nickMsg.params = [user.nick]
-				self.broadcast(nickMsg, None, self.IRC_Connection.SERVER)
+				self.broadcast(nickMsg, connection, self.IRC_Connection.SERVER)
 				userMsg = self.IRC_Message("USER")
 				userMsg.prefix = user.nick
 				userMsg.params = [user.username, user.hostname, user.servername]
 				userMsg.trail = user.realname
-				self.broadcast(userMsg, None, self.IRC_Connection.SERVER)
+				self.broadcast(userMsg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "SERVER"):
 			pass
 		elif(msg.command == "OPER"):
@@ -353,8 +426,12 @@ class IRC_Server:
 		elif(msg.command == "QUIT"):
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg.prefix = connection.user.fullUser()
-			self.removeUser(self.findUser(msg.prefix))
-			self.broadcast(msg, connection)
+			user = self.findUser(msg.prefix)
+			# need to do this while the user still exists, so we can find links
+			# but users don't recieve their own quit message
+			self.localBroadcast(msg, user, connection)
+			self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+			self.removeUser(user)
 		elif(msg.command == "SQUIT"):
 			pass
 		elif(msg.command == "JOIN"):
@@ -367,32 +444,24 @@ class IRC_Server:
 				msg.params[0] = chanName
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
-					channel.addUser(self.findUser(msg.prefix))
-					channel.broadcast(msg)
-				else:
-					channel.addUser(self.findUser(msg.prefix))
-					channel.broadcast(msg, connection)
+				channel.addUser(self.findUser(msg.prefix))
+				channel.broadcast(msg, None, localOnly=True)
+				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 			if(connection.type == self.IRC_Connection.CLIENT):
 				# this is a local user, we must send them all the stuff (like topic, userlist)
 				# first send the channel topic
-				if(channel.topic):
-					msg = self.IRC_Message("332") # RPL_TOPIC
-					msg.trail = channel.topic
-				else:
-					msg = self.IRC_Message("331 :No topic is set") # RPL_NOTOPIC
-				msg.prefix = self.hostname
-				msg.params = [channel.name]
-				connection.send(msg.toString())
+				self.sendTopic(connection, channel)
 				# Now send the channel userlist
 				msg = self.IRC_Message("353") # RPL_NAMEREPLY
 				msg.prefix = self.hostname
-				msg.params = [channel.name]
+				#TODO: WTF is the @ for?
+				msg.params = [connection.user.nick, "@", channel.name]
 				for cuser in channel.users:
-					msg.trail = cuser.toString()
-					connection.send(msg.toString())
+					msg.trail += "%s " % cuser.toString()
+				connection.send(msg.toString())
 				msg = self.IRC_Message("366 :End of /NAMES list") # RPL_ENDOFNAMES
 				msg.prefix = self.hostname
-				msg.params = [channel.name]
+				msg.params = [connection.user.nick, channel.name]
 				connection.send(msg.toString())
 		elif(msg.command == "PART"):
 			for chanName in msg.params[0].split(","):
@@ -400,9 +469,8 @@ class IRC_Server:
 				msg.params[0] = chanName
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
-					channel.broadcast(msg)
-				else:
-					channel.broadcast(msg, connection)
+				channel.broadcast(msg, None, localOnly=True)
+				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				channel.removeUser(self.findUser(msg.prefix))
 		elif(msg.command == "MODE"):
 			if(len(msg.params) == 1):
@@ -412,34 +480,40 @@ class IRC_Server:
 					# now send the channel modes
 					msg = self.IRC_Message("324") # RPL_CHANNELMODEIS
 					msg.prefix = self.hostname
-					msg.params = [channel.name, "+" + channel.flags]
+					msg.params = [connection.user.nick, channel.name, str(channel.flags)]
 					connection.send(msg.toString())
 				else:
 					user = self.findUser(msg.params[0])
 					msg = self.IRC_Message("221") # RPL_UMODEIS
 					msg.prefix = self.hostname
-					msg.params = [user.nick, "+" + user.flags]
+					msg.params = [connection.user.nick, user.nick, str(user.flags)]
 			elif(len(msg.params) > 1):
 				# user is trying to change a mode
+				# TODO: This performs NO VALIDATION and will accept ALL FLAGS
+				if(connection.type == self.IRC_Connection.CLIENT):
+					msg.prefix = connection.user.fullUser()
 				if(msg.params[0].startswith("#") or msg.params[0].startswith("&")):
 					# channel mode being set
 					channel = self.findChannel(msg.params[0])
-					# TODO: actually change channel modes
+					targetIndex = 2
+					for flag in msg.params[1][1:]:
+						if(flag in ['o', 'v']):
+							# these are channel-user modes
+							cuser = channel.findCUser(msg.params[targetIndex])
+							cuser.flags.change(msg.params[1][0] + flag)
+							targetIndex += 1
+						else:
+							# everything else can be assumed to be a channel mode
+							channel.flags.change(msg.params[1][0] + flag)
 					# forward the message
-					msg.prefix = connection.user.fullUser()
 					channel.broadcast(msg)
+					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
 					user = self.finduser(msg.params[0])
-					if(msg.params[1].startswith("+")):
-						# add modes
-						for flag in msg.params[1][1:]:
-							if(user.flags.find(flag) == -1):
-								user.flags += flag
-					elif(msg.params[1].startswith("-")):
-						# remove modes
-						for flag in msg.params[1][1:]:
-							user.flags = user.flags.replace(flag, "")
+					user.flags.change(msg.params[1])
+					self.localBroadcast(msg, user)
+					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "TOPIC"):
 			channel = self.findChannel(msg.params[0])
 			if(msg.trail):
@@ -448,14 +522,7 @@ class IRC_Server:
 				channel.broadcast(msg)
 			else:
 				# first send the channel topic
-				if(channel.topic):
-					msg = self.IRC_Message("332") # RPL_TOPIC
-					msg.trail = channel.topic
-				else:
-					msg = self.IRC_Message("331 :No topic is set") # RPL_NOTOPIC
-				msg.prefix = self.hostname
-				msg.params = [channel.name]
-				connection.send(msg.toString())
+				self.sendTopic(connection, channel)
 		elif(msg.command == "NAMES"):
 			pass
 		elif(msg.command == "LIST"):
@@ -511,12 +578,14 @@ class IRC_Server:
 					for cuser in channel.users:
 						user = cuser.user
 						msg.params = [ \
+							connection.user.nick, \
 							channel.name, \
+							user.username, \
 							user.hostname, \
 							user.servername, \
 							user.nick, \
-							['H', 'G'][1], \
-							"*" + cuser.sigil(), \
+							# TODO: WTF is all this stuff about?
+							['H', 'G'][0] + cuser.sigil(), \
 						]
 						msg.trail = "%d %s" % (user.hopcount, user.realname)
 						connection.send(msg.toString())
@@ -525,18 +594,8 @@ class IRC_Server:
 					msg.params = [connection.user.nick, channel.name]
 					connection.send(msg.toString())
 				else:
-					# TODO: this probably isn't the right way to respond to this request
-					user = self.findUser(target)
-					msg.prefix = self.hostname
-					msg.params = [ \
-						user.hostname, \
-						user.servername, \
-						user.nick, \
-						['H', 'G'][1], \
-						"*" + cuser.sigil(), \
-					]
-					msg.trail = "%d %s" % (user.hopcount, user.realname)
-					connection.send(msg.toString())
+					# TODO: How do you respond to a who request that's not directed at a channel
+					pass
 		elif(msg.command == "WHOIS"):
 			pass
 		elif(msg.command == "WHOWAS"):
@@ -546,7 +605,11 @@ class IRC_Server:
 			user = self.findUser(msg.prefix)
 			self.removeUser(user)
 		elif(msg.command == "PING"):
-			pass
+			msg.prefix = self.hostname
+			msg.trail = msg.params[0]
+			msg.params = [self.hostname]
+			msg.command = "PONG"
+			connection.send(msg.toString())
 		elif(msg.command == "PONG"):
 			pass
 		elif(msg.command == "ERROR"):
