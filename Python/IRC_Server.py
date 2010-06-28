@@ -127,9 +127,11 @@ class IRC_Server:
 			return "<%s %s>" % (self.fullUser(), self.flags)
 	
 	class IRC_Server:
-		def __init__(self, connection, hostname):
+		def __init__(self, connection, hostname, hopcount, info):
 			self.connection = connection
 			self.hostname = hostname
+			self.hopcount = hopcount
+			self.info = info
 	
 	class IRC_Channel:
 		class Channel_User:
@@ -195,6 +197,7 @@ class IRC_Server:
 		# prefs
 		self.prefs = { \
 			"irc_port": 6667, \
+			"server_password": "seekrit", \
 		}
 		# irc servers need to know a lot of stuff
 		self.connections = list()
@@ -436,10 +439,11 @@ class IRC_Server:
 				msg.prefix = connection.user.fullUser()
 			user = self.findUser(msg.prefix)
 			user.username = msg.params[0]
-			user.hostname = connection.addr[0] # we ignore the contents of msg.params[1]
 			if(connection.type == self.IRC_Connection.SERVER):
-				user.servername = msg.params[2] # only trust this if it comes from another server
+				user.hostname = msg.params[1] # only trust these if it comes from another server
+				user.servername = msg.params[2]
 			else:
+				user.hostname = connection.addr[0]
 				user.servername = self.hostname
 			user.realname = msg.trail
 			if(connection.user.nick):
@@ -454,7 +458,20 @@ class IRC_Server:
 				userMsg.trail = user.realname
 				self.broadcast(userMsg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "SERVER"):
-			pass
+			if(self.findServer(msg.params[0])):
+				# duplicate server! terminate the connection immediately
+				raise Exception("Duplicate Server")
+			if(connection.type == self.IRC_Connection.UNKNOWN):
+				# this is a server attempting to register with us
+				if(connection.password == self.prefs["server_password"]):
+					connection.type = self.IRC_Connection.SERVER
+					newServer = self.IRC_Server(connection, msg.params[0], int(msg.params[1]), msg.trail)
+					self.servers.append(newServer)
+					connection.user = newServer
+					# TODO: now we must synchronize all of our data with this new server
+			elif(connection.type == self.IRC_Connection.SERVER):
+				# this is a server informing us of the presence of servers behind it
+				self.servers.append(self.IRC_Server(connection, msg.params[0], int(msg.params[1]), msg.trail))
 		elif(msg.command == "OPER"):
 			pass
 		elif(msg.command == "QUIT"):
