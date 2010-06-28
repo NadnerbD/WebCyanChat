@@ -76,6 +76,7 @@ class IRC_Server:
 			self.addr = addr
 			self.password = str()
 			self.user = None # this is either the client or server object
+			self.closed = False
 
 		
 		def __repr__(self):
@@ -190,7 +191,7 @@ class IRC_Server:
 		self.quit = threading.Event()
 		self.broadcastLock = threading.Lock()
 		self.accessLock = threading.Lock()
-		self.hostname = "skynet.chelmsford.skaion.com"
+		self.hostname = socket.gethostname()
 		# prefs
 		self.prefs = { \
 			"irc_port": 6667, \
@@ -229,6 +230,7 @@ class IRC_Server:
 			channel.removeUser(user)
 		if(user.connection.type == self.IRC_Connection.CLIENT):
 			user.connection.sock.close()
+			user.connection.closed = True
 			self.connections.remove(user.connection)
 
 	def start(self):
@@ -261,6 +263,35 @@ class IRC_Server:
 		sockThread = threading.Thread(None, self.sockLoop, "sockLoop", (newConnection,))
 		sockThread.setDaemon(1)
 		sockThread.start()
+		watchdogThread = threading.Thread(None, self.watchConnection, "watchdogThread", (newConnection, sockThread))
+		watchdogThread.setDaemon(1)
+		watchdogThread.start()
+
+	def watchConnection(self, connection, sockThread):
+		sockThread.join()
+		if(not connection.closed):
+			# send a quit message
+			if(connection.type == self.IRC_Connection.CLIENT):
+				msg = self.IRC_Message("QUIT :Lost connection")
+				msg.prefix = connection.user.fullUser()
+				self.localBroadcast(msg, connection.user, connection)
+				# this method should never attempt to send messages to the dead connection
+				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+			elif(connection.type == self.IRC_Connection.SERVER):
+				for user in self.users:
+					if(user.connection == connection):
+						# any user which was connected to us through the lost server must quit
+						msg = self.IRC_Message("QUIT :Lost in netsplit")
+						msg.prefix = user.fullUser()
+						self.localBroadcast(msg, user, connection)
+						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+						self.removeUser(user)
+		# get rid of the connection and associated users (server or client)
+		if(connection.type == self.IRC_Connection.CLIENT):
+			self.removeUser(connection.user)
+		else:
+			self.connections.remove(connection)
+					
 
 	def sockLoop(self, connection): #Threaded per-socket
 		while 1:
@@ -405,8 +436,11 @@ class IRC_Server:
 				msg.prefix = connection.user.fullUser()
 			user = self.findUser(msg.prefix)
 			user.username = msg.params[0]
-			user.hostname = msg.params[1]
-			user.servername = msg.params[2]
+			user.hostname = connection.addr[0] # we ignore the contents of msg.params[1]
+			if(connection.type == self.IRC_Connection.SERVER):
+				user.servername = msg.params[2] # only trust this if it comes from another server
+			else:
+				user.servername = self.hostname
 			user.realname = msg.trail
 			if(connection.user.nick):
 				# now we can send the user to the other servers
