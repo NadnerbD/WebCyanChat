@@ -200,7 +200,10 @@ class IRC_Server:
 		self.prefs = { \
 			"irc_port": 6667, \
 			"server_password": "seekrit", \
+			"enable_http": 1, \
+			"http_port": 6668, \
 		}
+		self.HTTPServ = HTTP_Server()
 		# irc servers need to know a lot of stuff
 		self.connections = list()
 		self.users = list()
@@ -241,6 +244,10 @@ class IRC_Server:
 		acceptThread = threading.Thread(None, self.acceptLoop, "acceptLoop", (self.prefs["irc_port"],))
 		acceptThread.setDaemon(1)
 		acceptThread.start()
+		if(self.prefs["enable_http"]):
+			acceptThread = threading.Thread(None, self.acceptHTTP, "acceptHttpLoop", (self.prefs["http_port"],))
+			acceptThread.setDaemon(1)
+			acceptThread.start()
 		self.run()
 
 	def run(self):
@@ -258,6 +265,23 @@ class IRC_Server:
 		while 1:
 			listener.listen(1)
 			(sock, addr) = listener.accept()
+			self.addConnection(sock, addr)
+
+	def watchHTTP(self, HTTPServThread):
+		HTTPServThread.join()
+		log(self, "HTTP server thread terminated")
+		self.quit.set() #Terminate the server if the HTTP server dies
+
+	def acceptHTTP(self, port=81): #Threaded per-server
+		acceptQueue = self.HTTPServ.registerProtocol("irc")
+		HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (port,))
+		HTTPServThread.setDaemon(1)
+		HTTPServThread.start()
+		HTTPWatchdogThread = threading.Thread(None, self.watchHTTP, "HTTPWatchdogThread", (HTTPServThread,))
+		HTTPWatchdogThread.setDaemon(1)
+		HTTPWatchdogThread.start()
+		while 1:
+			(sock, addr) = acceptQueue.acceptHTTPSession()
 			self.addConnection(sock, addr)
 
 	def addConnection(self, sock, addr):

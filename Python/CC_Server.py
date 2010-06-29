@@ -369,19 +369,19 @@ class CC_Server:
 			(sock, addr) = listener.accept()
 			self.addConnection(sock, addr)
 	
-	def watchHTTP(self):
-		self.HTTPServThread.join()
+	def watchHTTP(self, HTTPServThread):
+		HTTPServThread.join()
 		log(self, "HTTP server thread terminated")
 		self.quit.set() #Terminate the server if the HTTP server dies
 
 	def acceptHTTP(self, port=81): #Threaded per-server
 		acceptQueue = self.HTTPServ.registerProtocol("cyanchat")
-		self.HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (port,))
-		self.HTTPServThread.setDaemon(1)
-		self.HTTPServThread.start()
-		self.HTTPWatchdogThread = threading.Thread(None, self.watchHTTP, "HTTPWatchdogThread", ())
-		self.HTTPWatchdogThread.setDaemon(1)
-		self.HTTPWatchdogThread.start()
+		HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (port,))
+		HTTPServThread.setDaemon(1)
+		HTTPServThread.start()
+		HTTPWatchdogThread = threading.Thread(None, self.watchHTTP, "HTTPWatchdogThread", (HTTPServThread,))
+		HTTPWatchdogThread.setDaemon(1)
+		HTTPWatchdogThread.start()
 		while 1:
 			(sock, addr) = acceptQueue.acceptHTTPSession()
 			self.addConnection(sock, addr)
