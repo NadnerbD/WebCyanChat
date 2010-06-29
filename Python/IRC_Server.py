@@ -14,17 +14,15 @@ class IRC_Server:
 			self.params = list()
 			self.trail = str()
 			args = message.split(' ')
-			args.reverse()
 			if(message.startswith(':')): 
 				# the prefix, if present, indicates the origin of the message
-				self.prefix = args.pop()[0:]
+				self.prefix = args.pop(0)[1:]
 			# a command is required for all messages
-			self.command = args.pop()
-			while(len(args) > 0 and not args[-1].startswith(':')):
+			self.command = args.pop(0)
+			while(len(args) > 0 and not args[0].startswith(':')):
 				# command parameters
-				self.params.append(args.pop())
+				self.params.append(args.pop(0))
 			# and any characters following a ':' are trailing chars
-			args.reverse()
 			self.trail = ' '.join(args)[1:]
 
 		def toString(self):
