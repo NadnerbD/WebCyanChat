@@ -162,14 +162,16 @@ class IRC_Server:
 			return "<%s %s>" % (self.name, self.flags)
 
 		def addUser(self, user):
-			self.users.append(self.Channel_User(user))
-			user.channels.append(self)
+			if(self.findCUser(user.nick) == None):
+				self.users.append(self.Channel_User(user))
+				user.channels.append(self)
+				return True
+			return False
 
 		def removeUser(self, user):
 			for cuser in self.users:
 				if(cuser.user == user):
 					self.users.remove(cuser)
-					break
 			user.channels.remove(self)
 
 		def findCUser(self, nick):
@@ -226,9 +228,8 @@ class IRC_Server:
 
 	def removeUser(self, user):
 		# perform all the cleanup that needs to be done to get a user out of the system
-		if(not user):
-			return
-		self.users.remove(user)
+		if(user in self.users):
+			self.users.remove(user)
 		for channel in user.channels:
 			channel.removeUser(user)
 		if(user.connection.type == self.IRC_Connection.CLIENT):
@@ -495,25 +496,27 @@ class IRC_Server:
 				msg.params[0] = chanName
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
-				channel.addUser(self.findUser(msg.prefix))
+				if(not channel.addUser(self.findUser(msg.prefix))):
+					return
 				channel.broadcast(msg, None, localOnly=True)
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
-			if(connection.type == self.IRC_Connection.CLIENT):
-				# this is a local user, we must send them all the stuff (like topic, userlist)
-				# first send the channel topic
-				self.sendTopic(connection, channel)
-				# Now send the channel userlist
-				msg = self.IRC_Message("353") # RPL_NAMEREPLY
-				msg.prefix = self.hostname
-				#TODO: WTF is the @ for?
-				msg.params = [connection.user.nick, "@", channel.name]
-				for cuser in channel.users:
-					msg.trail += "%s " % cuser.toString()
-				connection.send(msg.toString())
-				msg = self.IRC_Message("366 :End of /NAMES list") # RPL_ENDOFNAMES
-				msg.prefix = self.hostname
-				msg.params = [connection.user.nick, channel.name]
-				connection.send(msg.toString())
+				if(connection.type == self.IRC_Connection.CLIENT):
+					# this is a local user, we must send them all the stuff (like topic, userlist)
+					# first send the channel topic
+					self.sendTopic(connection, channel)
+					# Now send the channel userlist
+					msg = self.IRC_Message("353") # RPL_NAMEREPLY
+					msg.prefix = self.hostname
+					#TODO: WTF is the @ for?
+					msg.params = [connection.user.nick, "@", channel.name]
+					for cuser in channel.users:
+						msg.trail += "%s " % cuser.toString()
+					msg.trail = msg.trail.rstrip()
+					connection.send(msg.toString())
+					msg = self.IRC_Message("366 :End of /NAMES list") # RPL_ENDOFNAMES
+					msg.prefix = self.hostname
+					msg.params = [connection.user.nick, channel.name]
+					connection.send(msg.toString())
 		elif(msg.command == "PART"):
 			for chanName in msg.params[0].split(","):
 				channel = self.findChannel(chanName)
@@ -561,7 +564,7 @@ class IRC_Server:
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
-					user = self.finduser(msg.params[0])
+					user = self.findUser(msg.params[0])
 					user.flags.change(msg.params[1])
 					self.localBroadcast(msg, user)
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
