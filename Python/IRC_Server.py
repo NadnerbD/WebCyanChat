@@ -238,6 +238,12 @@ class IRC_Server:
 			user.connection.closed = True
 			self.connections.remove(user.connection)
 
+	def removeServer(self, server):
+		if(server in self.servers):
+			self.servers.remove(server)
+		if(server == server.connection.user):
+			self.connections.remove(server.connection)
+
 	def start(self):
 		acceptThread = threading.Thread(None, self.acceptLoop, "acceptLoop", (self.prefs["irc_port"],))
 		acceptThread.setDaemon(1)
@@ -312,11 +318,18 @@ class IRC_Server:
 						self.localBroadcast(msg, user, connection)
 						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 						self.removeUser(user)
+				for server in self.servers:
+					if(server.connection == connection):
+						msg = self.IRC_Message("SQUIT :Lost in netsplit")
+						msg.prefix = self.hostname
+						msg.params = [sever.hostname]
+						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+						self.removeServer(server)
 		# get rid of the connection and associated users (server or client)
 		if(connection.type == self.IRC_Connection.CLIENT):
 			self.removeUser(connection.user)
 		else:
-			self.connections.remove(connection)
+			self.removeServer(connection.user)
 					
 
 	def sockLoop(self, connection): #Threaded per-socket
@@ -498,18 +511,68 @@ class IRC_Server:
 		elif(msg.command == "SERVER"):
 			if(self.findServer(msg.params[0])):
 				# duplicate server! terminate the connection immediately
+				msg = self.IRC_Message("462 :Server already known") # ERR_ALREADYREGISTERED
+				msg.params = [msg.params[0]]
+				msg.prefix = self.hostname
+				connection.send(msg.toString())
 				raise Exception("Duplicate Server")
 			if(connection.type == self.IRC_Connection.UNKNOWN):
 				# this is a server attempting to register with us
 				if(connection.password == self.prefs["server_password"]):
 					connection.type = self.IRC_Connection.SERVER
 					newServer = self.IRC_Server(connection, msg.params[0], int(msg.params[1]), msg.trail)
-					self.servers.append(newServer)
 					connection.user = newServer
 					# TODO: now we must synchronize all of our data with this new server
+					for server in self.servers:
+						servMsg = self.IRC_Message("SERVER")
+						servMsg.params = [server.hostname, str(server.hopcount)]
+						servMsg.trail = server.info
+						servMsg.prefix = self.hostname
+						connection.send(servMsg.toString())
+					for user in self.users:
+						# NICK, USER, MODE, JOIN
+						userMsg = self.IRC_Message("NICK")
+						userMsg.prefix = self.hostname
+						userMsg.params = [user.nick]
+						connection.send(userMsg.toString())
+						userMsg = self.IRC_Message("USER")
+						userMsg.prefix = self.hostname
+						userMsg.params = [user.username, user.hostname, user.servername]
+						userMsg.trail = user.realname
+						connection.send(userMsg.toString())
+						userMsg = self.IRC_Message("MODE")
+						userMsg.prefix = self.hostname
+						userMsg.params = [user.nick, str(user.flags)]
+						connection.send(userMsg.toString())
+						userMsg = self.IRC_Message("JOIN")
+						channelNames = list()
+						channelKeys = list()
+						for channel in user.channels:
+							channelNames.append(channel.name)
+							channelKeys.append(channel.key)
+						userMsg.params = [','.join(channelNames), ','.join(channelKeys)]
+						userMsg.prefix = user.nick
+						connection.send(userMsg.toString())
+					for channel in self.channels:
+						chanMsg = self.IRC_Message("MODE")
+						chanMsg.prefix = self.hostname
+						chanMsg.params = [channel.name, str(channel.flags)]
+						connection.send(chanMsg.toString())
+					# add the server to our local server collection
+					self.servers.append(newServer)
+				else:
+					return	
 			elif(connection.type == self.IRC_Connection.SERVER):
 				# this is a server informing us of the presence of servers behind it
 				self.servers.append(self.IRC_Server(connection, msg.params[0], int(msg.params[1]), msg.trail))
+			elif(connection.type == self.IRC_Connection.CLIENT):
+				# NO, BAD CLIENT, SPANKIES
+				return
+			# increment the hopcount
+			msg.params[1] = str(int(msg.params[1]) + 1)
+			msg.prefix = self.hostname
+			# propagate this to the rest of the network
+			self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "OPER"):
 			pass
 		elif(msg.command == "QUIT"):
@@ -533,7 +596,9 @@ class IRC_Server:
 				msg.params[0] = chanName
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
+				# add the user to the channel
 				if(not channel.addUser(self.findUser(msg.prefix))):
+					# if this fails (due to the user already being there) stop
 					return
 				channel.broadcast(msg, None, localOnly=True)
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
