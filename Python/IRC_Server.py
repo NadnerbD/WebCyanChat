@@ -374,6 +374,21 @@ class IRC_Server:
 		msg.prefix = self.hostname
 		msg.params = [connection.user.nick, channel.name]
 		connection.send(msg.toString())
+
+	def sendNames(self, connection, channel, sendEnd=True):
+		msg = self.IRC_Message("353") # RPL_NAMEREPLY
+		msg.prefix = self.hostname
+		#TODO: WTF is the @ for?
+		msg.params = [connection.user.nick, "@", channel.name]
+		for cuser in channel.users:
+			msg.trail += "%s " % cuser.toString()
+		msg.trail = msg.trail.rstrip()
+		connection.send(msg.toString())
+		if(sendEnd):
+			msg = self.IRC_Message("366 :End of /NAMES list") # RPL_ENDOFNAMES
+			msg.prefix = self.hostname
+			msg.params = [connection.user.nick, channel.name]
+			connection.send(msg.toString())
 	
 	def handleMsg(self, connection, msg):
 		log(self, "command: %s from %s" % (msg.command, connection), 2)
@@ -527,18 +542,7 @@ class IRC_Server:
 					# first send the channel topic
 					self.sendTopic(connection, channel)
 					# Now send the channel userlist
-					msg = self.IRC_Message("353") # RPL_NAMEREPLY
-					msg.prefix = self.hostname
-					#TODO: WTF is the @ for?
-					msg.params = [connection.user.nick, "@", channel.name]
-					for cuser in channel.users:
-						msg.trail += "%s " % cuser.toString()
-					msg.trail = msg.trail.rstrip()
-					connection.send(msg.toString())
-					msg = self.IRC_Message("366 :End of /NAMES list") # RPL_ENDOFNAMES
-					msg.prefix = self.hostname
-					msg.params = [connection.user.nick, channel.name]
-					connection.send(msg.toString())
+					self.sendNames(connection, channel)
 		elif(msg.command == "PART"):
 			for chanName in msg.params[0].split(","):
 				channel = self.findChannel(chanName)
@@ -600,9 +604,34 @@ class IRC_Server:
 				# first send the channel topic
 				self.sendTopic(connection, channel)
 		elif(msg.command == "NAMES"):
-			pass
+			if(len(msg.params) > 0):
+				channelNames = msg.params[0].split(",")
+				for channelName in channelNames:
+					channel = self.findChannel(channelName)
+					# I'm assuming we don't send the end of /NAMES until we've responded to the whole command
+					self.sendNames(connection, channel, channelName == channelNames[-1])
+			else:
+				for channel in self.channels:
+					# I'm assuming we don't send the end of /NAMES until we've responded to the whole command
+					self.sendNames(connection, channel, False)
+				allChannel = self.IRC_Channel("*")
+				for user in self.users:
+					if(len(user.channels) == 0):
+						# we don't use addUser() because that would add the channel to the user's channel list
+						allChannel.users.append(self.IRC_Channel.Channel_User(user))
+				self.sendNames(connection, allChannel)
 		elif(msg.command == "LIST"):
-			pass
+			reply = self.IRC_Message("321 :Users  Name") # RPL_LISTSTART
+			reply.params = [connection.user.nick, "Channel"]
+			connection.send(reply.toString())
+			for channel in self.channels:
+				reply = self.IRC_Message("322") # RPL_LIST
+				reply.params = [connection.user.nick, channel.name, str(len(channel.users))]
+				reply.trail = channel.topic
+				connection.send(reply.toString())
+			reply = self.IRC_Message("323 :End of /LIST") # RPL_LISTEND
+			reply.params = [connection.user.nick]
+			connection.send(reply.toString())
 		elif(msg.command == "INVITE"):
 			pass
 		elif(msg.command == "KICK"):
