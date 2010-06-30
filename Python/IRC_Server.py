@@ -103,6 +103,7 @@ class IRC_Server:
 			self.password = str()
 			self.user = None # this is either the client or server object
 			self.closed = False
+			self.pendingServer = False
 
 		
 		def __repr__(self):
@@ -612,7 +613,7 @@ class IRC_Server:
 				user.hostname = connection.addr[0]
 				user.servername = self.hostname
 			user.realname = msg.trail
-			if(connection.user.nick):
+			if(user.nick):
 				# now we can send the user to the other servers
 				nickMsg = self.IRC_Message("NICK")
 				nickMsg.prefix = self.hostname
@@ -637,7 +638,8 @@ class IRC_Server:
 					connection.type = self.IRC_Connection.SERVER
 					newServer = self.IRC_Server(connection, msg.params[0], int(msg.params[1]), msg.trail)
 					connection.user = newServer
-					self.sendServerData(connection)
+					if(not connection.pendingServer):
+						self.sendServerData(connection)
 					# add the server to our local server collection
 					self.servers.append(newServer)
 				else:
@@ -848,7 +850,9 @@ class IRC_Server:
 				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 				addr = (msg.params[0], int(msg.params[1]))
 				sock.connect(addr)
-				self.sendServerData(self.addConnection(sock, addr))
+				connection = self.addConnection(sock, addr)
+				connection.pendingServer = True
+				self.sendServerData()
 			elif(len(msg.params) == 3):
 				# find the named server, and forward message toward it
 				server = self.findServer(msg.params[2])
