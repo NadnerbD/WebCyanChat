@@ -40,26 +40,41 @@ class IRC_Server:
 			return self.toString()
 
 	class IRC_Flags:
-		def __init__(self, flagstring=""):
+		# here I go, redefining the set type
+		# (plus some useful functions, and alpha only)
+		def __init__(self, flags=""):
+			# since IRC_Flags is iterable, we 
+			# can use this as a copy constructor
 			self.flags = list()
-			for flag in flagstring:
-				if(not flag in self.flags):
+			for flag in flags:
+				if(flag not in self and flag.isalpha()):
 					self.flags.append(flag)
 
 		def change(self, changestring):
-			for flag in changestring[1:]:
-				if(changestring[0] == "+"):
-					if(not flag in self.flags):
-						self.flags.append(flag)
-				elif(changestring[0] == "-"):
-					if(flag in self.flags):	
-						self.flags.remove(flag)
+			if(changestring[0] == "+"):
+				self.flags = (self + changestring).flags
+			elif(changestring[0] == "-"):
+				self.flags = (self - changestring).flags
+
+		def __add__(self, flags):
+			out = IRC_Server.IRC_Flags(self)
+			for flag in flags:
+				if(flag not in out and flag.isalpha()):
+					out.flags.append(flag)
+			return out
+
+		def __sub__(self, flags):
+			out = IRC_Server.IRC_Flags(self)
+			for flag in flags:
+				if(flag in out):
+					out.flags.remove(flag)
+			return out
 
 		def __repr__(self):
 			return "+%s" % ''.join(self.flags)
 
-		def __contains__(self, flag):
-			return flag in self.flags
+		def __iter__(self):
+			return self.flags.__iter__()
 
 	class IRC_Connection:
 		# type flags
@@ -114,6 +129,13 @@ class IRC_Server:
 			# a list of channel objects which the user is 
 			# subscribed to
 			self.channels = list()
+			self.here = True
+
+		def whoSigils(self):
+			out = ['G', 'H'][self.here] # Here/Gone
+			if('o' in self.flags):
+				out += '*' # IRCop
+			return out
 		
 		def fullUser(self):
 			if(self.username):
@@ -138,11 +160,31 @@ class IRC_Server:
 				self.flags = IRC_Server.IRC_Flags()
 
 			def sigil(self):
-				if('v' in self.flags):
-					return "+"
+				# the highest-order mode takes precedence
+				if('?' in self.flags): # TODO: figure out what this is
+					return "!"
 				if('o' in self.flags):
 					return "@"
+				if('h' in self.flags):
+					return "%"
+				if('v' in self.flags):
+					return "+"
 				return ""
+
+			def whoSigils(self):
+				csymbols = {
+					'v': '+', \
+					'h': '%', \
+					'o': '@', \
+					'd': 'd', \
+					'?': '!'  # TODO: what's this <_<
+				}
+				out = str()
+				for flag in self.flags:
+					# we shouldn't need to check this, since only
+					# certain modes can be set on this object
+					out += csymbols[flag]
+				return out + self.user.whoSigils()
 
 			def toString(self):
 				return self.sigil() + self.user.nick
@@ -225,6 +267,12 @@ class IRC_Server:
 				log(self, "Found channel %s" % channel, 4)
 				return channel
 		log(self, "Didn't find channel", 4)
+		return None
+
+	def findServer(self, hostname):
+		for server in self.servers:
+			if(server.hostname == hostname):
+				return server
 		return None
 
 	def removeUser(self, user):
@@ -364,6 +412,7 @@ class IRC_Server:
 		msg = self.IRC_Message("001 :Welcome, %s" % connection.user.nick) # WTF: Unknown reply type
 		msg.params.append(connection.user.nick)
 		msg.prefix = self.hostname
+		# stick this in there somewhere: CHANTYPES=#&+ PREFIX=(Naohv)$&@%+ CHANMODES=be,k,l,cimnpqstAKMNORS STATUSMSG=$&@%+ NETWORK=Nadru
 		connection.send(msg.toString())
 		msg = self.IRC_Message("375 :- %s Message of the day -" % self.hostname) # RPL_MOTDSTART
 		msg.params.append(connection.user.nick)
@@ -458,7 +507,7 @@ class IRC_Server:
 					connection.user.nick = msg.params[0]
 					self.sendMOTD(connection)
 				# forward the nick msg to the servers
-				msg.params.append("0")
+				msg.params.append("1")
 				self.broadcast(msg, None, self.IRC_Connection.SERVER)
 				# now we can change the name of the user locally
 				# forward the nick msg to local users who need to know
@@ -585,7 +634,13 @@ class IRC_Server:
 			self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 			self.removeUser(user)
 		elif(msg.command == "SQUIT"):
-			pass
+			if(connection.type == self.IRC_Connection.SERVER and msg.params[0] == self.hostname):
+				# this message is directed at us, we must terminate the connection and send SQUITs for all servers
+				# that are being split from this half of the network
+				# for the moment, I'm going to be lazy and just let the watchdog do all the cleanup work
+				raise Exception("Recieved SQUIT command")
+			elif(connection.type == self.IRC_Connection.SERVER):
+				self.removeServer(self.findServer(msg.params[0]))
 		elif(msg.command == "JOIN"):
 			for chanName in msg.params[0].split(","):
 				channel = self.findChannel(chanName)
@@ -634,15 +689,20 @@ class IRC_Server:
 					msg.params = [connection.user.nick, user.nick, str(user.flags)]
 			elif(len(msg.params) > 1):
 				# user is trying to change a mode
-				# TODO: This performs NO VALIDATION and will accept ALL FLAGS
+				# TODO: This performs MINIMAL VALIDATION and will accept ALL FLAGS (but only from operators)
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
 				if(msg.params[0].startswith("#") or msg.params[0].startswith("&")):
 					# channel mode being set
 					channel = self.findChannel(msg.params[0])
+					cuserflags = connection.user.flags + channel.findCUser(connection.user.nick).flags
+					if('o' not in cuserflags): # and 'h' not in cuserflags): #TODO: decide how to deal with halfops
+						# not allowed :>
+						return
 					targetIndex = 2
 					for flag in msg.params[1][1:]:
-						if(flag in ['o', 'v']):
+						# op, voice, half-op
+						if(flag in 'vho'):
 							# these are channel-user modes
 							cuser = channel.findCUser(msg.params[targetIndex])
 							cuser.flags.change(msg.params[1][0] + flag)
@@ -655,6 +715,9 @@ class IRC_Server:
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
+					if('o' not in connection.user.flags):
+						# not allowed :>
+						return
 					user = self.findUser(msg.params[0])
 					user.flags.change(msg.params[1])
 					self.localBroadcast(msg, user)
@@ -745,7 +808,6 @@ class IRC_Server:
 			for target in msg.params[0].split(','):
 				if(target.startswith("#") or target.startswith("&")):
 					channel = self.findChannel(target)
-					# TODO: XChat doesn't like my whoreplies
 					msg = self.IRC_Message("352") # RPL_WHOREPLY
 					msg.prefix = self.hostname
 					for cuser in channel.users:
@@ -757,8 +819,7 @@ class IRC_Server:
 							user.hostname, \
 							user.servername, \
 							user.nick, \
-							# TODO: WTF is all this stuff about?
-							['H', 'G'][0] + cuser.sigil(), \
+							cuser.whoSigils(), \
 						]
 						msg.trail = "%d %s" % (user.hopcount, user.realname)
 						connection.send(msg.toString())
