@@ -770,7 +770,7 @@ class IRC_Server:
 							# everything else can be assumed to be a channel mode
 							channel.flags.change(msg.params[1][0] + flag)
 					# forward the message
-					channel.broadcast(msg)
+					channel.broadcast(msg, localOnly=True)
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
@@ -785,7 +785,8 @@ class IRC_Server:
 			if(msg.trail):
 				channel.topic = msg.trail
 				msg.prefix = connection.user.fullUser()
-				channel.broadcast(msg)
+				channel.broadcast(msg, localOnly=True)
+				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 			else:
 				# first send the channel topic
 				self.sendTopic(connection, channel)
