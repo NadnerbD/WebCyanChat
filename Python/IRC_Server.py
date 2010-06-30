@@ -852,7 +852,7 @@ class IRC_Server:
 				sock.connect(addr)
 				connection = self.addConnection(sock, addr)
 				connection.pendingServer = True
-				self.sendServerData()
+				self.sendServerData(connection)
 			elif(len(msg.params) == 3):
 				# find the named server, and forward message toward it
 				server = self.findServer(msg.params[2])
