@@ -291,6 +291,8 @@ class IRC_Server:
 		if(server in self.servers):
 			self.servers.remove(server)
 		if(server == server.connection.user):
+			server.connection.sock.close()
+			server.connection.closed = True
 			self.connections.remove(server.connection)
 
 	def start(self):
@@ -358,6 +360,7 @@ class IRC_Server:
 				self.localBroadcast(msg, connection.user, connection)
 				# this method should never attempt to send messages to the dead connection
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+				self.removeUser(connection.user)
 			elif(connection.type == self.IRC_Connection.SERVER):
 				for user in self.users:
 					if(user.connection == connection):
@@ -374,12 +377,11 @@ class IRC_Server:
 						msg.params = [sever.hostname]
 						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 						self.removeServer(server)
-		# get rid of the connection and associated users (server or client)
-		if(connection.type == self.IRC_Connection.CLIENT):
-			self.removeUser(connection.user)
-		else:
-			self.removeServer(connection.user)
-					
+				self.removeServer(connection.user)
+			else:
+				# that was fast :P
+				connection.sock.close()
+				self.connections.remove(connection)
 
 	def sockLoop(self, connection): #Threaded per-socket
 		while 1:
