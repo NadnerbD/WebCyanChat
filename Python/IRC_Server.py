@@ -482,7 +482,7 @@ class IRC_Server:
 			userMsg.params = [user.nick, "1"]
 			connection.send(userMsg.toString())
 			userMsg = self.IRC_Message("USER")
-			userMsg.prefix = self.hostname
+			userMsg.prefix = user.nick
 			userMsg.params = [user.username, user.hostname, user.servername]
 			userMsg.trail = user.realname
 			connection.send(userMsg.toString())
@@ -559,7 +559,8 @@ class IRC_Server:
 					user.nick = msg.params[0]
 				else:
 					# new user
-					self.users.append(self.IRC_User(connection, msg.params[0], hopcount))
+					user = self.IRC_User(connection, msg.params[0], hopcount)
+					self.users.append(user)
 				# increment the hopcount and forward to servers
 				msg.params[1] = str(hopcount + 1)
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
