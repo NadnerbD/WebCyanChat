@@ -576,12 +576,22 @@ class IRC_Server:
 					# get this connections previous username and set it as the sender of the nick msg
 					msg.prefix = connection.user.fullUser()
 					connection.user.nick = msg.params[0]
+					isNewUser = False
 				else:
+					# this is the first nick this user has recieved
 					connection.user.nick = msg.params[0]
 					self.sendMOTD(connection)
+					isNewUser = True
 				# forward the nick msg to the servers
-				msg.params.append("1")
+				msg.params.append("1") # hopcount
 				self.broadcast(msg, None, self.IRC_Connection.SERVER)
+				if(connection.user.username and isNewUser):
+					# now that we have a nick broadcast to the servers, we can send the user as well
+					userMsg = self.IRC_Message("USER")
+					userMsg.prefix = connection.user.nick
+					userMsg.params = [connection.user.username, connection.user.hostname, connection.user.servername]
+					userMsg.trail = connection.user.realname
+					self.broadcast(userMsg, connection, self.IRC_Connection.SERVER)
 				# now we can change the name of the user locally
 				# forward the nick msg to local users who need to know
 				msg.params.remove(msg.params[1])
@@ -595,6 +605,9 @@ class IRC_Server:
 				connection.user = self.IRC_User(connection, msg.params[0])
 				self.users.append(connection.user)
 				self.sendMOTD(connection)
+				# broadcast new user to the network
+				msg.params.append("1") # hopcount
+				self.broadcast(msg, None, self.IRC_Connection.SERVER)
 		elif(msg.command == "USER"):
 			# if this is the first message from a connection, it's a client
 			if(connection.type == self.IRC_Connection.UNKNOWN):
@@ -614,11 +627,7 @@ class IRC_Server:
 				user.servername = self.hostname
 			user.realname = msg.trail
 			if(user.nick):
-				# now we can send the user to the other servers
-				nickMsg = self.IRC_Message("NICK")
-				nickMsg.prefix = self.hostname
-				nickMsg.params = [user.nick]
-				self.broadcast(nickMsg, connection, self.IRC_Connection.SERVER)
+				# if the user has a nick already, we can send the user to the other servers
 				userMsg = self.IRC_Message("USER")
 				userMsg.prefix = user.nick
 				userMsg.params = [user.username, user.hostname, user.servername]
@@ -762,6 +771,9 @@ class IRC_Server:
 					for flag in msg.params[1][1:]:
 						if(flag in IRC_Server.cuser_modes):
 							# these are channel-user modes
+							if(targetIndex >= len(msg.params)):
+								# prevent thread crash, silent fail, perhaps send a RPL_NOTENOUGHPARAMS (if that exists)
+								return
 							cuser = channel.findCUser(msg.params[targetIndex])
 							if(cuser):
 								cuser.flags.change(msg.params[1][0] + flag)
@@ -784,7 +796,8 @@ class IRC_Server:
 			channel = self.findChannel(msg.params[0])
 			if(msg.trail):
 				channel.topic = msg.trail
-				msg.prefix = connection.user.fullUser()
+				if(connection.type == self.IRC_Connection.CLIENT):
+					msg.prefix = connection.user.fullUser()
 				channel.broadcast(msg, localOnly=True)
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 			else:
