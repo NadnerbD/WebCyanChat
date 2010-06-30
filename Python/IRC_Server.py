@@ -198,6 +198,7 @@ class IRC_Server:
 			self.topic = str()
 			self.flags = IRC_Server.IRC_Flags()
 			self.users = list()
+			self.key = ""
 
 		def __repr__(self):
 			return "<%s %s>" % (self.name, self.flags)
@@ -352,6 +353,7 @@ class IRC_Server:
 		watchdogThread = threading.Thread(None, self.watchConnection, "watchdogThread", (newConnection, sockThread))
 		watchdogThread.setDaemon(1)
 		watchdogThread.start()
+		return newConnection
 
 	def watchConnection(self, connection, sockThread):
 		sockThread.join()
@@ -377,7 +379,7 @@ class IRC_Server:
 					if(server.connection == connection):
 						msg = self.IRC_Message("SQUIT :Lost in netsplit")
 						msg.prefix = self.hostname
-						msg.params = [sever.hostname]
+						msg.params = [server.hostname]
 						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 						self.removeServer(server)
 				self.removeServer(connection.user)
@@ -477,8 +479,7 @@ class IRC_Server:
 		for user in self.users:
 			# NICK, USER, MODE, JOIN
 			userMsg = self.IRC_Message("NICK")
-			userMsg.prefix = self.hostname
-			userMsg.params = [user.nick]
+			userMsg.params = [user.nick, "1"]
 			connection.send(userMsg.toString())
 			userMsg = self.IRC_Message("USER")
 			userMsg.prefix = self.hostname
@@ -496,11 +497,11 @@ class IRC_Server:
 			for channel in user.channels:
 				channelNames.append(channel.name)
 				channelKeys.append(channel.key)
-				channelModes.append(channel.findUser(user).flags)
+				channelModes.append(channel.findCUser(user.nick).flags)
 			userMsg.params = [','.join(channelNames), ','.join(channelKeys)]
 			userMsg.prefix = user.nick
 			connection.send(userMsg.toString())
-			for channel in len(channelModes):
+			for channel in range(len(channelModes)):
 				userMsg = self.IRC_Message("MODE")
 				userMsg.prefix = self.hostname
 				userMsg.params = [channelNames[channel], str(channelModes[channel]), user.nick]
@@ -844,9 +845,9 @@ class IRC_Server:
 				if(len(msg.params) == 1):
 					msg.params.append("6667")
 				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-				sock.connect((msg.params[0], int(msg.params[1])))
-				self.addConnection(sock, addr)
-				self.sendServerData(newConnection)
+				addr = (msg.params[0], int(msg.params[1]))
+				sock.connect(addr)
+				self.sendServerData(self.addConnection(sock, addr))
 			elif(len(msg.params) == 3):
 				# find the named server, and forward message toward it
 				server = self.findServer(msg.params[2])
