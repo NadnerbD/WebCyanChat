@@ -377,12 +377,12 @@ class IRC_Server:
 						self.removeUser(user)
 				for server in self.servers:
 					if(server.connection == connection):
+						# this removes both the lost server, and all servers behind it
 						msg = self.IRC_Message("SQUIT :Lost in netsplit")
 						msg.prefix = self.hostname
 						msg.params = [server.hostname]
 						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 						self.removeServer(server)
-				self.removeServer(connection.user)
 			else:
 				# that was fast :P
 				connection.sock.close()
@@ -559,7 +559,7 @@ class IRC_Server:
 					user.nick = msg.params[0]
 				else:
 					# new user
-					self.users.append(self.IRC_User(connection, nick, hopcount))
+					self.users.append(self.IRC_User(connection, msg.params[0], hopcount))
 				# increment the hopcount and forward to servers
 				msg.params[1] = str(hopcount + 1)
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
