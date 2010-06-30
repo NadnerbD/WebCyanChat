@@ -237,12 +237,15 @@ class IRC_Server:
 		self.broadcastLock = threading.Lock()
 		self.accessLock = threading.Lock()
 		self.hostname = socket.gethostname()
+		self.info = "I am a server"
 		# prefs
 		self.prefs = { \
 			"irc_port": 6667, \
 			"server_password": "seekrit", \
 			"enable_http": 1, \
 			"http_port": 6668, \
+			"oper_user": "oper", \
+			"oper_pass": "huru", \
 		}
 		self.HTTPServ = HTTP_Server()
 		# irc servers need to know a lot of stuff
@@ -454,6 +457,61 @@ class IRC_Server:
 		msg.params = [connection.user.nick, channel.name]
 		connection.send(msg.toString())
 
+	def sendServerData(self, connection):
+		# respond with our own PASS, SERVER combo
+		passMsg = self.IRC_Message("PASS")
+		passMsg.prefix = self.hostname
+		passMsg.params = [self.prefs["server_password"]]
+		connection.send(passMsg.toString())
+		servMsg = self.IRC_Message("SERVER")
+		servMsg.params = [self.hostname, "1"]
+		servMsg.trail = self.info
+		connection.send(servMsg.toString())
+		# now we must synchronize all of our data with this new server
+		for server in self.servers:
+			servMsg = self.IRC_Message("SERVER")
+			servMsg.params = [server.hostname, str(server.hopcount)]
+			servMsg.trail = server.info
+			servMsg.prefix = self.hostname
+			connection.send(servMsg.toString())
+		for user in self.users:
+			# NICK, USER, MODE, JOIN
+			userMsg = self.IRC_Message("NICK")
+			userMsg.prefix = self.hostname
+			userMsg.params = [user.nick]
+			connection.send(userMsg.toString())
+			userMsg = self.IRC_Message("USER")
+			userMsg.prefix = self.hostname
+			userMsg.params = [user.username, user.hostname, user.servername]
+			userMsg.trail = user.realname
+			connection.send(userMsg.toString())
+			userMsg = self.IRC_Message("MODE")
+			userMsg.prefix = self.hostname
+			userMsg.params = [user.nick, str(user.flags)]
+			connection.send(userMsg.toString())
+			userMsg = self.IRC_Message("JOIN")
+			channelNames = list()
+			channelKeys = list()
+			channelModes = list()
+			for channel in user.channels:
+				channelNames.append(channel.name)
+				channelKeys.append(channel.key)
+				channelModes.append(channel.findUser(user).flags)
+			userMsg.params = [','.join(channelNames), ','.join(channelKeys)]
+			userMsg.prefix = user.nick
+			connection.send(userMsg.toString())
+			for channel in len(channelModes):
+				userMsg = self.IRC_Message("MODE")
+				userMsg.prefix = self.hostname
+				userMsg.params = [channelNames[channel], str(channelModes[channel]), user.nick]
+				connection.send(userMsg.toString())
+		for channel in self.channels:
+			chanMsg = self.IRC_Message("MODE")
+			chanMsg.prefix = self.hostname
+			chanMsg.params = [channel.name, str(channel.flags)]
+			connection.send(chanMsg.toString())
+		
+
 	def checkClientNick(self, connection, nick):
 		if(self.findUser(nick)):
 			# check that nobody's taken the nick already
@@ -577,46 +635,12 @@ class IRC_Server:
 					connection.type = self.IRC_Connection.SERVER
 					newServer = self.IRC_Server(connection, msg.params[0], int(msg.params[1]), msg.trail)
 					connection.user = newServer
-					# TODO: now we must synchronize all of our data with this new server
-					for server in self.servers:
-						servMsg = self.IRC_Message("SERVER")
-						servMsg.params = [server.hostname, str(server.hopcount)]
-						servMsg.trail = server.info
-						servMsg.prefix = self.hostname
-						connection.send(servMsg.toString())
-					for user in self.users:
-						# NICK, USER, MODE, JOIN
-						userMsg = self.IRC_Message("NICK")
-						userMsg.prefix = self.hostname
-						userMsg.params = [user.nick]
-						connection.send(userMsg.toString())
-						userMsg = self.IRC_Message("USER")
-						userMsg.prefix = self.hostname
-						userMsg.params = [user.username, user.hostname, user.servername]
-						userMsg.trail = user.realname
-						connection.send(userMsg.toString())
-						userMsg = self.IRC_Message("MODE")
-						userMsg.prefix = self.hostname
-						userMsg.params = [user.nick, str(user.flags)]
-						connection.send(userMsg.toString())
-						userMsg = self.IRC_Message("JOIN")
-						channelNames = list()
-						channelKeys = list()
-						for channel in user.channels:
-							channelNames.append(channel.name)
-							channelKeys.append(channel.key)
-						userMsg.params = [','.join(channelNames), ','.join(channelKeys)]
-						userMsg.prefix = user.nick
-						connection.send(userMsg.toString())
-					for channel in self.channels:
-						chanMsg = self.IRC_Message("MODE")
-						chanMsg.prefix = self.hostname
-						chanMsg.params = [channel.name, str(channel.flags)]
-						connection.send(chanMsg.toString())
+					self.sendServerData(connection)
 					# add the server to our local server collection
 					self.servers.append(newServer)
 				else:
-					return	
+					# if the server isn't authenticated, we should terminate the connection
+					raise Exception("Unauthenticated server attempt")
 			elif(connection.type == self.IRC_Connection.SERVER):
 				# this is a server informing us of the presence of servers behind it
 				self.servers.append(self.IRC_Server(connection, msg.params[0], int(msg.params[1]), msg.trail))
@@ -629,7 +653,21 @@ class IRC_Server:
 			# propagate this to the rest of the network
 			self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "OPER"):
-			pass
+			# we should only recieve this message from a client
+			if(not connection.type == self.IRC_Connection.CLIENT):
+				return
+			if(msg.params[0] == self.prefs["oper_user"] and msg.params[1] == self.prefs["oper_pass"]):
+				operMsg = self.IRC_Message("MODE")
+				operMsg.prefix = self.hostname
+				operMsg.params = ['+o', connection.user.nick]
+				self.broadcast(operMsg, None, self.IRC_Connection.SERVER)
+				connection.user.flags += 'o'
+				rpl = self.IRC_Message("381 :You are now an IRC operator") # RPL_YOUREOPER
+			else:
+				rpl = self.IRC_Message("464 :Password incorrect") # RPL_PASSWDMISMATCH
+			rpl.prefix = self.hostname
+			rpl.params = [connection.user.nick]
+			connection.send(rpl.toString())
 		elif(msg.command == "QUIT"):
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg.prefix = connection.user.fullUser()
@@ -680,9 +718,11 @@ class IRC_Server:
 				msg.params[0] = chanName
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
-				channel.broadcast(msg, None, localOnly=True)
-				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
-				channel.removeUser(self.findUser(msg.prefix))
+				user = self.findUser(msg.prefix)
+				if(user):
+					channel.broadcast(msg, None, localOnly=True)
+					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+					channel.removeUser(user)
 		elif(msg.command == "MODE"):
 			if(len(msg.params) == 1):
 				# user is requesting modes
@@ -719,7 +759,8 @@ class IRC_Server:
 						if(flag in IRC_Server.cuser_modes):
 							# these are channel-user modes
 							cuser = channel.findCUser(msg.params[targetIndex])
-							cuser.flags.change(msg.params[1][0] + flag)
+							if(cuser):
+								cuser.flags.change(msg.params[1][0] + flag)
 							targetIndex += 1
 						else:
 							# everything else can be assumed to be a channel mode
@@ -790,7 +831,26 @@ class IRC_Server:
 		elif(msg.command == "TIME"):
 			pass
 		elif(msg.command == "CONNECT"):
-			pass
+			if(connection.type == self.IRC_Connection.CLIENT):
+				if('o' not in connection.user.flags):
+					rpl = self.IRC_Message("481 :Permission Denied- You're not an IRC operator") # ERR_NOPRIVILEGES
+					rpl.prefix = self.hostname
+					rpl.params = [connection.user.nick]
+					connection.send(rpl.toString())
+					return
+				msg.prefix = connection.user.fullUser()
+			if(len(msg.params) in [1, 2] or (len(msg.params) == 3 and msg.params[2] == self.hostname)):
+				# this message is meant for us, we must now connect to the named server
+				if(len(msg.params) == 1):
+					msg.params.append("6667")
+				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				sock.connect((msg.params[0], int(msg.params[1])))
+				self.addConnection(sock, addr)
+				self.sendServerData(newConnection)
+			elif(len(msg.params) == 3):
+				# find the named server, and forward message toward it
+				server = self.findServer(msg.params[2])
+				server.connection.send(msg.toString())
 		elif(msg.command == "TRACE"):
 			pass
 		elif(msg.command == "ADMIN"):
