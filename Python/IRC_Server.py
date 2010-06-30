@@ -6,6 +6,19 @@ import threading
 import socket
 
 class IRC_Server:
+	# these are ordered lists of channel-user and user mode characters
+	# they represent all the modes that the server will accept for users
+	# and channel users, and their mapping to sigils put in WHO replies
+	# and NAMES replies. For NAMES replies, earlier chars take precedence
+	# op, voice, half-op currently supported
+	cuser_modes = "ohv"
+	cuser_sigils = "@%+"
+	# IRCop supported
+	user_modes = "o"
+	user_sigils = "*"
+	# Global, Local, and Modeless channels
+	chan_types = "#&+"
+
 	# max name length is 9 characters
 	class IRC_Message:
 		def __init__(self, message):
@@ -133,8 +146,9 @@ class IRC_Server:
 
 		def whoSigils(self):
 			out = ['G', 'H'][self.here] # Here/Gone
-			if('o' in self.flags):
-				out += '*' # IRCop
+			for flag in range(len(IRC_Server.user_modes)):
+				if(IRC_Server.user_modes[flag] in self.flags):
+					out += IRC_Server.user_sigils[flag]
 			return out
 		
 		def fullUser(self):
@@ -161,30 +175,17 @@ class IRC_Server:
 
 			def sigil(self):
 				# the highest-order mode takes precedence
-				if('?' in self.flags): # TODO: figure out what this is
-					return "!"
-				if('o' in self.flags):
-					return "@"
-				if('h' in self.flags):
-					return "%"
-				if('v' in self.flags):
-					return "+"
+				for flag in range(len(IRC_Server.cuser_modes)):
+					if(IRC_Server.cuser_modes[flag] in self.flags):
+						return IRC_Server.cuser_sigils[flag]
 				return ""
 
 			def whoSigils(self):
-				csymbols = {
-					'v': '+', \
-					'h': '%', \
-					'o': '@', \
-					'd': 'd', \
-					'?': '!'  # TODO: what's this <_<
-				}
-				out = str()
-				for flag in self.flags:
-					# we shouldn't need to check this, since only
-					# certain modes can be set on this object
-					out += csymbols[flag]
-				return out + self.user.whoSigils()
+				out = self.user.whoSigils()
+				for flag in range(len(IRC_Server.cuser_modes)):
+					if(IRC_Server.cuser_modes[flag] in self.flags):
+						out += IRC_Server.cuser_sigils[flag]
+				return out
 
 			def toString(self):
 				return self.sigil() + self.user.nick
@@ -437,7 +438,7 @@ class IRC_Server:
 		msg.params = [connection.user.nick, channel.name]
 		connection.send(msg.toString())
 
-	def sendNames(self, connection, channel, sendEnd=True):
+	def sendNames(self, connection, channel):
 		msg = self.IRC_Message("353") # RPL_NAMEREPLY
 		msg.prefix = self.hostname
 		#TODO: WTF is the @ for?
@@ -446,11 +447,25 @@ class IRC_Server:
 			msg.trail += "%s " % cuser.toString()
 		msg.trail = msg.trail.rstrip()
 		connection.send(msg.toString())
-		if(sendEnd):
-			msg = self.IRC_Message("366 :End of /NAMES list") # RPL_ENDOFNAMES
-			msg.prefix = self.hostname
-			msg.params = [connection.user.nick, channel.name]
-			connection.send(msg.toString())
+		msg = self.IRC_Message("366 :End of /NAMES list") # RPL_ENDOFNAMES
+		msg.prefix = self.hostname
+		msg.params = [connection.user.nick, channel.name]
+		connection.send(msg.toString())
+
+	def checkClientNick(self, connection, nick):
+		if(self.findUser(nick)):
+			# check that nobody's taken the nick already
+			errmsg = self.IRC_Message("433 :Nickname is already in use")
+			errmsg.prefix = self.hostname
+			#TODO: WTF is the star for?
+			errmsg.params = ["*", nick]
+			connection.send(errmsg.toString())
+			return False
+		for char in IRC_Server.cuser_sigils + IRC_Server.chan_types + "!@": #need to include these symbols, as they're nick!user@host delimiters
+			if char in nick:
+				return False
+		# nick is valid
+		return True
 	
 	def handleMsg(self, connection, msg):
 		log(self, "command: %s from %s" % (msg.command, connection), 2)
@@ -491,13 +506,8 @@ class IRC_Server:
 				msg.params.remove(msg.params[1])
 				self.localBroadcast(msg, user)
 			elif(connection.type == self.IRC_Connection.CLIENT):
-				if(self.findUser(msg.params[0])):
-					# check that nobody's taken the nick already
-					errmsg = self.IRC_Message("433 :Nickname is already in use")
-					errmsg.prefix = self.hostname
-					#TODO: WTF is the star for?
-					errmsg.params = ["*", msg.params[0]]
-					connection.send(errmsg.toString())
+				# check that the name isn't already taken and is valid
+				if(not self.checkClientNick(connection, msg.params[0])):
 					return
 				if(connection.user.nick):
 					# get this connections previous username and set it as the sender of the nick msg
@@ -514,14 +524,8 @@ class IRC_Server:
 				msg.params.remove(msg.params[1])
 				self.localBroadcast(msg, connection.user)
 			elif(connection.type == self.IRC_Connection.UNKNOWN):
-				# check that the name isn't already taken
-				if(self.findUser(msg.params[0])):
-					# check that nobody's taken the nick already
-					errmsg = self.IRC_Message("433 :Nickname is already in use")
-					errmsg.prefix = self.hostname
-					#TODO: WTF is the star for?
-					errmsg.params = ["*", msg.params[0]]
-					connection.send(errmsg.toString())
+				# check that the name isn't already taken and is valid
+				if(not self.checkClientNick(connection, msg.params[0])):
 					return
 				# now we know it's a client
 				connection.type = self.IRC_Connection.CLIENT
@@ -643,6 +647,8 @@ class IRC_Server:
 				self.removeServer(self.findServer(msg.params[0]))
 		elif(msg.command == "JOIN"):
 			for chanName in msg.params[0].split(","):
+				if(chanName[0] not in IRC_Server.chan_types):
+					continue
 				channel = self.findChannel(chanName)
 				if(not channel):
 					channel = self.IRC_Channel(chanName)
@@ -655,6 +661,9 @@ class IRC_Server:
 				if(not channel.addUser(self.findUser(msg.prefix))):
 					# if this fails (due to the user already being there) stop
 					return
+				# if this is the first user in the channel, make the cuser an op
+				if(len(channel.users) == 1):
+					channel.users[0].flags += 'o'
 				channel.broadcast(msg, None, localOnly=True)
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				if(connection.type == self.IRC_Connection.CLIENT):
@@ -675,7 +684,7 @@ class IRC_Server:
 		elif(msg.command == "MODE"):
 			if(len(msg.params) == 1):
 				# user is requesting modes
-				if(msg.params[0].startswith("#") or msg.params[0].startswith("&")):
+				if(msg.params[0][0] in IRC_Server.chan_types):
 					channel = self.findChannel(msg.params[0])
 					# now send the channel modes
 					msg = self.IRC_Message("324") # RPL_CHANNELMODEIS
@@ -692,17 +701,20 @@ class IRC_Server:
 				# TODO: This performs MINIMAL VALIDATION and will accept ALL FLAGS (but only from operators)
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
-				if(msg.params[0].startswith("#") or msg.params[0].startswith("&")):
+				if(msg.params[0][0] in IRC_Server.chan_types):
 					# channel mode being set
 					channel = self.findChannel(msg.params[0])
-					cuserflags = connection.user.flags + channel.findCUser(connection.user.nick).flags
-					if('o' not in cuserflags): # and 'h' not in cuserflags): #TODO: decide how to deal with halfops
-						# not allowed :>
-						return
+					if(connection.type == self.IRC_Connection.CLIENT):
+						# only need to validate client mode sets
+						cuserflags = connection.user.flags + channel.findCUser(connection.user.nick).flags
+						if('o' not in cuserflags and 'h' not in cuserflags):
+							return # silent failure is acceptable
+						for flag in msg.params[1][1:]:
+							if('o' not in cuserflags and 'h' in cuserflags and flag in IRC_Server.cuser_modes.replace('v', '')):
+								return #halfops can do anything chanop-like except modify user modes above voice
 					targetIndex = 2
 					for flag in msg.params[1][1:]:
-						# op, voice, half-op
-						if(flag in 'vho'):
+						if(flag in IRC_Server.cuser_modes):
 							# these are channel-user modes
 							cuser = channel.findCUser(msg.params[targetIndex])
 							cuser.flags.change(msg.params[1][0] + flag)
@@ -715,9 +727,8 @@ class IRC_Server:
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
-					if('o' not in connection.user.flags):
-						# not allowed :>
-						return
+					if(connection.type == self.IRC_Connection.CLIENT and 'o' not in connection.user.flags):
+						return # silent failure is acceptable
 					user = self.findUser(msg.params[0])
 					user.flags.change(msg.params[1])
 					self.localBroadcast(msg, user)
@@ -737,11 +748,12 @@ class IRC_Server:
 				for channelName in channelNames:
 					channel = self.findChannel(channelName)
 					# I'm assuming we don't send the end of /NAMES until we've responded to the whole command
-					self.sendNames(connection, channel, channelName == channelNames[-1])
+					if(channel):
+						self.sendNames(connection, channel)
 			else:
 				for channel in self.channels:
 					# I'm assuming we don't send the end of /NAMES until we've responded to the whole command
-					self.sendNames(connection, channel, False)
+					self.sendNames(connection, channel)
 				allChannel = self.IRC_Channel("*")
 				for user in self.users:
 					if(len(user.channels) == 0):
@@ -789,7 +801,7 @@ class IRC_Server:
 			for target in msg.params[0].split(","):
 				# hopefully this doesn't count as modifying the iterable
 				msg.params[0] = target
-				if(target.startswith("#") or target.startswith("&")):
+				if(target[0] in IRC_Server.chan_types):
 					self.findChannel(target).broadcast(msg, connection)
 				else:
 					self.findUser(target).connection.send(msg.toString())
@@ -799,14 +811,14 @@ class IRC_Server:
 			for target in msg.params[0].split(","):
 				# hopefully this doesn't count as modifying the iterable
 				msg.params[0] = target
-				if(target.startswith("#") or target.startswith("&")):
+				if(target[0] in IRC_Server.chan_types):
 					self.findChannel(target).broadcast(msg, connection)
 				else:
 					self.findUser(target).connection.send(msg.toString())
 		elif(msg.command == "WHO"):
 			# Now send the channel userlist
 			for target in msg.params[0].split(','):
-				if(target.startswith("#") or target.startswith("&")):
+				if(target[0] in IRC_Server.chan_types):
 					channel = self.findChannel(target)
 					msg = self.IRC_Message("352") # RPL_WHOREPLY
 					msg.prefix = self.hostname
