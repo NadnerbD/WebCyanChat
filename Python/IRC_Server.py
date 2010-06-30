@@ -688,14 +688,17 @@ class IRC_Server:
 		elif(msg.command == "LIST"):
 			reply = self.IRC_Message("321 :Users  Name") # RPL_LISTSTART
 			reply.params = [connection.user.nick, "Channel"]
+			reply.prefix = self.hostname
 			connection.send(reply.toString())
 			for channel in self.channels:
 				reply = self.IRC_Message("322") # RPL_LIST
 				reply.params = [connection.user.nick, channel.name, str(len(channel.users))]
 				reply.trail = channel.topic
+				reply.prefix = self.hostname
 				connection.send(reply.toString())
 			reply = self.IRC_Message("323 :End of /LIST") # RPL_LISTEND
 			reply.params = [connection.user.nick]
+			reply.prefix = self.hostname
 			connection.send(reply.toString())
 		elif(msg.command == "INVITE"):
 			pass
