@@ -983,7 +983,26 @@ class IRC_Server:
 			reply.prefix = self.hostname
 			connection.send(reply.toString())
 		elif(msg.command == "INVITE"):
-			pass
+			if(connection.type == self.IRC_Connection.CLIENT):
+				msg.prefix = connection.user.fullUser()
+			target = self.findUser(msg.params[0])
+			channel = self.findChannel(msg.params[1])
+			if(channel):
+				sender = channel.findCUser(msg.prefix)
+			if(not target):
+				return
+			if(channel and 'i' in channel.flags and (not sender or not sender.flags.hasAny('oh'))):
+				# to invite to a +i channel, you must be a chanop
+				rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
+				rpl.prefix = self.hostname
+				rpl.params = [connection.user.nick]
+				connection.send(rpl.toString())
+				return
+			target.invites.append(msg.params[1])
+			# we don't really need to propagate this to every server, but just to be safe
+			self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+			if(target.connection.type == self.IRC_Connection.CLIENT):
+				target.connection.send(msg.toString())
 		elif(msg.command == "KICK"):
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg.prefix = connection.user.fullUser()
