@@ -401,12 +401,15 @@ class IRC_Server:
 
 	def broadcast(self, msg, excludeConn=None, connType=None):
 		self.broadcastLock.acquire()
+		if(type(excludeConn) != list):
+			excludeConn = [excludeConn]
 		for connection in self.connections:
-			if(connection != excludeConn and (connType == None or connType == connection.type)):
+			if(connection in excludeConn and (connType == None or connType == connection.type)):
 				connection.send(msg.toString())
 		self.broadcastLock.release()
 
 	def localBroadcast(self, msg, relUser, excludeConn=None):
+		self.broadcastLock.acquire()
 		localUsers = list()
 		for channel in relUser.channels:
 			for cuser in channel.users:
@@ -416,6 +419,7 @@ class IRC_Server:
 					localUsers.append(user)
 		for user in localUsers:
 			user.connection.send(msg.toString())
+		self.broadcastLock.release()
 
 	def sendMOTD(self, connection):
 		msg = self.IRC_Message("001 :Welcome, %s" % connection.user.nick) # WTF: Unknown reply type
@@ -538,20 +542,14 @@ class IRC_Server:
 			if(connection.type == self.IRC_Connection.SERVER):
 				user = self.findUser(msg.params[0])
 				if(user):
+					# KILL the users
 					sender = msg.prefix
 					msg.prefix = self.hostname
 					msg.command = "KILL"
 					msg.params = [msg.params[0]]
-					# send a KILL to the server we received this from
-					connection.send(msg.toString())
-					# if this was a name change, we need to KILL both nicks
-					if(sender):
-						msg.params = [sender]
-						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
-					# broadcast this to local clients which know about the user
-					self.localBroadcast(msg, user)
-					# get rid of the user
-					self.removeUser(user)
+					msg.trail = "Nickname collision"
+					# HAX: send the kill to ourselves, so it will get broadcast and handled
+					self.handleMsg(msg, self.IRC_Connection(None, None))
 					return
 				hopcount = int(msg.params[1])
 				if(msg.prefix):
@@ -952,10 +950,18 @@ class IRC_Server:
 		elif(msg.command == "KILL"):
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg.prefix = connection.user.fullUser()
-			user = self.findUser(msg.prefix)
-			if(user):
-				self.localBroadcast(msg, user)
-				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+			killSender = msg.prefix.split("!")[0]
+			killTarget = self.findUser(msg.params[0])
+			if(killTarget):
+				# send the KILL towards it's target
+				killTarget.connection.send(msg.toString())
+				# generate QUITs for the rest of the network to see
+				killQuit = self.IRC_Message("QUIT :Killed by %s (%s)" % (killSender, msg.trail))
+				killQuit.params = [killTarget.nick]
+				killQuit.prefix = self.hostname
+				self.localBroadcast(killQuit, killTarget)
+				self.broadcast(killQuit, [connection, killTarget.connection], self.IRC_Connection.SERVER)
+				# remove the killed user
 				self.removeUser(user)
 		elif(msg.command == "PING"):
 			msg.prefix = self.hostname
