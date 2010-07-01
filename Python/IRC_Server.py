@@ -237,7 +237,7 @@ class IRC_Server:
 		def findCUser(self, nick):
 			nick = nick.split("!")[0]
 			for cuser in self.users:
-				if(cuser.user.nick == nick):
+				if(cuser.user.nick.lower() == nick.lower()):
 					return cuser
 			return None
 
@@ -277,7 +277,7 @@ class IRC_Server:
 		log(self, "Looking for %s in %s" % (nick, self.users), 4)
 		nick = nick.split("!")[0]
 		for user in self.users:
-			if(user.nick == nick):
+			if(user.nick.lower() == nick.lower()):
 				log(self, "Found user %s" % user, 4)
 				return user
 		log(self, "Didn't find user", 4)
@@ -286,7 +286,7 @@ class IRC_Server:
 	def findChannel(self, name):
 		log(self, "Looking for %s in %s" % (name, self.channels), 4)
 		for channel in self.channels:
-			if(channel.name == name):
+			if(channel.name.lower() == name.lower()):
 				log(self, "Found channel %s" % channel, 4)
 				return channel
 		log(self, "Didn't find channel", 4)
@@ -531,6 +531,9 @@ class IRC_Server:
 			channelKeys = list()
 			channelModes = list()
 			for channel in user.channels:
+				if(channel.name.startswith("&")):
+					# don't sync local channels
+					continue
 				channelNames.append(channel.name)
 				channelKeys.append(channel.key)
 				channelModes.append(channel.findCUser(user.nick).flags)
@@ -799,7 +802,9 @@ class IRC_Server:
 				if(len(channel.users) == 1):
 					channel.users[0].flags += 'o'
 				channel.broadcast(msg, None, localOnly=True)
-				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+				if(not channel.name.startswith("&")):
+					# don't sync local channels
+					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				if(connection.type == self.IRC_Connection.CLIENT):
 					# this is a local user, we must send them all the stuff (like topic, userlist)
 					# first send the channel topic
@@ -815,7 +820,9 @@ class IRC_Server:
 				user = self.findUser(msg.prefix)
 				if(user):
 					channel.broadcast(msg, None, localOnly=True)
-					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+					if(not channel.name.startswith("&")):
+						# don't sync local channels
+						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 					channel.removeUser(user)
 		elif(msg.command == "MODE"):
 			if(len(msg.params) == 1):
@@ -842,6 +849,23 @@ class IRC_Server:
 					channel = self.findChannel(msg.params[0])
 					if(not channel):
 						return
+					if(msg.params[1] == 'b' or (msg.params[1] == '+b' and len(msg.params) == 2)):
+						for ban in channel.bans:
+							rpl = self.IRC_Message("367") # RPL_BANLIST
+							rpl.prefix = self.hostname
+							rpl.params = [connection.user.nick, channel.name, ban]
+							connection.send(rpl.toString())
+						rpl = self.IRC_Message("368 :End of channel ban list") # RPL_ENDOFBANLIST
+						rpl.prefix = self.hostname
+						rpl.params = [connection.user.nick, channel.name]
+						connection.send(rpl.toString())
+						return
+					elif(msg.params[1] == 'e' or (msg.params[1] == '+e' and len(msg.params) == 2)):
+						# TODO: request for exempt mask
+						return
+					elif(msg.params[1][0] not in ['+', '-']):
+						# TODO: invalid, give reply
+						return
 					if(connection.type == self.IRC_Connection.CLIENT):
 						# only need to validate client mode sets
 						cuser = channel.findCUser(connection.user.nick)
@@ -860,23 +884,6 @@ class IRC_Server:
 							connection.send(rpl.toString())
 							return 
 					targetIndex = 2
-					if(msg.params[1] == 'b'):
-						for ban in channel.bans:
-							rpl = self.IRC_Message("376") # RPL_BANLIST
-							rpl.prefix = self.hostname
-							rpl.params = [connection.user.nick, channel.name, ban]
-							connection.send(rpl.toString())
-						rpl = self.IRC_Message("368: End of channel ban list") # RPL_ENDOFBANLIST
-						rpl.prefix = self.hostname
-						rpl.params = [connection.user.nick, channel.name]
-						connection.send(rpl.toString())
-						return
-					elif(msg.params[1] == 'e'):
-						# TODO: request for exempt mask
-						return
-					elif(msg.params[1][0] not in ['+', '-']):
-						# TODO: invalid, give reply
-						return
 					for flag in msg.params[1][1:]:
 						if(flag in IRC_Server.cuser_modes):
 							# these are channel-user modes
@@ -913,7 +920,9 @@ class IRC_Server:
 							channel.flags.change(msg.params[1][0] + flag)
 					# forward the message
 					channel.broadcast(msg, localOnly=True)
-					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+					if(not channel.name.startswith("&")):
+						# don't sync local channels
+						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
 					user = self.findUser(msg.params[0])
@@ -940,7 +949,9 @@ class IRC_Server:
 						connection.send(rpl.toString())
 						return
 				channel.broadcast(msg, localOnly=True)
-				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+				if(not channel.name.startswith("&")):
+					# don't sync local channels
+					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 			else:
 				# first send the channel topic
 				self.sendTopic(connection, channel)
@@ -1022,7 +1033,9 @@ class IRC_Server:
 			partMsg.prefix = kickee.user.fullUser()
 			partMsg.params = [channel.name]
 			channel.broadcast(partMsg, kickee.user.connection, localOnly=True)
-			self.broadcast(msg, kickee.user.connection, self.IRC_Connection.SERVER)
+			if(not channel.name.startswith("&")):
+				# don't sync local channels
+				self.broadcast(msg, kickee.user.connection, self.IRC_Connection.SERVER)
 			kickee.user.connection.send(msg.toString())
 			channel.removeUser(kickee.user)
 		elif(msg.command == "VERSION"):
