@@ -713,7 +713,7 @@ class IRC_Server:
 				self.removeServer(self.findServer(msg.params[0]))
 			elif(connection.type == self.IRC_Connection.CLIENT and 'o' in connection.user.flags):
 				msg.prefix = connection.user.fullUser()
-			self.broadcast(msg, connection, IRC_Connection.SERVER)
+			self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "JOIN"):
 			for chanName in msg.params[0].split(","):
 				if(chanName[0] not in IRC_Server.chan_types):
