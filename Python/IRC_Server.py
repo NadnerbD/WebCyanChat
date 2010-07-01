@@ -549,7 +549,7 @@ class IRC_Server:
 					msg.params = [msg.params[0]]
 					msg.trail = "Nickname collision"
 					# HAX: send the kill to ourselves, so it will get broadcast and handled
-					self.handleMsg(msg, self.IRC_Connection(None, None))
+					self.handleMsg(self.IRC_Connection(None, None), msg)
 					return
 				hopcount = int(msg.params[1])
 				if(msg.prefix):
@@ -962,7 +962,7 @@ class IRC_Server:
 				self.localBroadcast(killQuit, killTarget)
 				self.broadcast(killQuit, [connection, killTarget.connection], self.IRC_Connection.SERVER)
 				# remove the killed user
-				self.removeUser(user)
+				self.removeUser(killTarget)
 		elif(msg.command == "PING"):
 			msg.prefix = self.hostname
 			msg.trail = msg.params[0]
