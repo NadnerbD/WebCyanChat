@@ -549,7 +549,7 @@ class IRC_Server:
 						msg.params = [sender]
 						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 					# broadcast this to local clients which know about the user
-					self.localBroadcast(msg)
+					self.localBroadcast(msg, user)
 					# get rid of the user
 					self.removeUser(user)
 					return
@@ -759,6 +759,8 @@ class IRC_Server:
 				if(msg.params[0][0] in IRC_Server.chan_types):
 					# channel mode being set
 					channel = self.findChannel(msg.params[0])
+					if(not channel):
+						return
 					if(connection.type == self.IRC_Connection.CLIENT):
 						# only need to validate client mode sets
 						cuserflags = connection.user.flags + channel.findCUser(connection.user.nick).flags
@@ -768,6 +770,15 @@ class IRC_Server:
 							if('o' not in cuserflags and 'h' in cuserflags and flag in IRC_Server.cuser_modes.replace('v', '')):
 								return #halfops can do anything chanop-like except modify user modes above voice
 					targetIndex = 2
+					if(msg.params[1] == 'b'):
+						# TODO: request for ban mask
+						return
+					elif(msg.params[1] == 'e'):
+						# TODO: request for exempt mask
+						return
+					elif(msg.params[1][0] not in ['+', '-']):
+						# TODO: invalid, give reply
+						return
 					for flag in msg.params[1][1:]:
 						if(flag in IRC_Server.cuser_modes):
 							# these are channel-user modes
@@ -884,9 +895,13 @@ class IRC_Server:
 				# hopefully this doesn't count as modifying the iterable
 				msg.params[0] = target
 				if(target[0] in IRC_Server.chan_types):
-					self.findChannel(target).broadcast(msg, connection)
+					channel = self.findChannel(target)
+					if(channel):
+						channel.broadcast(msg, connection)
 				else:
-					self.findUser(target).connection.send(msg.toString())
+					user = self.findUser(target)
+					if(user):
+						user.connection.send(msg.toString())
 		elif(msg.command == "NOTICE"):
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg.prefix = connection.user.fullUser()
@@ -894,11 +909,17 @@ class IRC_Server:
 				# hopefully this doesn't count as modifying the iterable
 				msg.params[0] = target
 				if(target[0] in IRC_Server.chan_types):
-					self.findChannel(target).broadcast(msg, connection)
+					channel = self.findChannel(target)
+					if(channel):
+						channel.broadcast(msg, connection)
 				else:
-					self.findUser(target).connection.send(msg.toString())
+					user = self.findUser(target)
+					if(user):
+						user.connection.send(msg.toString())
 		elif(msg.command == "WHO"):
 			# Now send the channel userlist
+			if(len(msg.params) == 0):
+				return
 			for target in msg.params[0].split(','):
 				if(target[0] in IRC_Server.chan_types):
 					channel = self.findChannel(target)
@@ -929,9 +950,13 @@ class IRC_Server:
 		elif(msg.command == "WHOWAS"):
 			pass
 		elif(msg.command == "KILL"):
-			self.broadcast(msg, connection)
+			if(connection.type == self.IRC_Connection.CLIENT):
+				msg.prefix = connection.user.fullUser()
 			user = self.findUser(msg.prefix)
-			self.removeUser(user)
+			if(user):
+				self.localBroadcast(msg, user)
+				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+				self.removeUser(user)
 		elif(msg.command == "PING"):
 			msg.prefix = self.hostname
 			msg.trail = msg.params[0]
