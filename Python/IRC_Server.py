@@ -985,7 +985,27 @@ class IRC_Server:
 		elif(msg.command == "INVITE"):
 			pass
 		elif(msg.command == "KICK"):
-			pass
+			if(connection.type == self.IRC_Connection.CLIENT):
+				msg.prefix = connection.user.fullUser()
+			if(len(msg.params) < 2):
+				return
+			channel = self.findChannel(msg.params[0])
+			kicker = channel.findCUser(msg.prefix)
+			kickee = channel.findCUser(msg.params[1])
+			if(not kicker or not kickee or not kicker.flags.hasAny('oh') or (kickee.flags.hasAny('oh') and not kickee.flags.hasAny('o'))):
+				# halfops can't kick ops or each other, nonexistent users can't kick nonexistent users, and stuff
+				rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
+				rpl.prefix = self.hostname
+				rpl.params = [connection.user.nick]
+				connection.send(rpl.toString())
+				return
+			partMsg = self.IRC_Message("PART :Kicked by %s (%s)" % (kicker.user.nick, msg.trail))
+			partMsg.prefix = kickee.user.fullUser()
+			partMsg.params = [channel.name]
+			channel.broadcast(partMsg, kickee.user.connection, localOnly=True)
+			self.broadcast(msg, kickee.user.connection, self.IRC_Connection.SERVER)
+			kickee.user.connection.send(msg.toString())
+			channel.removeUser(kickee.user)
 		elif(msg.command == "VERSION"):
 			pass
 		elif(msg.command == "STATS"):
