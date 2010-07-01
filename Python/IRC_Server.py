@@ -69,6 +69,18 @@ class IRC_Server:
 			elif(changestring[0] == "-"):
 				self.flags = (self - changestring).flags
 
+		def hasAny(self, flags):
+			for flag in flags:
+				if(flag in self.flags):
+					return True
+			return False
+
+		def hasAll(self, flags):
+			for flag in flags:
+				if(flag not in self.flags):
+					return False
+			return True
+
 		def __add__(self, flags):
 			out = IRC_Server.IRC_Flags(self)
 			for flag in flags:
@@ -144,6 +156,7 @@ class IRC_Server:
 			# subscribed to
 			self.channels = list()
 			self.here = True
+			self.invites = list()
 
 		def whoSigils(self):
 			out = ['G', 'H'][self.here] # Here/Gone
@@ -159,7 +172,7 @@ class IRC_Server:
 				return self.nick
 
 		def __repr__(self):
-			return "<%s %s>" % (self.fullUser(), self.flags)
+			return "<%s(%s)>" % (self.fullUser(), self.flags)
 	
 	class IRC_Server:
 		def __init__(self, connection, hostname, hopcount, info):
@@ -195,7 +208,7 @@ class IRC_Server:
 				return self.sigil() + self.user.nick
 
 			def __repr__(self):
-				return "<%s>" % self.toString()
+				return "<%s(%s)>" % (self.toString(), self.flags)
 			
 		def __init__(self, name):
 			self.name = name
@@ -203,9 +216,10 @@ class IRC_Server:
 			self.flags = IRC_Server.IRC_Flags()
 			self.users = list()
 			self.key = ""
+			self.bans = list()
 
 		def __repr__(self):
-			return "<%s %s>" % (self.name, self.flags)
+			return "<%s(%s)>" % (self.name, self.flags)
 
 		def addUser(self, user):
 			if(self.findCUser(user.nick) == None):
@@ -302,6 +316,16 @@ class IRC_Server:
 			server.connection.sock.close()
 			server.connection.closed = True
 			self.connections.remove(server.connection)
+
+	def matchBan(self, user, banMask):
+		banUser = self.IRC_User(None, banMask)
+		if(user.nick != banUser.nick and banUser.nick != '*'):
+			return False
+		if(user.username != banUser.username and banUser.username != '*'):
+			return False
+		if(user.hostname != banUser.hostname and banUser.hostname != '*'):
+			return False
+		return True
 
 	def start(self):
 		acceptThread = threading.Thread(None, self.acceptLoop, "acceptLoop", (self.prefs["irc_port"],))
@@ -458,7 +482,11 @@ class IRC_Server:
 		msg.prefix = self.hostname
 		#TODO: WTF is the @ for?
 		msg.params = [connection.user.nick, "@", channel.name]
+		isInChannel = channel.findCUser(connection.user.nick) != None
 		for cuser in channel.users:
+			if('i' in cuser.user.flags and not isInChannel):
+				# hide +i users from users not in the channel
+				continue
 			msg.trail += "%s " % cuser.toString()
 		msg.trail = msg.trail.rstrip()
 		connection.send(msg.toString())
@@ -711,11 +739,24 @@ class IRC_Server:
 				raise Exception("Recieved SQUIT command")
 			elif(connection.type == self.IRC_Connection.SERVER):
 				self.removeServer(self.findServer(msg.params[0]))
-			elif(connection.type == self.IRC_Connection.CLIENT and 'o' in connection.user.flags):
+			elif(connection.type == self.IRC_Connection.CLIENT):
+				if('o' not in connection.user.flags):
+					rpl = self.IRC_Message("481 :Permission Denied- You're not an IRC operator") # ERR_NOPRIVILEGES
+					rpl.prefix = self.hostname
+					rpl.params = [connection.user.nick]
+					connection.send(rpl.toString())
+					return
 				msg.prefix = connection.user.fullUser()
 			self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "JOIN"):
-			for chanName in msg.params[0].split(","):
+			if(not len(msg.params)):
+				return
+			chans = msg.params[0].split(",")
+			if(len(msg.params) > 1):
+				keys = msg.params[1].split(",")
+			else:
+				keys = range(len(chans))
+			for i, chanName in enumerate(chans):
 				if(chanName[0] not in IRC_Server.chan_types):
 					continue
 				channel = self.findChannel(chanName)
@@ -726,13 +767,33 @@ class IRC_Server:
 				msg.params[0] = chanName
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
+					if('i' in channel.flags and chanName not in connection.user.invites):
+						# prevent an uninvited user from joining an invite-only channel
+						rpl = self.IRC_Message("473 :Cannot join channel (+i)") # ERR_INVITEONLYCHAN
+						rpl.prefix = self.hostname
+						rpl.params = [connection.user.nick, channel.name]
+						connection.send(rpl.toString())
+						return
+					if('k' in channel.flags and keys[i] != channel.key):
+						# prevent a user from joining a +k channel without the channel key
+						rpl = self.IRC_Message("475 :Cannot join channel (+k)") # ERR_BADCHANNELKEY
+						rpl.prefix = self.hostname
+						rpl.params = [connection.user.nick, channel.name]
+						connection.send(rpl.toString())
+						return
+					for ban in channel.bans:
+						if(self.matchBan(connection.user, ban)):
+							# prevent banned users from joining the channel
+							rpl = self.IRC_Message("474 :Cannot join channel (+b)") # ERR_BANNEDFROMCHAN
+							rpl.prefix = self.hostname
+							rpl.params = [connection.user.nick, channel.name]
+							connection.send(rpl.toString())
+							return
 				# add the user to the channel
 				user = self.findUser(msg.prefix)
-				if(not user):
-					# this can happen during a nick collision resolution
-					return
-				if(not channel.addUser(user)):
+				if(not (user and channel.addUser(user))):
 					# if this fails (due to the user already being there) stop
+					# this can happen during a nick collision resolution
 					return
 				# if this is the first user in the channel, make the cuser an op
 				if(len(channel.users) == 1):
@@ -783,15 +844,32 @@ class IRC_Server:
 						return
 					if(connection.type == self.IRC_Connection.CLIENT):
 						# only need to validate client mode sets
-						cuserflags = connection.user.flags + channel.findCUser(connection.user.nick).flags
-						if('o' not in cuserflags and 'h' not in cuserflags):
-							return # silent failure is acceptable
-						for flag in msg.params[1][1:]:
-							if('o' not in cuserflags and 'h' in cuserflags and flag in IRC_Server.cuser_modes.replace('v', '')):
-								return #halfops can do anything chanop-like except modify user modes above voice
+						cuser = channel.findCUser(connection.user.nick)
+						if((cuser == None or not cuser.flags.hasAny('oh')) and 'o' not in connection.user.flags):
+							# can't set channel modes if you're not in the op'd in the channel and not an ircop
+							rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
+							rpl.prefix = self.hostname
+							rpl.params = [connection.user.nick]
+							connection.send(rpl.toString())
+							return
+						if('o' not in cuser.flags and 'h' in cuser.flags and self.IRC_Flags(msg.params[1]).hasAny('oh')):
+							# halfops can do anything chanop-like except modify user modes above voice
+							rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
+							rpl.prefix = self.hostname
+							rpl.params = [connection.user.nick]
+							connection.send(rpl.toString())
+							return 
 					targetIndex = 2
 					if(msg.params[1] == 'b'):
-						# TODO: request for ban mask
+						for ban in channel.bans:
+							rpl = self.IRC_Message("376") # RPL_BANLIST
+							rpl.prefix = self.hostname
+							rpl.params = [connection.user.nick, channel.name, ban]
+							connection.send(rpl.toString())
+						rpl = self.IRC_Message("368: End of channel ban list") # RPL_ENDOFBANLIST
+						rpl.prefix = self.hostname
+						rpl.params = [connection.user.nick, channel.name]
+						connection.send(rpl.toString())
 						return
 					elif(msg.params[1] == 'e'):
 						# TODO: request for exempt mask
@@ -803,7 +881,11 @@ class IRC_Server:
 						if(flag in IRC_Server.cuser_modes):
 							# these are channel-user modes
 							if(targetIndex >= len(msg.params)):
-								# prevent thread crash, silent fail, perhaps send a RPL_NOTENOUGHPARAMS (if that exists)
+								if(connection.type == self.IRC_Connection.CLIENT):
+									rpl = self.IRC_Message("461 :Not enough parameters") # ERR_NEEDMOREPARAMS
+									rpl.prefix = self.hostname
+									rpl.params = [connection.user.nick]
+									connection.send(rpl.toString())
 								return
 							cuser = channel.findCUser(msg.params[targetIndex])
 							if(cuser):
@@ -811,17 +893,35 @@ class IRC_Server:
 							targetIndex += 1
 						else:
 							# everything else can be assumed to be a channel mode
+							if(flag == 'k'):
+								# set the channel key
+								if(msg.params[1][0] == '+' and not targetIndex >= len(msg.params)):
+									channel.key = msg.params[targetIndex]
+								targetIndex += 1
+							elif(flag == 'b'):
+								if(targetIndex >= len(msg.params)):
+									continue
+								# add or remove bans
+								if(msg.params[1][0] == '+'):
+									if(msg.params[targetIndex] not in channel.bans):
+										channel.bans.append(msg.params[targetIndex])
+								elif(msg.params[1][0] == '-'):
+									if(msg.params[targetIndex] in channel.bans):
+										channel.bans.remove(msg.params[targetIndex])
+								targetIndex += 1
+								continue
 							channel.flags.change(msg.params[1][0] + flag)
 					# forward the message
 					channel.broadcast(msg, localOnly=True)
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
-					if(connection.type == self.IRC_Connection.CLIENT and 'o' not in connection.user.flags):
-						return # silent failure is acceptable
 					user = self.findUser(msg.params[0])
 					if(not user):
 						return
+					# user can set it's own flags as long as it doesn't try to op itself, otherwise, user must be op
+					if(connection.type == self.IRC_Connection.CLIENT and (user != connection.user or 'o' in msg.params[1]) and 'o' not in connection.user.flags):
+						return # silent failure is acceptable
 					user.flags.change(msg.params[1])
 					self.localBroadcast(msg, user)
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
@@ -831,6 +931,14 @@ class IRC_Server:
 				channel.topic = msg.trail
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
+					cuser = channel.findCUser(connection.user.nick)
+					if(not cuser or ('t' in channel.flags and not cuser.flags.hasAny('oh'))):
+						# if the channel has mode +t, then you must be a chan(op/halfop)
+						rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
+						rpl.prefix = self.hostname
+						rpl.params = [connection.user.nick]
+						connection.send(rpl.toString())
+						return
 				channel.broadcast(msg, localOnly=True)
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 			else:
@@ -850,7 +958,8 @@ class IRC_Server:
 					self.sendNames(connection, channel)
 				allChannel = self.IRC_Channel("*")
 				for user in self.users:
-					if(len(user.channels) == 0):
+					if(len(user.channels) == 0 and 'i' not in user.flags):
+						# don't show invisible users we don't know about
 						# we don't use addUser() because that would add the channel to the user's channel list
 						allChannel.users.append(self.IRC_Channel.Channel_User(user))
 				self.sendNames(connection, allChannel)
@@ -860,6 +969,10 @@ class IRC_Server:
 			reply.prefix = self.hostname
 			connection.send(reply.toString())
 			for channel in self.channels:
+				if('s' in channel.flags and not channel.findCUser(connection.user.nick) and 'o' not in connection.user.flags):
+					# if a channel is +s (secret) then don't list it unless our user is in it
+					# ircops can see all channels
+					continue
 				reply = self.IRC_Message("322") # RPL_LIST
 				reply.params = [connection.user.nick, channel.name, str(len(channel.users))]
 				reply.trail = channel.topic
@@ -919,6 +1032,14 @@ class IRC_Server:
 				if(target[0] in IRC_Server.chan_types):
 					channel = self.findChannel(target)
 					if(channel):
+						if(connection.type == self.IRC_Connection.CLIENT):
+							cuser = channel.findCUser(connection.user.nick)
+							if('n' in channel.flags and not cuser):
+								# +n channels cannot be msg'd by users not in the channel
+								return
+							if('m' in channel.flags and (not cuser or not cuser.flags.hasAny('ohv'))):
+								# only voiced or better users can talk in a +m channel
+								return
 						channel.broadcast(msg, connection)
 				else:
 					user = self.findUser(target)
@@ -933,6 +1054,14 @@ class IRC_Server:
 				if(target[0] in IRC_Server.chan_types):
 					channel = self.findChannel(target)
 					if(channel):
+						if(connection.type == self.IRC_Connection.CLIENT):
+							cuser = channel.findCUser(connection.user.nick)
+							if('n' in channel.flags and not cuser):
+								# +n channels cannot be msg'd by users not in the channel
+								return
+							if('m' in channel.flags and (not cuser or not cuser.flags.hasAny('ohv'))):
+								# only voiced or better users can talk in a +m channel
+								return
 						channel.broadcast(msg, connection)
 				else:
 					user = self.findUser(target)
@@ -945,9 +1074,13 @@ class IRC_Server:
 			for target in msg.params[0].split(','):
 				if(target[0] in IRC_Server.chan_types):
 					channel = self.findChannel(target)
+					isInChannel = channel.findCUser(connection.user.nick) != None
 					msg = self.IRC_Message("352") # RPL_WHOREPLY
 					msg.prefix = self.hostname
 					for cuser in channel.users:
+						if('i' in cuser.user.flags and not isInChannel):
+							# hide +i users from users not in the channel
+							continue
 						user = cuser.user
 						msg.params = [ \
 							connection.user.nick, \
@@ -973,6 +1106,12 @@ class IRC_Server:
 			pass
 		elif(msg.command == "KILL"):
 			if(connection.type == self.IRC_Connection.CLIENT):
+				if('o' not in connection.user.flags):
+					rpl = self.IRC_Message("481 :Permission Denied- You're not an IRC operator") # ERR_NOPRIVILEGES
+					rpl.prefix = self.hostname
+					rpl.params = [connection.user.nick]
+					connection.send(rpl.toString())
+					return
 				msg.prefix = connection.user.fullUser()
 			killSender = msg.prefix.split("!")[0]
 			killTarget = self.findUser(msg.params[0])
