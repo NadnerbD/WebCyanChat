@@ -167,6 +167,9 @@ class IRC_Server:
 			self.hostname = hostname
 			self.hopcount = hopcount
 			self.info = info
+			
+		def __repr__(self):
+			return "<%s>" % self.hostname
 	
 	class IRC_Channel:
 		class Channel_User:
@@ -404,7 +407,7 @@ class IRC_Server:
 		if(type(excludeConn) != list):
 			excludeConn = [excludeConn]
 		for connection in self.connections:
-			if(connection in excludeConn and (connType == None or connType == connection.type)):
+			if(connection not in excludeConn and (connType == None or connType == connection.type)):
 				connection.send(msg.toString())
 		self.broadcastLock.release()
 
@@ -540,16 +543,24 @@ class IRC_Server:
 			connection.password = msg.params[0]
 		elif(msg.command == "NICK"):
 			if(connection.type == self.IRC_Connection.SERVER):
-				user = self.findUser(msg.params[0])
-				if(user):
-					# KILL the users
-					sender = msg.prefix
-					msg.prefix = self.hostname
-					msg.command = "KILL"
-					msg.params = [msg.params[0]]
-					msg.trail = "Nickname collision"
-					# HAX: send the kill to ourselves, so it will get broadcast and handled
-					self.handleMsg(self.IRC_Connection(None, None), msg)
+				existingUser = self.findUser(msg.params[0])
+				if(existingUser):
+					# Nickname collision! The remote server is trying to add a user we already know about!
+					# what needs to happen: 
+					# QUITs to everywhere on this side of the network (except for existing user if local)
+					# KILL to existing user being killed
+					# KILL to incoming user being killed
+					killMsg = self.IRC_Message("KILL :Nickname collision")
+					killMsg.prefix = self.hostname
+					killMsg.params = [existingUser.nick]
+					existingUser.connection.send(killMsg.toString())
+					connection.send(killMsg.toString())
+					quitMsg = self.IRC_Message("QUIT :Killed by %s (Nickname collision)" % self.hostname)
+					quitMsg.prefix = existingUser.fullUser()
+					self.broadcast(quitMsg, [existingUser.connection, connection], self.IRC_Connection.SERVER)
+					# this came from a server so we don't need to worry about excluding it
+					self.localBroadcast(quitMsg, existingUser, existingUser.connection)
+					self.removeUser(existingUser)
 					return
 				hopcount = int(msg.params[1])
 				if(msg.prefix):
@@ -616,6 +627,8 @@ class IRC_Server:
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg.prefix = connection.user.fullUser()
 			user = self.findUser(msg.prefix)
+			if(not user):
+				return
 			user.username = msg.params[0]
 			if(connection.type == self.IRC_Connection.SERVER):
 				user.hostname = msg.params[1] # only trust these if it comes from another server
@@ -683,6 +696,8 @@ class IRC_Server:
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg.prefix = connection.user.fullUser()
 			user = self.findUser(msg.prefix)
+			if(not user):
+				return
 			# need to do this while the user still exists, so we can find links
 			# but users don't recieve their own quit message
 			self.localBroadcast(msg, user, connection)
@@ -696,6 +711,9 @@ class IRC_Server:
 				raise Exception("Recieved SQUIT command")
 			elif(connection.type == self.IRC_Connection.SERVER):
 				self.removeServer(self.findServer(msg.params[0]))
+			elif(connection.type == self.IRC_Connection.CLIENT and 'o' in connection.user.flags):
+				msg.prefix = connection.user.fullUser()
+			self.broadcast(msg, connection, IRC_Connection.SERVER)
 		elif(msg.command == "JOIN"):
 			for chanName in msg.params[0].split(","):
 				if(chanName[0] not in IRC_Server.chan_types):
@@ -709,7 +727,11 @@ class IRC_Server:
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
 				# add the user to the channel
-				if(not channel.addUser(self.findUser(msg.prefix))):
+				user = self.findUser(msg.prefix)
+				if(not user):
+					# this can happen during a nick collision resolution
+					return
+				if(not channel.addUser(user)):
 					# if this fails (due to the user already being there) stop
 					return
 				# if this is the first user in the channel, make the cuser an op
@@ -798,6 +820,8 @@ class IRC_Server:
 					if(connection.type == self.IRC_Connection.CLIENT and 'o' not in connection.user.flags):
 						return # silent failure is acceptable
 					user = self.findUser(msg.params[0])
+					if(not user):
+						return
 					user.flags.change(msg.params[1])
 					self.localBroadcast(msg, user)
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
@@ -957,9 +981,8 @@ class IRC_Server:
 				killTarget.connection.send(msg.toString())
 				# generate QUITs for the rest of the network to see
 				killQuit = self.IRC_Message("QUIT :Killed by %s (%s)" % (killSender, msg.trail))
-				killQuit.params = [killTarget.nick]
-				killQuit.prefix = self.hostname
-				self.localBroadcast(killQuit, killTarget)
+				killQuit.prefix = killTarget.fullUser()
+				self.localBroadcast(killQuit, killTarget, killTarget.connection)
 				self.broadcast(killQuit, [connection, killTarget.connection], self.IRC_Connection.SERVER)
 				# remove the killed user
 				self.removeUser(killTarget)
