@@ -18,6 +18,12 @@ class IRC_Server:
 	user_sigils = "*"
 	# Global, Local, and Modeless channels
 	chan_types = "#&+"
+	# add-remove from list chanmodes
+	# set-unset with param chanmodes
+	# set with param only chanmodes
+	# flag only chanmodes
+	chan_modes = "b,k,,stnmi"
+	network = "Nadru"
 
 	# max name length is 9 characters
 	class IRC_Message:
@@ -452,7 +458,18 @@ class IRC_Server:
 		msg = self.IRC_Message("001 :Welcome, %s" % connection.user.nick) # WTF: Unknown reply type
 		msg.params.append(connection.user.nick)
 		msg.prefix = self.hostname
-		# stick this in there somewhere: CHANTYPES=#&+ PREFIX=(Naohv)$&@%+ CHANMODES=be,k,l,cimnpqstAKMNORS STATUSMSG=$&@%+ NETWORK=Nadru
+		connection.send(msg.toString())
+		#ISUPPORT message example: CHANTYPES=#&+ PREFIX=(Naohv)$&@%+ CHANMODES=be,k,l,cimnpqstAKMNORS NETWORK=Nadru
+		msg = self.IRC_Message("005 :are supported by this server") # RPL_ISUPPORT
+		msg.prefix = self.hostname
+		msg.params = [
+			connection.user.nick,
+			"CHANTYPES=%s" % (self.chan_types), \
+			"PREFIX=(%s)%s" % (self.cuser_modes, self.cuser_sigils), \
+			"CHANMODES=%s" % (self.chan_modes), \
+			"NETWORK=%s" % (self.network), \
+			"CASEMAPPING=ascii", \
+		]
 		connection.send(msg.toString())
 		msg = self.IRC_Message("375 :- %s Message of the day -" % self.hostname) # RPL_MOTDSTART
 		msg.params.append(connection.user.nick)
@@ -836,9 +853,16 @@ class IRC_Server:
 					connection.send(msg.toString())
 				else:
 					user = self.findUser(msg.params[0])
+					if(not user or user != connection.user and 'o' not in connection.user.flags):
+						rpl = self.IRC_Message("502 :You can't change someone else's modes") # ERR_USERSDONTMATCH
+						rpl.prefix = self.hostname
+						rpl.params = [connection.user.nick]
+						connection.send(rpl.toString())
+						return
 					msg = self.IRC_Message("221") # RPL_UMODEIS
 					msg.prefix = self.hostname
-					msg.params = [connection.user.nick, user.nick, str(user.flags)]
+					msg.params = [user.nick, str(user.flags)]
+					connection.send(msg.toString())
 			elif(len(msg.params) > 1):
 				# user is trying to change a mode
 				# TODO: This performs MINIMAL VALIDATION and will accept ALL FLAGS (but only from operators)
@@ -926,13 +950,16 @@ class IRC_Server:
 				else:
 					# user mode being set
 					user = self.findUser(msg.params[0])
-					if(not user):
-						return
 					# user can set it's own flags as long as it doesn't try to op itself, otherwise, user must be op
-					if(connection.type == self.IRC_Connection.CLIENT and (user != connection.user or 'o' in msg.params[1]) and 'o' not in connection.user.flags):
-						return # silent failure is acceptable
+					if(not user or connection.type == self.IRC_Connection.CLIENT and (user != connection.user or 'o' in msg.params[1]) and 'o' not in connection.user.flags):
+						rpl = self.IRC_Message("502 :You can't change someone else's modes") # ERR_USERSDONTMATCH
+						rpl.prefix = self.hostname
+						rpl.params = [connection.user.nick]
+						connection.send(rpl.toString())
+						return
 					user.flags.change(msg.params[1])
-					self.localBroadcast(msg, user)
+					# only the target and the server need to know about a user mode change
+					user.connection.send(msg.toString())
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "TOPIC"):
 			channel = self.findChannel(msg.params[0])
