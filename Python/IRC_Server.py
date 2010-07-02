@@ -229,16 +229,26 @@ class IRC_Server:
 
 		def addUser(self, user):
 			if(self.findCUser(user.nick) == None):
-				self.users.append(self.Channel_User(user))
+				cuser = self.Channel_User(user)
+				self.users.append(cuser)
+				log(self, "Added cuser %s to %s's userlist" % (cuser, self), 3)
 				user.channels.append(self)
+				log(self, "Added %s to %s's channel list" % (self, user), 3)
 				return True
+			log(self, "User %s already in %s's userlist" % (user, self), 3)
 			return False
 
 		def removeUser(self, user):
+			log(self, "Attempting to remove %s from %s" % (user, self), 3)
 			for cuser in self.users:
 				if(cuser.user == user):
 					self.users.remove(cuser)
-			user.channels.remove(self)
+					log(self, "Removed %s from %s's userlist" % (cuser, self), 3)
+			if(self in user.channels):
+				user.channels.remove(self)
+				log(self, "Removed %s from %s's channel list" % (self, user), 3)
+			else:
+				log(self, "WARNING: Channel %s wasn't %s's channel list" % (self, user), 3)
 
 		def findCUser(self, nick):
 			nick = nick.split("!")[0]
@@ -299,16 +309,26 @@ class IRC_Server:
 		return None
 
 	def findServer(self, hostname):
+		log(self, "Looking for %s in %s" % (hostname, self.servers), 4)
 		for server in self.servers:
 			if(server.hostname == hostname):
+				log(self, "found server %s" % server, 4)
 				return server
+		log(self, "Didn't find server", 4)
 		return None
 
 	def removeUser(self, user):
 		# perform all the cleanup that needs to be done to get a user out of the system
+		log(self, "Removing %s from server" % user, 3)
 		if(user in self.users):
 			self.users.remove(user)
+		else:
+			log(self, "WARNING: %s wasn't in userlist" % user, 3)
+		log(self, "Removing %s from channels %s" % (user, user.channels), 3)
+		rmChans = list()
 		for channel in user.channels:
+			rmChans.append(channel)
+		for channel in rmChans:
 			channel.removeUser(user)
 		if(user.connection.type == self.IRC_Connection.CLIENT):
 			user.connection.sock.close()
@@ -391,7 +411,10 @@ class IRC_Server:
 
 	def watchConnection(self, connection, sockThread):
 		sockThread.join()
-		if(not connection.closed):
+		if(connection.closed):
+			log(self, "%s's thread ended, connection was marked closed" % connection.user, 3)
+		else:
+			log(self, "%s's thread ended unexpectedly, cleaning up" % connection.user, 3)
 			# send a quit message
 			if(connection.type == self.IRC_Connection.CLIENT):
 				msg = self.IRC_Message("QUIT :Lost connection")
