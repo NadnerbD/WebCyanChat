@@ -325,10 +325,7 @@ class IRC_Server:
 		else:
 			log(self, "WARNING: %s wasn't in userlist" % user, 3)
 		log(self, "Removing %s from channels %s" % (user, user.channels), 3)
-		rmChans = list()
-		for channel in user.channels:
-			rmChans.append(channel)
-		for channel in rmChans:
+		for channel in list(user.channels):
 			channel.removeUser(user)
 		if(user.connection.type == self.IRC_Connection.CLIENT):
 			user.connection.sock.close()
