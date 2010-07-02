@@ -574,8 +574,10 @@ class IRC_Server:
 			# check that nobody's taken the nick already
 			errmsg = self.IRC_Message("433 :Nickname is already in use")
 			errmsg.prefix = self.hostname
-			#TODO: WTF is the star for?
-			errmsg.params = ["*", nick]
+			if(connection.user.nick):
+				errmsg.params = [connection.user.nick, nick]
+			else:
+				errmsg.params = ["*", nick]
 			connection.send(errmsg.toString())
 			return False
 		for char in IRC_Server.cuser_sigils + IRC_Server.chan_types + "!@": #need to include these symbols, as they're nick!user@host delimiters
@@ -784,7 +786,7 @@ class IRC_Server:
 					channel = self.IRC_Channel(chanName)
 					self.channels.append(channel)
 					log(self, "Added channel %s" % channel, 2)
-				msg.params[0] = chanName
+				msg.params[0] = channel.name
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
 					if('i' in channel.flags and chanName not in connection.user.invites):
@@ -831,25 +833,32 @@ class IRC_Server:
 		elif(msg.command == "PART"):
 			for chanName in msg.params[0].split(","):
 				channel = self.findChannel(chanName)
+				if(not channel):
+					return
 				msg.params[0] = chanName
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
-				user = self.findUser(msg.prefix)
-				if(user):
+				cuser = channel.findCUser(msg.prefix)
+				if(cuser):
 					channel.broadcast(msg, None, localOnly=True)
 					if(not channel.name.startswith("&")):
 						# don't sync local channels
 						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
-					channel.removeUser(user)
+					channel.removeUser(cuser.user)
 		elif(msg.command == "MODE"):
 			if(len(msg.params) == 1):
 				# user is requesting modes
 				if(msg.params[0][0] in IRC_Server.chan_types):
-					channel = self.findChannel(msg.params[0])
-					# now send the channel modes
-					msg = self.IRC_Message("324") # RPL_CHANNELMODEIS
+					chanName = msg.params[0]
+					channel = self.findChannel(chanName)
+					if(channel):
+						# now send the channel modes
+						msg = self.IRC_Message("324") # RPL_CHANNELMODEIS
+						msg.params = [connection.user.nick, channel.name, str(channel.flags)]
+					else:
+						msg = self.IRC_Message("403 :No such channel") # ERR_NOSUCHCHANNEL
+						msg.params = [connection.user.nick, chanName]
 					msg.prefix = self.hostname
-					msg.params = [connection.user.nick, channel.name, str(channel.flags)]
 					connection.send(msg.toString())
 				else:
 					user = self.findUser(msg.params[0])
