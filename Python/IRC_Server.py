@@ -281,6 +281,7 @@ class IRC_Server:
 			"http_port": 6668, \
 			"oper_user": "oper", \
 			"oper_pass": "huru", \
+			"die_pass": "die", \
 		}
 		self.HTTPServ = HTTP_Server()
 		# irc servers need to know a lot of stuff
@@ -991,7 +992,8 @@ class IRC_Server:
 						return
 					user.flags.change(msg.params[1])
 					# only the target and the server need to know about a user mode change
-					user.connection.send(msg.toString())
+					if(connection.type == self.IRC_Connection.CLIENT):
+						user.connection.send(msg.toString())
 					self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 		elif(msg.command == "TOPIC"):
 			channel = self.findChannel(msg.params[0])
@@ -1246,5 +1248,22 @@ class IRC_Server:
 			pass
 		elif(msg.command == "ERROR"):
 			pass
+		elif(msg.command == "DIE"):
+			# allows local clients to shut down the server
+			# NONSTANDARD: Inspired by the command from InspIRCd
+			if(connection.type == self.IRC_Connection.CLIENT):
+				if('o' in connection.user.flags and len(msg.params) and msg.params[0] == self.prefs["die_pass"]):
+					log(self, "Server shut down by %s" % connection.user)
+					dieMsg = self.IRC_Message("NOTICE :Server is shutting down")
+					dieMsg.prefix = self.hostname
+					dieMsg.params = ['*']
+					self.broadcast(dieMsg, None, self.IRC_Connection.CLIENT)
+					self.quit.set()
+				else:
+					rpl = self.IRC_Message("481 :Permission Denied- You're not an IRC operator") # ERR_NOPRIVILEGES
+					rpl.prefix = self.hostname
+					rpl.params = [connection.user.nick]
+					connection.send(rpl.toString())
+					
 				
 
