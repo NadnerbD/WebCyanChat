@@ -421,7 +421,7 @@ class IRC_Server:
 				self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				self.removeUser(connection.user)
 			elif(connection.type == self.IRC_Connection.SERVER):
-				for user in self.users:
+				for user in list(self.users):
 					if(user.connection == connection):
 						# any user which was connected to us through the lost server must quit
 						msg = self.IRC_Message("QUIT :Lost in netsplit")
@@ -429,7 +429,7 @@ class IRC_Server:
 						self.localBroadcast(msg, user, connection)
 						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 						self.removeUser(user)
-				for server in self.servers:
+				for server in list(self.servers):
 					if(server.connection == connection):
 						# this removes both the lost server, and all servers behind it
 						msg = self.IRC_Message("SQUIT :Lost in netsplit")
@@ -979,8 +979,11 @@ class IRC_Server:
 				else:
 					# user mode being set
 					user = self.findUser(msg.params[0])
+					if(not user):
+						log(self, "Attempt to set mode for nonexistent user %s from %s" % (msg.params[0], connection.user), 3)
+						return
 					# user can set it's own flags as long as it doesn't try to op itself, otherwise, user must be op
-					if(not user or connection.type == self.IRC_Connection.CLIENT and (user != connection.user or 'o' in msg.params[1]) and 'o' not in connection.user.flags):
+					if(connection.type == self.IRC_Connection.CLIENT and (user != connection.user or 'o' in msg.params[1]) and 'o' not in connection.user.flags):
 						rpl = self.IRC_Message("502 :You can't change someone else's modes") # ERR_USERSDONTMATCH
 						rpl.prefix = self.hostname
 						rpl.params = [connection.user.nick]
