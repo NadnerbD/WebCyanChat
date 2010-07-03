@@ -594,7 +594,7 @@ class IRC_Server:
 			# check that nobody's taken the nick already
 			errmsg = self.IRC_Message("433 :Nickname is already in use")
 			errmsg.prefix = self.hostname
-			if(connection.user.nick):
+			if(connection.user and connection.user.nick):
 				errmsg.params = [connection.user.nick, nick]
 			else:
 				errmsg.params = ["*", nick]
