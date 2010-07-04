@@ -1278,17 +1278,11 @@ class IRC_Server:
 							cuser = channel.findCUser(connection.user.nick)
 							if('n' in channel.flags and not cuser):
 								# +n channels cannot be msg'd by users not in the channel
-								rpl = self.IRC_Message("404 :Cannot send to channel")
-								rpl.prefix = self.hostname
-								rpl.params = [connection.user.nick, channel.name]
-								connection.send(rpl.toString())
+								# Never reply to a notice
 								return
 							if('m' in channel.flags and (not cuser or not cuser.flags.hasAny('ohv'))):
 								# only voiced or better users can talk in a +m channel
-								rpl = self.IRC_Message("404 :Cannot send to channel")
-								rpl.prefix = self.hostname
-								rpl.params = [connection.user.nick, channel.name]
-								connection.send(rpl.toString())
+								# Never reply to a notice
 								return
 						channel.broadcast(msg, connection)
 				else:
