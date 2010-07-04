@@ -14,7 +14,7 @@ class IRC_Server:
 	# voiced users can talk on +m (moderated) channels
 	# half ops can set modes on channels and kick/ban voiced and normal users
 	# ops can kick, ban, create half-ops and ops, and set modes on channels
-	# founder can create protected users, protected users can't be kicked or banned
+	# founder can create protected users, protected users can't be kicked or deopped
 	cuser_modes = "qaohv"
 	cuser_sigils = "~&@%+"
 	# IRCop supported
@@ -28,6 +28,34 @@ class IRC_Server:
 	# flag only chanmodes
 	chan_modes = "b,k,,stnmi"
 	network = "Nadru"
+
+	NumericReplies = { \
+		001: "Welcome, %s", \
+		005: "Are supported by this server", \
+		221: "", \
+		321: "Users  Name", \
+		323: "End of /LIST", \
+		376: "End of /MOTD command", \
+		324: "", \
+		315: "End of /WHO list", \
+		331: "No topic is set", \
+		366: "End of /NAMES list", \
+		376: "", \
+		368: "End of channel ban list", \
+		404: "Cannot send to channel", \
+		433: "Nickname is already in use", \
+		461: "Not enough parameters", \
+		462: "Server already known", \
+		381: "You are now an IRC operator", \
+		464: "Password incorrect", \
+		481: "Permission Denied- You're not an IRC operator", \
+		482: "You're not a channel operator", \
+		473: "Cannot join channel (+i)", \
+		474: "Cannot join channel (+b)", \
+		475: "Cannot join channel (+k)", \
+		403: "No such channel", \
+		502: "You can't change somone else's modes", \
+	}
 
 	# max name length is 9 characters
 	class IRC_Message:
@@ -286,6 +314,7 @@ class IRC_Server:
 			"oper_user": "oper", \
 			"oper_pass": "huru", \
 			"die_pass": "die", \
+			"use_founder": 1, \
 		}
 		self.HTTPServ = HTTP_Server()
 		# irc servers need to know a lot of stuff
@@ -352,6 +381,24 @@ class IRC_Server:
 		if(user.username != banUser.username and banUser.username != '*'):
 			return False
 		if(user.hostname != banUser.hostname and banUser.hostname != '*'):
+			return False
+		return True
+
+	def validateCUserModeChange(self, target, sender, flag):
+		if(flag == 'v' and not sender.flags.hasAny('oh')):
+			# only ops and halfops can manipulate voice
+			return False
+		if(flag in 'oh' and not ('o' in sender.flags or 'o' in sender.user.flags)):
+			# only chanops can manipulate the oh flags (exception for ircops)
+			return False
+		if(flag in 'oh' and target.flags.hasAny('qa')):
+			# founders and protected users cannot be deopped or dehalfopped
+			return False
+		if(flag == 'a' and not 'q' in sender.flags):
+			# only founders can manipulate the protected flag
+			return False
+		if(flag == 'q'):
+			# q may not be set
 			return False
 		return True
 
@@ -479,6 +526,20 @@ class IRC_Server:
 		for user in localUsers:
 			user.connection.send(msg.toString())
 		self.broadcastLock.release()
+
+	def sendReply(self, connection, replyID, params=[], trail=None):
+		rpl = self.IRC_Message("%03d" % int(replyID))
+		rpl.trail = self.NumericReplies[int(replyID)]
+		if(trail):
+			rpl.trail %= trail
+		rpl.prefix = self.hostname
+		if(connection.user and connection.type == self.IRC_Connection.CLIENT):
+			rpl.params = [connection.user.nick] + params
+		elif(connection.user and connection.type == self.IRC_Connection.SERVER):
+			rpl.params = [connection.user.hostname] + params
+		else:
+			rpl.params = ['*'] + params
+		connection.send(rpl.toString())
 
 	def sendMOTD(self, connection):
 		msg = self.IRC_Message("001 :Welcome, %s" % connection.user.nick) # WTF: Unknown reply type
@@ -845,7 +906,9 @@ class IRC_Server:
 					return
 				# if this is the first user in the channel, make the cuser an founder-op
 				if(len(channel.users) == 1):
-					channel.users[0].flags += 'qo'
+					channel.users[0].flags += 'o'
+					if(self.prefs["use_founder"]):
+						channel.users[0].flags += 'q'
 				channel.broadcast(msg, None, localOnly=True)
 				if(not channel.name.startswith("&")):
 					# don't sync local channels
@@ -878,46 +941,27 @@ class IRC_Server:
 					chanName = msg.params[0]
 					channel = self.findChannel(chanName)
 					if(channel):
-						# now send the channel modes
-						msg = self.IRC_Message("324") # RPL_CHANNELMODEIS
-						msg.params = [connection.user.nick, channel.name, str(channel.flags)]
+						self.sendReply(connection, 324, [channel.name, str(channel.flags)]) # RPL_CHANNELMODEIS
 					else:
-						msg = self.IRC_Message("403 :No such channel") # ERR_NOSUCHCHANNEL
-						msg.params = [connection.user.nick, chanName]
-					msg.prefix = self.hostname
-					connection.send(msg.toString())
+						self.sendReply(connection, 403, [chanName]) # ERR_NOSUCHCHANNEL
 				else:
 					user = self.findUser(msg.params[0])
-					if(not user or user != connection.user and 'o' not in connection.user.flags):
-						rpl = self.IRC_Message("502 :You can't change someone else's modes") # ERR_USERSDONTMATCH
-						rpl.prefix = self.hostname
-						rpl.params = [connection.user.nick]
-						connection.send(rpl.toString())
+					if(not user or user != connection.user):
+						self.sendReply(connection, 502) # ERR_USERSDONTMATCH
 						return
-					msg = self.IRC_Message("221") # RPL_UMODEIS
-					msg.prefix = self.hostname
-					msg.params = [user.nick, str(user.flags)]
-					connection.send(msg.toString())
+					self.sendReply(connection, 221, [str(user.flags)]) # RPL_UMODEIS
 			elif(len(msg.params) > 1):
 				# user is trying to change a mode
-				# TODO: This performs MINIMAL VALIDATION and will accept ALL FLAGS (but only from operators)
 				if(connection.type == self.IRC_Connection.CLIENT):
 					msg.prefix = connection.user.fullUser()
 				if(msg.params[0][0] in IRC_Server.chan_types):
-					# channel mode being set
 					channel = self.findChannel(msg.params[0])
 					if(not channel):
 						return
 					if(msg.params[1] == 'b' or (msg.params[1] == '+b' and len(msg.params) == 2)):
 						for ban in channel.bans:
-							rpl = self.IRC_Message("367") # RPL_BANLIST
-							rpl.prefix = self.hostname
-							rpl.params = [connection.user.nick, channel.name, ban]
-							connection.send(rpl.toString())
-						rpl = self.IRC_Message("368 :End of channel ban list") # RPL_ENDOFBANLIST
-						rpl.prefix = self.hostname
-						rpl.params = [connection.user.nick, channel.name]
-						connection.send(rpl.toString())
+							self.sendReply(connection, 367, [channel.name, ban]) # RPL_BANLIST
+						self.sendReply(connection, 368, [channel.name]) # RPL_ENDOFBANLIST
 						return
 					elif(msg.params[1] == 'e' or (msg.params[1] == '+e' and len(msg.params) == 2)):
 						# TODO: request for exempt mask
@@ -925,69 +969,98 @@ class IRC_Server:
 					elif(msg.params[1][0] not in ['+', '-']):
 						# TODO: invalid, give reply
 						return
-					if(connection.type == self.IRC_Connection.CLIENT):
-						# only need to validate client mode sets
-						cuser = channel.findCUser(connection.user.nick)
-						if((cuser == None or not cuser.flags.hasAny('oh')) and 'o' not in connection.user.flags):
-							# can't set channel modes if you're not in the op'd in the channel and not an ircop
-							rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
-							rpl.prefix = self.hostname
-							rpl.params = [connection.user.nick]
-							connection.send(rpl.toString())
-							return
-						if('o' not in cuser.flags and 'h' in cuser.flags and self.IRC_Flags(msg.params[1]).hasAny('oh')):
-							# halfops can do anything chanop-like except modify user modes above voice
-							rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
-							rpl.prefix = self.hostname
-							rpl.params = [connection.user.nick]
-							connection.send(rpl.toString())
-							return
-						if('q' not in cuser.flags and 'a' in msg.params[1]):
-							# only +q users may manipulate +a
-							return
-						if('q' in msg.params[1] and 'o' not in connection.user.flags):
-							# +q may not be set (exception for ircops)
-							return
-					targetIndex = 2
-					for flag in msg.params[1][1:]:
+					# channel mode being set
+					paramIndex = 0
+					modeParams = msg.params[2:]
+					changeType = msg.params[1][0]
+					changeFlags = msg.params[1][1:]
+					sender = channel.findCUser(msg.prefix)
+					# we will rebuild the message parameters and forward the final message
+					# which will have all failed mode changes stripped out
+					msg.params = [channel.name, changeType]
+					for flag in changeFlags:
 						if(flag in IRC_Server.cuser_modes):
 							# these are channel-user modes
-							if(targetIndex >= len(msg.params)):
-								if(connection.type == self.IRC_Connection.CLIENT):
-									rpl = self.IRC_Message("461 :Not enough parameters") # ERR_NEEDMOREPARAMS
-									rpl.prefix = self.hostname
-									rpl.params = [connection.user.nick]
-									connection.send(rpl.toString())
-								return
-							cuser = channel.findCUser(msg.params[targetIndex])
-							if(cuser):
-								cuser.flags.change(msg.params[1][0] + flag)
-							targetIndex += 1
+							if(paramIndex < len(modeParams)):
+								target = channel.findCUser(modeParams[paramIndex])
+								if( \
+									(target and sender and self.validateCUserModeChange(target, sender, flag)) or \
+									(target and connection.type == self.IRC_Connection.SERVER) \
+								):
+									
+									target.flags.change(changeType + flag)
+									msg.params[1] += flag
+									msg.params.append(target.user.nick)
+								else:
+									self.sendReply(connection, 482) # ERR_CHANOPRIVSNEEDED
+							else:
+								self.sendReply(connection, 461) # ERR_NEEDMOREPARAMS
+							paramIndex += 1
 						else:
 							# everything else can be assumed to be a channel mode
+							if(sender and not sender.flags.hasAny('oh')):
+								# only ops and halfops can manipulate the channel flags
+								self.sendReply(connection, 482) # ERR_CHANOPRIVSNEEDED
+								return
 							if(flag == 'k'):
 								# set the channel key
-								if(msg.params[1][0] == '+' and not targetIndex >= len(msg.params)):
-									channel.key = msg.params[targetIndex]
-								targetIndex += 1
+								# this logic is real fucked up, why is all this neccessary? :P
+								if(changeType == '+' and not paramIndex >= len(modeParams)):
+									if(channel.key):
+										# remove the key before adding the new one
+										keyMsg = self.IRC_Message("MODE")
+										keyMsg.prefix = msg.prefix
+										keyMsg.params = [channel.name, '-k', channel.key]
+										channel.broadcast(keyMsg, localOnly=True)
+										if(not channel.name.startswith("&")):
+											# don't sync local channels
+											self.broadcast(keyMsg, connection, self.IRC_Connection.SERVER)
+									channel.key = modeParams[paramIndex]
+								elif(changeType == '-' and not paramIndex >= len(modeParams)):
+									if(modeParams[paramIndex] == channel.key):
+										channel.key = ""
+									else:
+										paramIndex += 1
+										continue
+								elif(changeType == '-'):
+									modeParams.insert(paramIndex, channel.key)
+									channel.key = ""
+								else:
+									self.sendReply(connection, 461) # ERR_NEEDMOREPARAMS
+									continue
+								msg.params.append(modeParams[paramIndex])
+								paramIndex += 1
+								# we go on and let the flag be set or unset on the channel as well
 							elif(flag == 'b'):
-								if(targetIndex >= len(msg.params)):
+								if(paramIndex >= len(msg.params)):
+									self.sendReply(connection, 461) # ERR_NEEDMOREPARAMS
 									continue
 								# add or remove bans
-								if(msg.params[1][0] == '+'):
-									if(msg.params[targetIndex] not in channel.bans):
-										channel.bans.append(msg.params[targetIndex])
-								elif(msg.params[1][0] == '-'):
-									if(msg.params[targetIndex] in channel.bans):
-										channel.bans.remove(msg.params[targetIndex])
-								targetIndex += 1
+								if(changeType == '+'):
+									if(modeParams[paramIndex] not in channel.bans):
+										channel.bans.append(modeParams[paramIndex])
+									else:
+										paramIndex += 1
+										continue
+								elif(changeType == '-'):
+									if(modeParams[paramIndex] in channel.bans):
+										channel.bans.remove(modeParams[paramIndex])
+									else:
+										paramIndex += 1
+										continue
+								msg.params[1] += flag
+								msg.params.append(modeParams[paramIndex])
+								paramIndex += 1
+								# the b flag is never actually set on a channel
 								continue
-							channel.flags.change(msg.params[1][0] + flag)
-					# forward the message
-					channel.broadcast(msg, localOnly=True)
-					if(not channel.name.startswith("&")):
-						# don't sync local channels
-						self.broadcast(msg, connection, self.IRC_Connection.SERVER)
+							channel.flags.change(changeType + flag)
+							msg.params[1] += flag
+					if(len(msg.params[1]) > 1):
+						# forward the mode changes
+						channel.broadcast(msg, localOnly=True)
+						if(not channel.name.startswith("&")):
+							# don't sync local channels
+							self.broadcast(msg, connection, self.IRC_Connection.SERVER)
 				else:
 					# user mode being set
 					user = self.findUser(msg.params[0])
