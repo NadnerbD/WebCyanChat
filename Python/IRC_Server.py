@@ -10,9 +10,13 @@ class IRC_Server:
 	# they represent all the modes that the server will accept for users
 	# and channel users, and their mapping to sigils put in WHO replies
 	# and NAMES replies. For NAMES replies, earlier chars take precedence
-	# op, voice, half-op currently supported
-	cuser_modes = "ohv"
-	cuser_sigils = "@%+"
+	# founder, protected, op, half-op, voice
+	# voiced users can talk on +m (moderated) channels
+	# half ops can set modes on channels and kick/ban voiced and normal users
+	# ops can kick, ban, create half-ops and ops, and set modes on channels
+	# founder can create protected users, protected users can't be kicked or banned
+	cuser_modes = "qaohv"
+	cuser_sigils = "~&@%+"
 	# IRCop supported
 	user_modes = "o"
 	user_sigils = "*"
@@ -839,9 +843,9 @@ class IRC_Server:
 					# if this fails (due to the user already being there) stop
 					# this can happen during a nick collision resolution
 					return
-				# if this is the first user in the channel, make the cuser an op
+				# if this is the first user in the channel, make the cuser an founder-op
 				if(len(channel.users) == 1):
-					channel.users[0].flags += 'o'
+					channel.users[0].flags += 'qo'
 				channel.broadcast(msg, None, localOnly=True)
 				if(not channel.name.startswith("&")):
 					# don't sync local channels
@@ -937,7 +941,13 @@ class IRC_Server:
 							rpl.prefix = self.hostname
 							rpl.params = [connection.user.nick]
 							connection.send(rpl.toString())
-							return 
+							return
+						if('q' not in cuser.flags and 'a' in msg.params[1]):
+							# only +q users may manipulate +a
+							return
+						if('q' in msg.params[1] and 'o' not in connection.user.flags):
+							# +q may not be set (exception for ircops)
+							return
 					targetIndex = 2
 					for flag in msg.params[1][1:]:
 						if(flag in IRC_Server.cuser_modes):
@@ -1084,7 +1094,7 @@ class IRC_Server:
 			channel = self.findChannel(msg.params[0])
 			kicker = channel.findCUser(msg.prefix)
 			kickee = channel.findCUser(msg.params[1])
-			if(not kicker or not kickee or not kicker.flags.hasAny('oh') or (kickee.flags.hasAny('oh') and not kickee.flags.hasAny('o'))):
+			if(not kicker or not kickee or not kicker.flags.hasAny('oh') or (kickee.flags.hasAny('oh') and not kickee.flags.hasAny('o')) or kickee.flags.hasAny('qa')):
 				# halfops can't kick ops or each other, nonexistent users can't kick nonexistent users, and stuff
 				rpl = self.IRC_Message("482 :You're not a channel operator") # ERR_CHANOPRIVSNEEDED
 				rpl.prefix = self.hostname
@@ -1150,9 +1160,17 @@ class IRC_Server:
 							cuser = channel.findCUser(connection.user.nick)
 							if('n' in channel.flags and not cuser):
 								# +n channels cannot be msg'd by users not in the channel
+								rpl = self.IRC_Message("404 :Cannot send to channel")
+								rpl.prefix = self.hostname
+								rpl.params = [connection.user.nick, channel.name]
+								connection.send(rpl.toString())
 								return
 							if('m' in channel.flags and (not cuser or not cuser.flags.hasAny('ohv'))):
 								# only voiced or better users can talk in a +m channel
+								rpl = self.IRC_Message("404 :Cannot send to channel")
+								rpl.prefix = self.hostname
+								rpl.params = [connection.user.nick, channel.name]
+								connection.send(rpl.toString())
 								return
 						channel.broadcast(msg, connection)
 				else:
@@ -1172,9 +1190,17 @@ class IRC_Server:
 							cuser = channel.findCUser(connection.user.nick)
 							if('n' in channel.flags and not cuser):
 								# +n channels cannot be msg'd by users not in the channel
+								rpl = self.IRC_Message("404 :Cannot send to channel")
+								rpl.prefix = self.hostname
+								rpl.params = [connection.user.nick, channel.name]
+								connection.send(rpl.toString())
 								return
 							if('m' in channel.flags and (not cuser or not cuser.flags.hasAny('ohv'))):
 								# only voiced or better users can talk in a +m channel
+								rpl = self.IRC_Message("404 :Cannot send to channel")
+								rpl.prefix = self.hostname
+								rpl.params = [connection.user.nick, channel.name]
+								connection.send(rpl.toString())
 								return
 						channel.broadcast(msg, connection)
 				else:
