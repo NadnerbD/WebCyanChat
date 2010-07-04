@@ -650,9 +650,17 @@ class IRC_Server:
 				userMsg.params = [channelNames[channel], str(channelModes[channel]), user.nick]
 				connection.send(userMsg.toString())
 		for channel in self.channels:
+			if(channel.name.startswith("&")):
+				# don't sync local channels
+				continue
 			chanMsg = self.IRC_Message("MODE")
 			chanMsg.prefix = self.hostname
 			chanMsg.params = [channel.name, str(channel.flags)]
+			if('k' in channel.flags):
+				chanMsg.params.append(channel.key)
+			for ban in channel.bans:
+				chanMsg.params[1] += 'b'
+				chanMsg.params.append(ban)
 			connection.send(chanMsg.toString())
 		
 
