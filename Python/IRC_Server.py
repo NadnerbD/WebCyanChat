@@ -32,15 +32,13 @@ class IRC_Server:
 	NumericReplies = { \
 		001: "Welcome, %s", \
 		005: "Are supported by this server", \
-		221: "", \
+		318: "End of /WHOIS list", \
 		321: "Users  Name", \
 		323: "End of /LIST", \
 		376: "End of /MOTD command", \
-		324: "", \
 		315: "End of /WHO list", \
 		331: "No topic is set", \
 		366: "End of /NAMES list", \
-		376: "", \
 		368: "End of channel ban list", \
 		404: "Cannot send to channel", \
 		433: "Nickname is already in use", \
@@ -344,6 +342,9 @@ class IRC_Server:
 
 	def findServer(self, hostname):
 		log(self, "Looking for %s in %s" % (hostname, self.servers), 4)
+		if(hostname == self.hostname):
+			log(self, "Server is self", 4)
+			return self
 		for server in self.servers:
 			if(server.hostname == hostname):
 				log(self, "found server %s" % server, 4)
@@ -529,9 +530,12 @@ class IRC_Server:
 
 	def sendReply(self, connection, replyID, params=[], trail=None):
 		rpl = self.IRC_Message("%03d" % int(replyID))
-		rpl.trail = self.NumericReplies[int(replyID)]
-		if(trail):
+		if(self.NumericReplies.has_key(replyID)):
+			rpl.trail = self.NumericReplies[int(replyID)]
+		if(trail and rpl.trail):
 			rpl.trail %= trail
+		elif(trail):
+			rpl.trail = trail
 		rpl.prefix = self.hostname
 		if(connection.user and connection.type == self.IRC_Connection.CLIENT):
 			rpl.params = [connection.user.nick] + params
@@ -684,6 +688,7 @@ class IRC_Server:
 		return True
 	
 	def handleMsg(self, connection, msg):
+		msg.command = msg.command.upper()
 		log(self, "command: %s from %s" % (msg.command, connection), 2)
 		if(msg.command == "PASS"):
 			# if only all the commands were this simple :(
@@ -1292,7 +1297,8 @@ class IRC_Server:
 						user.connection.send(msg.toString())
 		elif(msg.command == "WHO"):
 			# Now send the channel userlist
-			if(len(msg.params) == 0):
+			if(len(msg.params) < 0):
+				self.sendReply(connection, 461) # ERR_NEEDMOREPARAMS
 				return
 			for target in msg.params[0].split(','):
 				if(target[0] in IRC_Server.chan_types):
@@ -1324,7 +1330,22 @@ class IRC_Server:
 					# TODO: How do you respond to a who request that's not directed at a channel
 					pass
 		elif(msg.command == "WHOIS"):
-			pass
+			if(len(msg.params) < 1):
+				self.sendReply(connection, 461) # ERR_NEEDMOREPARAMS
+				return
+			target = self.findUser(msg.params[0])
+			if(target):
+				whoisChannels = list()
+				for channel in target.channels:
+					if(('s' in channel.flags or 'i' in target.flags) and not self.findCUser(connection.user.nick)):
+						# don't show secret channels or any channels that an inivsible user is in unless the requester is in those channels
+						continue
+					cuser = channel.findCUser(target.nick)
+					whoisChannels.append(cuser.sigil() + channel.name)
+				self.sendReply(connection, 311, [target.nick, target.username, target.hostname, '*'], target.realname) # RPL_WHOISUSER
+				self.sendReply(connection, 319, [target.nick], ' '.join(whoisChannels)) # RPL_WHOISCHANNELS
+				self.sendReply(connection, 312, [target.nick, target.servername], self.findServer(target.servername).info) # RPL_WHOISSERVER
+				self.sendReply(connection, 318, [target.nick]) # RPL_ENDOFWHOIS
 		elif(msg.command == "WHOWAS"):
 			pass
 		elif(msg.command == "KILL"):
