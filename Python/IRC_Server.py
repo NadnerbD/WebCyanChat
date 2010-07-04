@@ -647,7 +647,9 @@ class IRC_Server:
 			for channel in range(len(channelModes)):
 				userMsg = self.IRC_Message("MODE")
 				userMsg.prefix = self.hostname
-				userMsg.params = [channelNames[channel], str(channelModes[channel]), user.nick]
+				userMsg.params = [channelNames[channel], str(channelModes[channel])]
+				for i in range(len(userMsg.params[1]) - 1):
+					userMsg.params.append(user.nick)
 				connection.send(userMsg.toString())
 		for channel in self.channels:
 			if(channel.name.startswith("&")):
