@@ -278,7 +278,7 @@ class IRC_Server:
 				user.channels.remove(self)
 				log(self, "Removed %s from %s's channel list" % (self, user), 3)
 			else:
-				log(self, "WARNING: Channel %s wasn't %s's channel list" % (self, user), 3)
+				log(self, "WARNING: Channel %s wasn't in %s's channel list" % (self, user), 3)
 
 		def findCUser(self, nick):
 			nick = nick.split("!")[0]
@@ -646,7 +646,7 @@ class IRC_Server:
 				channelKeys.append(channel.key)
 				channelModes.append(channel.findCUser(user.nick).flags)
 			userMsg.params = [','.join(channelNames), ','.join(channelKeys)]
-			userMsg.prefix = user.nick
+			userMsg.prefix = user.fullUser()
 			connection.send(userMsg.toString())
 			for channel in range(len(channelModes)):
 				userMsg = self.IRC_Message("MODE")
