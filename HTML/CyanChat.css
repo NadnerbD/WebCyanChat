@@ -13,12 +13,12 @@ div#titlebar {
 	background: -webkit-gradient(linear, left top, left bottom, from(#151515), to(#303030));
 	background: -moz-linear-gradient(top, #151515, #303030);
 }
-a#title {
+#title {
 	font-size: 32pt;
 	color: #00FFFF;
 	text-shadow: #00ffff 0px 0px 3px;
 }
-a#green {
+#green {
 	font-size: 32pt;
 	color: #00FF00;
 	text-shadow: #00ff00 0px 0px 3px;
@@ -73,7 +73,7 @@ a.nav:visited, a.nav-ext:visited {
 	color:white;
 }
 /* get hover colors on ALL */
-a:hover, a.nav-ext:hover, a.nav:hover {
+a:hover, a.nav-ext:hover, a.nav:hover, a#current:hover {
 	color:gray;
 	text-shadow: #000000 0px 0px 3px;
 }
