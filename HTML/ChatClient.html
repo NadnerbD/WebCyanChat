@@ -21,8 +21,8 @@
 			</div>
 		</div>
 		<div id="interface">
-			<input type="button" value="Link In" onclick="setname(textin.value);textin.value='';" />
-			<input type="button" value="Link Out" onclick="disconnect()" />
+			<input type="text" id="nameinput" value="Default Name" onkeypress="nameenter(event)"/>
+			<input type="button" value="Link In" id="linkbutton" onclick="if(name_reg) disconnect(); else setname(namein.value);" />
 			<input type="button" value="SendPrivate" onclick="sendprivate(wholist.value, textin.value);textin.value='';" />
 			<input type="button" value="PrivateChat" onclick="openprivate(wholist.value)" />
 			<input type="button" value="Ignore" onclick="ignoreUser(wholist.value)" />

@@ -21,10 +21,12 @@ var authKey = "";
 var lastPMWindowOpenUser = "";
 
 function init() {
+	namein = document.getElementById("nameinput");
 	textin = document.getElementById("input");
 	textout = document.getElementById("output");
 	wholist = document.getElementById("wholistid");
 	cyanlist = document.getElementById("cyanlistid");
+	linkbutton = document.getElementById("linkbutton");
 	connectstatus = document.getElementById("connectstatusid");
 	timestamps = document.getElementById("timestampsid");
 	// check for a name cookie
@@ -164,6 +166,7 @@ function recv_cc(line) {
 			case "11":
 				// name accepted message
 				name_reg = 1;
+				linkbutton.value = 'Link Out';
 				currentName = lastAttemptedName;
 				// in case the user gets disconnected this session
 				lastSessionName = currentName;
@@ -177,6 +180,8 @@ function recv_cc(line) {
 			case "10":
 				// name rejected message
 				addTextOut("ChatClient", 3, "Server Rejected Name", "1");
+				if(!name_reg)
+					namein.disabled = false;
 			break;
 			case "70":
 				// append the ignoring user to the ignore lsit
@@ -366,6 +371,9 @@ function setname(name) {
 	if(name.length > 0) {
 		lastAttemptedName = name;
 		send_cc("10|" + name);
+		namein.value = name;
+		namein.disabled = true;
+		textin.focus();
 	}else{
 		addTextOut("ChatClient", 3, "Name Not Specified", "1");
 	}
@@ -440,6 +448,15 @@ function versionReply(target) {
 function disconnect() {
 	send_cc("15");
 	name_reg = 0;
+	linkbutton.value = 'Link In';
+	namein.disabled = false;
+}
+
+function nameenter(event) {
+	if((event.which == 13)||(event.charCode == 13)||(event.keyCode == 13)) {
+		if(!name_reg)
+			setname(namein.value);
+	}
 }
 
 function chatenter(event) {
@@ -448,6 +465,8 @@ function chatenter(event) {
 			send_cc("12|" + textin.value.split(" ")[1]);
 		}else if(textin.value.substring(0, 3) == "/me") {
 			sendchat("*" + textin.value.substring(4, textin.value.length) + "*");
+		}else if(textin.value.substring(0, 5) == "/nick") {
+			setname(textin.value.substring(6, textin.value.length));
 		}else{
 			if(name_reg) {
 				sendchat(textin.value);
