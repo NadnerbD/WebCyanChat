@@ -9,6 +9,10 @@ input {
 	width: 15%;
 	float: left;
 }
+input[disabled] {
+	background-color: #111;
+	color: #aaa;
+}
 input#input {
 	width: 85%;
 }
@@ -29,4 +33,12 @@ select {
 div#interface {
 	margin: 20px;
 	height: 70%;
+}
+#connectstatusid {
+	width: 15%;
+	float: right;
+	text-align: center;
+}
+#nameinput {
+	margin-right: 3px;
 }

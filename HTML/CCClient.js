@@ -21,6 +21,7 @@ var authKey = "";
 var lastPMWindowOpenUser = "";
 
 function init() {
+	// get all the global things
 	namein = document.getElementById("nameinput");
 	textin = document.getElementById("input");
 	textout = document.getElementById("output");
@@ -29,6 +30,8 @@ function init() {
 	linkbutton = document.getElementById("linkbutton");
 	connectstatus = document.getElementById("connectstatusid");
 	timestamps = document.getElementById("timestampsid");
+	// disable the buttons
+	whoSelChanged();
 	// check for a name cookie
 	if(document.cookie.split("ccname=").length > 1) {
 		lastSessionName = unescape(document.cookie.split("ccname=")[1].split(";")[0]);
@@ -152,6 +155,7 @@ function recv_cc(line) {
 			case "35":
 				userstring = line.substring(3, line.length).split("|");
 				refreshGUIUserList(userstring);
+				whoSelChanged();
 			break;
 			case "40":
 				addTextOut("ChatServer", 2, line.substring(4, line.length), "1");
@@ -450,6 +454,13 @@ function disconnect() {
 	name_reg = 0;
 	linkbutton.value = 'Link In';
 	namein.disabled = false;
+}
+
+function whoSelChanged() {
+	var disabled = wholist.value.length == 0;
+	document.getElementById("spbtn").disabled = disabled;
+	document.getElementById("pcbtn").disabled = disabled;
+	document.getElementById("ibtn").disabled = disabled;
 }
 
 function nameenter(event) {
