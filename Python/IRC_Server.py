@@ -5,6 +5,14 @@ from HTTP_Server import HTTP_Server
 import threading
 import socket
 
+# check for the dnspython module
+# if it is available, we can use it to do reverse dns lookups
+try:
+	from dns import resolver, reversename
+	HAS_DNSPYTHON = True
+except ImportError:
+	HAS_DNSPYTHON = False
+
 class IRC_Server:
 	# these are ordered lists of channel-user and user mode characters
 	# they represent all the modes that the server will accept for users
@@ -780,7 +788,13 @@ class IRC_Server:
 				user.hostname = msg.params[1] # only trust these if it comes from another server
 				user.servername = msg.params[2]
 			else:
-				user.hostname = connection.addr[0]
+				# try a reverse dns lookup on the user's IP address
+				# the try will fail if the dnspython module wasn't loaded
+				try:
+					addr = reversename.from_address(connection.addr[0])
+					user.hostname = str(resolver.query(addr, "PTR")[0])[:-1]
+				except:
+					user.hostname = connection.addr[0]
 				user.servername = self.hostname
 			user.realname = msg.trail
 			if(user.nick):

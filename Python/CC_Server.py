@@ -7,6 +7,14 @@ import random
 import socket
 import time
 
+# check for the dnspython module
+# if it is available, we can use it to do reverse dns lookups
+try:
+	from dns import resolver, reversename
+	HAS_DNSPYTHON = True
+except ImportError:
+	HAS_DNSPYTHON = False
+
 class CC_Server:
 	class connectionList:
 		def __init__(self, parent):
@@ -61,7 +69,6 @@ class CC_Server:
 			connectMessages = { \
 				1: "<links in from Cyan Worlds Age>", \
 				4: "<links in from Cyan Guest Age>", \
-				0: "<links in from somewhere on the internet age>", \
 			}
 			if(len(name) < 20 and len(name) > 1 and self.findByName(connection.name[0] + name) == None):
 				self.debugMsg(connection, "Setting name to '%s' - login - successful" % name)
@@ -74,6 +81,13 @@ class CC_Server:
 					self.sendChat(connection, "<[%s] is now known as [%s]>" % (oldname, name), 2)
 				elif(connectMessages.has_key(connection.level())):
 					self.sendChat(connection, connectMessages[connection.level()], 2)
+				elif(HAS_DNSPYTHON and self.parent.prefs["use_reverse_dns"]):
+					try:
+						addr = reversename.from_address(connection.addr[0])
+						host = str(resolver.query(addr, "PTR")[0]).split('.', 1)[1][:-1]
+					except:
+						host = "somewhere on the internet age"
+					self.sendChat(connection, "<links in from %s>" % host, 2)
 				else:
 					self.sendChat(connection, "<links in from somewhere on the internet age>", 2)
 				self.sendUserList()
@@ -225,6 +239,7 @@ class CC_Server:
 			"enable_bans": 0, \
 			"censor_level": 1, \
 			"debug_mode": 0, \
+			"use_reverse_dns": 1, \
 			"enable_admin_extensions": 1, \
 			"enable_protocol_extensions": 1, \
 			"auth_1": "huru", \
