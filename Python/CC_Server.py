@@ -84,12 +84,12 @@ class CC_Server:
 				elif(HAS_DNSPYTHON and self.parent.prefs["use_reverse_dns"]):
 					try:
 						addr = reversename.from_address(connection.addr[0])
-						host = str(resolver.query(addr, "PTR")[0]).split('.', 1)[1][:-1]
+						host = '.'.join(str(resolver.query(addr, "PTR")[0]).split('.')[-3:-1])
 					except:
-						host = "somewhere on the internet age"
-					self.sendChat(connection, "<links in from %s>" % host, 2)
+						host = "somewhere on the internet"
+					self.sendChat(connection, "<links in from %s Age>" % host, 2)
 				else:
-					self.sendChat(connection, "<links in from somewhere on the internet age>", 2)
+					self.sendChat(connection, "<links in from somewhere on the internet Age>", 2)
 				self.sendUserList()
 				self.parent.totallogins += 1
 				if(self.currentlogins() > self.parent.maxlogins):
