@@ -122,7 +122,12 @@ class CC_Server:
 					target.send("40|%d%s" % (target.version, line))
 		
 		def sendIgnore(self, sender, target):
-			target.send("70|%s" % sender)
+			self.accessLock.acquire()
+			target.send("70|%s" % sender.msg())
+			# cho broadcasts the userlist immediately following an ignore forward
+			# this is to refresh the client userlist
+			self.sendUserList()
+			self.accessLock.release()
 		
 		def setLevel(self, connection, level):
 			self.accessLock.acquire()
@@ -229,7 +234,7 @@ class CC_Server:
 			"enable_bans": ["disabled", "enabled"], \
 		}
 		self.prefs = { \
-			"server_version": "CyanChat (Py CC Server 2.0)", \
+			"server_version": "CyanChat (Py CC Server 2.1)", \
 			"enable_http": 1, \
 			"enable_cc": 1, \
 			"cc_port": 1812, \

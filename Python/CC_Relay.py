@@ -114,9 +114,10 @@ class CC_Relay(CC_Server):
 				self.shadowUserList = self.replaceUsers(msg.split('|'))
 				msg = '|'.join(self.shadowUserList)
 				self.shadowListLock.release()
-			elif(cmd in [21, 31]):
+			elif(cmd in [21, 31, 70]):
 				msg = msg.split('|', 1)
-				msg = '|'.join([self.replaceUsers([msg[0]])[0], msg[1]])
+				msg[0] = self.replaceUsers(msg[0:1])[0]
+				msg = '|'.join(msg)
 		log(self, "relaying to %s" % connection, 2)
 		connection.send("%d|%s" % (cmd, msg))
 	
@@ -136,6 +137,8 @@ class CC_Relay(CC_Server):
 		if(cmd in [50, 51, 53]):
 			self.sendShadowUserList()
 		elif(cmd in [10, 40] or (cmd in [15, 20, 30, 70] and connection.named)):
+			# TODO: for directed messages (20, 70) we can bypass the server entirely
+			# this would also eliminate potential problems with shadowing and directed messages
 			log(self, "forwarding %s to server" % "%d|%s" % (cmd, msg), 2)
 			connection.forward("%d|%s" % (cmd, msg))
 		if(cmd == 15): # logout (must be done after forward, or the above will block it)

@@ -1,7 +1,7 @@
 // the control script goes here
 var styles = ['', 'cyane', 'server', 'client', 'guest', 'client'];
 
-var version = "0.13";
+var version = "0.14";
 var client_name = "js_cc version " + version + " (NadCC)";
 var welcome_message = "Welcome to " + client_name;
 var connection;
@@ -79,7 +79,8 @@ function connect() {
 		lastAttemptedName = "";
 		recv_cc("13|0");
 		addTextOut("ChatClient", 5, "Reconnecting...", "1");
-		connect();
+		// wait a few seconds before reconnecting to avoid the DOS attack style reconnect
+		setTimeout(connect, 3000);
 	};
 	connection.onmessage = function (messageEvent) {
 		recv_cc(messageEvent.data.split("\r\n")[0]);
@@ -101,7 +102,7 @@ function pingCount() {
 	// if the server reports us missing, this will cause a reconnect
 	if(name_reg) {
 		send_cc("20||^1ping");
-	}else if(!name_reg && lastAttemptedName != '') {
+	}else if(lastAttemptedName != '') {
 		// we might be waiting for a name to free up
 		send_cc("10|" + lastAttemptedName);
 	}
@@ -454,6 +455,8 @@ function disconnect() {
 	name_reg = 0;
 	linkbutton.value = 'Link In';
 	namein.disabled = false;
+	// this will prevent the client from logging us back in
+	lastAttemptedName = '';
 }
 
 function whoSelChanged() {
