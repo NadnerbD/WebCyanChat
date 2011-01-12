@@ -137,8 +137,18 @@ class CC_Relay(CC_Server):
 		if(cmd in [50, 51, 53]):
 			self.sendShadowUserList()
 		elif(cmd in [10, 40] or (cmd in [15, 20, 30, 70] and connection.named)):
-			# TODO: for directed messages (20, 70) we can bypass the server entirely
-			# this would also eliminate potential problems with shadowing and directed messages
+			if(self.prefs["shadow_users"] and cmd in [20, 70]):
+				# If a PM or ignore message is directed at a client of the relay, we bypass the main server
+				msglist = msg.split("|", 1)
+				user = msglist[0].split(",", 1)
+				target = self.connections.findByName(user[0])
+				if(target):
+					if(cmd == 20):
+						self.connections.sendPM(connection, target, msglist[1][2:])
+					elif(cmd == 70):
+						self.connections.sendIgnore(connection, target)
+						self.sendShadowUserList()
+					return
 			log(self, "forwarding %s to server" % "%d|%s" % (cmd, msg), 2)
 			connection.forward("%d|%s" % (cmd, msg))
 		if(cmd == 15): # logout (must be done after forward, or the above will block it)
