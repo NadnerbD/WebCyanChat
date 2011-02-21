@@ -422,6 +422,8 @@ class IRC_Server:
 		self.run()
 
 	def run(self):
+                while(not self.quit.is_set()):
+                        time.sleep(10)
 		self.quit.wait()
 	
 	def acceptLoop(self, port=6667): #Threaded per-server

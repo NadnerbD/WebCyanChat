@@ -21,7 +21,7 @@
 			</div>
 		</div>
 		<div id="interface">
-			<input type="text" id="nameinput" value="Default Name" onkeypress="nameenter(event)"/>
+			<input type="text" id="nameinput" placeholder="Enter Name" onkeypress="nameenter(event)"/>
 			<input type="button" value="Link In" id="linkbutton" onclick="if(name_reg) disconnect(); else setname(namein.value);" />
 			<input type="button" value="SendPrivate" id="spbtn" onclick="sendprivate(wholist.value, textin.value);textin.value='';" />
 			<input type="button" value="PrivateChat" id="pcbtn" onclick="openprivate(wholist.value)" />

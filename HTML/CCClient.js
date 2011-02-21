@@ -104,7 +104,7 @@ function pingCount() {
 		send_cc("20||^1ping");
 	}else if(lastAttemptedName != '') {
 		// we might be waiting for a name to free up
-		send_cc("10|" + lastAttemptedName);
+		setname(lastAttemptedName);
 	}
 }
 
