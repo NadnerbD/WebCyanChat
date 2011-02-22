@@ -4,6 +4,7 @@ from HTTP_Server import HTTP_Server
 
 import threading
 import socket
+import time
 
 # check for the dnspython module
 # if it is available, we can use it to do reverse dns lookups
