@@ -358,7 +358,7 @@ class CC_Server:
 		self.run()
 	
 	def run(self):
-		while(not self.quit.is_set()):
+		while(not self.quit.isSet()):
 			time.sleep(10)
 		self.quit.wait()
 	
