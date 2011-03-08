@@ -35,6 +35,7 @@
 			<select id="wholistid" size="20" onchange="whoSelChanged()">
 				<!-- regular users -->
 			</select>
+			<span style="float:right;display:block;"><input type="checkbox" id="bounceid" onclick="togglebounce()" style="width:1em;display:inline;" />Use Bouncer</span>
 			<input type="button" value="MakeMeCyan" onclick="setmylevel(1)" class="op" style="color:#00ffff;" />
 			<input type="button" value="MakeGuest" onclick="setlevel(wholist.value, 4)" class="op" style="color:#ffc800;" />
 			<input type="button" value="MakeNormal" onclick="setlevel(wholist.value, 0)" class="op" />

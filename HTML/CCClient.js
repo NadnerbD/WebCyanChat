@@ -18,6 +18,7 @@ var title = "[CyanChat]WebCC";
 var ignoreList = [];
 var level = 0;
 var authKey = "";
+var bounceKey = "";
 var lastPMWindowOpenUser = "";
 
 function init() {
@@ -30,14 +31,12 @@ function init() {
 	linkbutton = document.getElementById("linkbutton");
 	connectstatus = document.getElementById("connectstatusid");
 	timestamps = document.getElementById("timestampsid");
+	bounceEnable = document.getElementById("bounceid");
 	// disable the buttons
 	whoSelChanged();
-	// check for a name cookie
-	if(document.cookie.split("ccname=").length > 1) {
-		lastSessionName = unescape(document.cookie.split("ccname=")[1].split(";")[0]);
-	}else{
-		lastSessionName = "";
-	}
+	// fetch previous settings
+	lastSessionName = getCookie("ccname");
+	bounceKey = getCookie("bouncekey");
 	try {
 		// standards compliant
 		window.addEventListener("focus", disableFlash, false);
@@ -70,7 +69,13 @@ function connect() {
 		connected = 1;
 		connectstatus.innerHTML = "Connected";
 		connectstatus.style.color = "#00ff00";
-		send_cc("40|1");
+		if(bounceKey) {
+			// if we have a bounce-reconnect cookie
+			bounceEnable.checked = true;
+			send_cc("102|" + bounceKey);
+		}else{
+			send_cc("40|1");
+		}
 	};
 	connection.onclose = function () {
 		// clear stuff and recreate the socket
@@ -110,7 +115,7 @@ function pingCount() {
 
 function recv_cc(line) {
 	if(line.length > 0) {
-		command = line.substring(0, 2);
+		command = line.split("|")[0];
 		pipelist = line.split("|");
 		switch(command) {
 			case "31":
@@ -162,8 +167,8 @@ function recv_cc(line) {
 				addTextOut("ChatServer", 2, line.substring(4, line.length), "1");
 				// now if there was a name cookie, we can use it
 				if((lastSessionName)&&(name_reg == 0)) {
+					// prevents multiple attempts to register name (one for each 40)
 					if(lastAttemptedName != lastSessionName) {
-						lastAttemptedName = lastSessionName;
 						setname(lastSessionName);
 					}
 				}
@@ -176,11 +181,11 @@ function recv_cc(line) {
 				// in case the user gets disconnected this session
 				lastSessionName = currentName;
 				// on a successful name set, we set the name cookie so we can autoname ourselves on the next visit
-				today = new Date();
 				// store the cookie for a week
-				expire_date = new Date(today.getTime() + (7 * 1000 * 60 * 60 * 24));
-				expire_string = expire_date.toGMTString();
-				document.cookie = "ccname=" + escape(currentName) + ";path=/;expires=" + expire_string;
+				setCookie("ccname", currentName);
+				if(bounceEnable.checked) {
+					send_cc("100"); // bounce key request
+				}
 			break;
 			case "10":
 				// name rejected message
@@ -207,6 +212,29 @@ function recv_cc(line) {
 					changeRule(".op", "visibility", "hidden");
 				}
 				refreshGUIUserList(userstring);
+			break;
+			case "101":
+				// bounce key response
+				// store the cookie for a week
+				bounceKey = pipelist[1] + "|" + pipelist[2];
+				setCookie("bouncekey", bounceKey);
+			break;
+			case "102":
+				// bounce connect reject
+				send_cc("40|1"); // log in normally
+				// we should delete the cookie so that we don't try to use it again later
+				deleteCookie("bouncekey");
+				bounceKey = "";
+			break;
+			case "103":
+				// bounce connect accept
+				currentName = bounceKey.split("|")[0].substring(1);
+				lastSessionName = currentName;
+				namein.value = currentName;
+				namein.disabled = true;
+				name_reg = true;
+				linkbutton.value = 'Link Out';
+				textin.focus();
 			break;
 			default:
 				addTextOut("ChatServer", 2, line, "1");
@@ -301,6 +329,32 @@ function addTextOut(nick, nickflag, message, messageflag) {
 	newline = addElement(newline, "br", "", "", 0);
 	textout.insertBefore(newline, textout.childNodes[0]);
 	startFlash();
+}
+
+function setCookie(name, value) {
+	// cookies are set to expire in one week
+	var today = new Date();
+	expire_date = new Date(today.getTime() + (7 * 1000 * 60 * 60 * 24));
+	expire_string = expire_date.toGMTString();
+	document.cookie = name + "=" + escape(value) + ";path=/;expires=" + expire_string;
+}
+
+function getCookie(name) {
+	// first check if the cookie exists
+	if(document.cookie.split(name + "=").length > 1) {
+		// if so, extract it
+		return unescape(document.cookie.split(name + "=")[1].split(";")[0]);
+	}else{
+		// otherwise return an empty string
+		return "";
+	}
+}
+
+function deleteCookie(name) {
+	// we delete cookies by setting their expiry date to the past
+	today = new Date();
+	expire_string = new Date(today.getTime() - 1).toGMTString();
+	document.cookie = name + "=;path=/;expires=" + expire_string
 }
 
 function intPlaces(integer, places) {
@@ -447,6 +501,13 @@ function killPMWindows() {
 function versionReply(target) {
 	send_cc("20|" + target + "|^1" + client_name);
 	send_cc("20|" + target + "|^1" + navigator.userAgent || "unknown browser");
+	//send_cc("20|" + target + "|^1Connection is a " + connection.constructor.toString().match(/function\s*(\w+)/)[1]);
+	// safari doesn't return anything useful for the constructor name
+	if(window.WebSocket) {
+		send_cc("20|" + target + "|^1Connection is a WebSocket");
+	}else{
+		send_cc("20|" + target + "|^1Connection is a XmlHttpSock");
+	}
 	addTextOut("ChatClient", 3, "[" + target.substring(1, target.length) + "] Requested version info", "1")
 }
 
@@ -527,4 +588,14 @@ function toggletimes() {
 		vis = "none";
 	}
 	changeRule(".timestamp", "display", vis);
+}
+
+function togglebounce() {
+	if(bounceEnable.checked) {
+		send_cc("100"); // bounce key request
+	}else{
+		bounceKey = "";
+		deleteCookie("bouncekey");
+		send_cc("104"); // disable bounce request
+	}
 }

@@ -185,6 +185,14 @@ class CC_Server:
 			self.version = 0 # client version
 			self.authLevel = 0
 			self.authKey = str()
+			# bouncer data
+			self.bounceEnable = 0
+			self.bounceBufferSize = 0
+			self.bounceKey = hex(random.randint(0, 0x7FFFFFFE))[2:]
+			self.bounceDisconnected = 0
+			self.bounceBursting = 0
+			self.bounceConnect = threading.Event()
+			self.bounceBuffer = []
 		
 		def __repr__(self):
 			return "[%s] (%s, %s)" % (self.name, self.addr[0], self.addr[1])
@@ -200,6 +208,11 @@ class CC_Server:
 		
 		def send(self, message):
 			self.comLock.acquire()
+			if(self.bounceEnable and not self.bounceBursting):
+				self.bounceBuffer.append(message)
+				# this naively buffers all messages, probably non-optimal, but simple
+				while(len(self.bounceBuffer) > self.bounceBufferSize):
+					self.bounceBuffer.remove(self.bounceBuffer[0])
 			try:
 				log(self, "sending: %s to %s" % (repr(message), self), 2)
 				self.sock.send(message + "\r\n")
@@ -249,6 +262,8 @@ class CC_Server:
 			"enable_protocol_extensions": 1, \
 			"auth_1": "huru", \
 			"auth_2": "tia", \
+			"enable_bouncer": 0, \
+			"bounce_buffer_size": 40, \
 		}
 		# dict levels
 		# 0 - still bad with * inserted and leaded and ended by letters ("fuck", "fluck", "pairofducks")
@@ -418,8 +433,17 @@ class CC_Server:
 		while 1:
 			line = readTo(connection.sock, '\n', ['\r'])
 			if(not line or connection.status == 0):
-				log(self, "lost connection to %s" % connection, 2)
-				return
+				if(connection.bounceEnable and connection.named):
+					log(self, "bounced session %s disconnected" % connection, 2)
+					connection.bounceDisconnected = 1
+					connection.bounceConnect.wait()
+					# when the session is reconnected, bounceConnect will be set
+					connection.bounceConnect.clear()
+					connection.bounceDisconnected = 0
+					continue
+				else:
+					log(self, "lost connection to %s" % connection, 2)
+					return
 			#line = line.rstrip("\r\n")
 			line = line.strip()
 			log(self, "received: %s from %s" % (line, connection), 2) 
@@ -481,8 +505,11 @@ class CC_Server:
 			if(target):
 				self.connections.debugMsg(connection, "Ignore user successful.")
 				self.connections.sendIgnore(connection, target)
-		elif(self.prefs["enable_admin_extensions"]):
-			self.handleExt(connection, cmd, msg)
+		else:
+			if(self.prefs["enable_admin_extensions"]):
+				self.handleExt(connection, cmd, msg)
+			if(self.prefs["enable_bouncer"]):
+				self.handleBounce(connection, cmd, msg)
 	
 	def handleExt(self, connection, cmd, msg):
 		if(cmd == 12): # auth
@@ -520,6 +547,31 @@ class CC_Server:
 		elif(cmd == 90): # reload config
 			if(connection.authLevel > 1):
 				self.readPrefs()
+	
+	def handleBounce(self, connection, cmd, msg):
+		if(cmd == 100): # bounce key request
+			connection.send("101|%s|%s" % (connection.name, connection.bounceKey))
+			connection.bounceEnable = 1
+			connection.bounceBufferSize = self.prefs["bounce_buffer_size"]
+		elif(cmd == 102): # bounce connect request
+			msg = msg.split("|")
+			# this method will break if the user has it's level changed while disconnected
+			bounceTarget = self.connections.findByName(msg[0])
+			if(bounceTarget and bounceTarget.bounceDisconnected and bounceTarget.bounceKey == msg[1]):
+				bounceTarget.sock = connection.sock
+				connection.status = 0 # mark this session to be removed
+				connection.sock = None # remove the sock from the original session
+				bounceTarget.bounceBursting = 1
+				bounceTarget.send("103") # bounce connect accept
+				for line in bounceTarget.bounceBuffer:
+					bounceTarget.send(line)
+				bounceTarget.bounceBursting = 0
+				bounceTarget.bounceConnect.set() # resume the sock recv thread
+			else:
+				connection.send("102") # bounce connect reject
+		elif(cmd == 104): # disable bounce request
+			connection.bounceEnable = 0
+			connection.bounceBuffer = []
 	
 	def handleServCmd(self, connection, msg):
 		if(msg == "?"):
