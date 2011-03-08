@@ -3,6 +3,7 @@ from Utils import *
 from CC_Server import CC_Server
 
 import socket
+import time
 
 class CC_Relay(CC_Server):
 	class connectionList(CC_Server.connectionList):
@@ -64,6 +65,18 @@ class CC_Relay(CC_Server):
 		self.prefs.update(relayPrefs)
 		self.shadowUserList = list()
 		self.shadowListLock = threading.Lock()
+		# bouncer feature - always on in case of config change
+		bouncerPingThread = threading.Thread(None, self.bouncerPingLoop, "bouncerPingLoop", ())
+		bouncerPingThread.setDaemon(1)
+		bouncerPingThread.start()
+
+	def bouncerPingLoop(self):
+		# pings the server while the user is disconnected to prevent idle timeout
+		while 1:
+			time.sleep(30)
+			for user in self.connections.connections:
+				if(user.bounceDisconnected):
+					user.forward("20||^1ping")
 	
 	def relayRecvLoop(self, connection): #Threaded per-relay-socket
 		while 1:
@@ -132,8 +145,11 @@ class CC_Relay(CC_Server):
 				return
 		elif(cmd == 10): # set name
 			connection.lastAttemptedName = msg
-		elif(self.prefs["enable_admin_extensions"]):
-			self.handleExt(connection, cmd, msg)
+		else:
+			if(self.prefs["enable_admin_extensions"]):
+				self.handleExt(connection, cmd, msg)
+			if(self.prefs["enable_bouncer"]):
+				self.handleBounce(connection, cmd, msg)
 		if(cmd in [50, 51, 53]):
 			self.sendShadowUserList()
 		elif(cmd in [10, 40] or (cmd in [15, 20, 30, 70] and connection.named)):
