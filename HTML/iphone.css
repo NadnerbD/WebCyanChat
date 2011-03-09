@@ -72,7 +72,7 @@ select {
     font-family: Helvetica;
     font-size: 14px;
 }
-ul input[type="button"] {
+ul input[type="button"], ul input[type="text"] {
     font-size: 17px;
     font-weight: bold;
     -webkit-appearance: none;

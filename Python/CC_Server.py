@@ -565,6 +565,7 @@ class CC_Server:
 				bounceTarget.send("103") # bounce connect accept
 				for line in bounceTarget.bounceBuffer:
 					bounceTarget.send(line)
+				bounceTarget.send("104") # end of bounce init burst
 				bounceTarget.bounceBursting = 0
 				bounceTarget.bounceConnect.set() # resume the sock recv thread
 			else:

@@ -19,6 +19,7 @@ var ignoreList = [];
 var level = 0;
 var authKey = "";
 var bounceKey = "";
+var bounceBursting = 0;
 var lastPMWindowOpenUser = "";
 
 function init() {
@@ -229,6 +230,7 @@ function recv_cc(line) {
 			break;
 			case "103":
 				// bounce connect accept
+				bounceBursting = 1;
 				currentName = bounceKey.split("|")[0].substring(1);
 				lastSessionName = currentName;
 				namein.value = currentName;
@@ -236,6 +238,10 @@ function recv_cc(line) {
 				name_reg = true;
 				linkbutton.value = 'Link Out';
 				textin.focus();
+			break;
+			case "104":
+				// bounce burst end
+				bounceBursting = 0;
 			break;
 			default:
 				addTextOut("ChatServer", 2, line, "1");
@@ -500,14 +506,16 @@ function killPMWindows() {
 }
 
 function versionReply(target) {
-	send_cc("20|" + target + "|^1" + client_name);
-	send_cc("20|" + target + "|^1" + navigator.userAgent || "unknown browser");
-	//send_cc("20|" + target + "|^1Connection is a " + connection.constructor.toString().match(/function\s*(\w+)/)[1]);
-	// safari doesn't return anything useful for the constructor name
-	if(window.WebSocket) {
-		send_cc("20|" + target + "|^1Connection is a WebSocket");
-	}else{
-		send_cc("20|" + target + "|^1Connection is a XmlHttpSock");
+	if(!bounceBursting) {
+		send_cc("20|" + target + "|^1" + client_name);
+		send_cc("20|" + target + "|^1" + navigator.userAgent || "unknown browser");
+		//send_cc("20|" + target + "|^1Connection is a " + connection.constructor.toString().match(/function\s*(\w+)/)[1]);
+		// safari doesn't return anything useful for the constructor name
+		if(window.WebSocket) {
+			send_cc("20|" + target + "|^1Connection is a WebSocket");
+		}else{
+			send_cc("20|" + target + "|^1Connection is a XmlHttpSock");
+		}
 	}
 	addTextOut("ChatClient", 3, "[" + target.substring(1, target.length) + "] Requested version info", "1")
 }
