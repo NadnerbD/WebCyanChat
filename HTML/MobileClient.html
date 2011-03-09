@@ -6,7 +6,7 @@
 		<link rel="stylesheet" type="text/css" href="ScriptConsts.css" />
 		<link rel="apple-touch-icon" href="icyanchat.png" />
 		<link rel="apple-touch-startup-image" href="icyanchat_launch.png" />
-		<meta name="viewport" content="user-scalable=no, width=device-width" />
+		<meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black" />
 		<script src="XmlHttpSock.js"></script>
@@ -22,6 +22,7 @@
 			<select id="wholistid" size="20" onchange="whoSelChanged()">
 				<!-- regular users -->
 			</select>
+			<input type="button" value="SendPrivate" id="spbtn" onclick="sendprivate(wholist.value, textin.value);textin.value='';" />
 			<div id="output">
 				<!-- output goes here -->
 			</div>
@@ -33,7 +34,6 @@
 		</ul>
 		<ul>
 			<li><a><input type="button" value="Link In" id="linkbutton" onclick="if(name_reg) disconnect(); else setname(namein.value);" /></a></li>
-			<li><a><input type="button" value="SendPrivate" id="spbtn" onclick="sendprivate(wholist.value, textin.value);textin.value='';" /></a></li>
 			<li style="display:none;"><a><input type="button" value="PrivateChat" id="pcbtn" onclick="openprivate(wholist.value)" /></a></li>
 			<li><a><input type="button" value="Ignore" id="ibtn" onclick="ignoreUser(wholist.value)" /></a></li>
 		</ul>

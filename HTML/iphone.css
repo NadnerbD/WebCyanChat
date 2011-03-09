@@ -60,21 +60,22 @@ ul li a:active,ul li a:hover {
     color: blue;
 }
 div#output {
-	width: 100%;
-	height: 100%;
-	word-wrap: break-word;
+    width: 100%;
+    height: 100%;
+    word-wrap: break-word;
 }
 input {
     font-family: Helvetica;
     font-size: 14px;
 }
-ul input {
+select {
+    font-family: Helvetica;
+    font-size: 14px;
+}
+ul input[type="button"] {
     font-size: 17px;
     font-weight: bold;
     -webkit-appearance: none;
     border: none;
     padding: 0px;
-}
-input[type="checkbox"] {
-    -webkit-appearance: checkbox;
 }

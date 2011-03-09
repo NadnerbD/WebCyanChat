@@ -37,6 +37,7 @@ function init() {
 	// fetch previous settings
 	lastSessionName = getCookie("ccname");
 	bounceKey = getCookie("bouncekey");
+	title = document.title;
 	try {
 		// standards compliant
 		window.addEventListener("focus", disableFlash, false);
