@@ -158,7 +158,10 @@ class CC_Server:
 			self.accessLock.release()
 		
 		def remove(self, connection, cause=1):
-			connection.sock.close()
+			try:
+				connection.sock.close()
+			except:
+				pass
 			connection.status = 0
 			self.removeName(connection, cause)
 			self.accessLock.acquire()
@@ -431,9 +434,13 @@ class CC_Server:
 	
 	def sockLoop(self, connection): #Threaded per-socket
 		while 1:
-			line = readTo(connection.sock, '\n', ['\r'])
+			try:
+				line = readTo(connection.sock, '\n', ['\r'])
+			except:
+				log(self, "error reading from socket on %s" % connection, 2)
+				return
 			if(not line or connection.status == 0):
-				if(connection.bounceEnable and connection.named):
+				if(connection.bounceEnable and connection.named and connection.status != 0):
 					log(self, "bounced session %s disconnected" % connection, 2)
 					connection.bounceDisconnected = 1
 					connection.bounceConnect.wait()
