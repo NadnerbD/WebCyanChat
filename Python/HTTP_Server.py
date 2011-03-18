@@ -276,9 +276,19 @@ class HTTP_Server:
 		#lazy parsing of escape sequences :P
 		resource = resource.replace("%20", ' ')
 		if(self.redirects.has_key(resource)):
-			self.writeHTTP(sock, 301, {"Location": self.redirects[resource]}, "301 Redirect")
-			log(self, "redirected %s from %s to %s" % (addr, resource, self.redirects[resource]), 3)
-			return
+			redirect = self.redirects[resource]
+			if(type(redirect) == type(str())):
+				self.writeHTTP(sock, 301, {"Location": redirect}, "301 Redirect")
+				log(self, "redirected %s from %s to %s" % (addr, resource, self.redirects[resource]), 3)
+				return
+			elif(headers.has_key(redirect["header"]) and redirect["value"] in headers[redirect["header"]]):
+				self.writeHTTP(sock, 301, {"Location": redirect["location"]}, "301 Redirect")
+				log(self, "redirected request for %s to %s due to %s value containing %s" % ( \
+					resource, \
+					redirect["location"], \
+					redirect["header"], \
+					redirect["value"]), 3)
+				return
 		#resExt = resource.rsplit('.', 1)
 		resExt = resource.split('.')
 		if(len(resExt) > 1):

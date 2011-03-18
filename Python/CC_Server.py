@@ -234,6 +234,7 @@ class CC_Server:
 		self.authDict = dict()
 		self.HTTPServ = HTTP_Server()
 		self.HTTPServ.redirects['/'] = "/ChatClient.html"
+		self.HTTPServ.redirects["/ChatClient.html"] = {"header": "User-Agent", "value": "iPhone", "location": "MobileClient.html"}
 		self.welcomeMessage = """
 			Welcome to %(server_version)s
 			Using protocol versions 0, 1 and 2
