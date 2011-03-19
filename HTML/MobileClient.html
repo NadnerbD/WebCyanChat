@@ -27,26 +27,28 @@
 				<!-- output goes here -->
 			</div>
 		</div>
-		<ul>
-			<li><a><input type="text" id="nameinput" placeholder="Enter Name" onkeypress="nameenter(event)"/></a></li>
-			<li><a><input type="checkbox" id="timestampsid" onclick="toggletimes()" style="width:1em;display:inline;" />Show Timestamps</a></li>
-			<li><a><input type="checkbox" id="bounceid" onclick="togglebounce()" style="width:1em;display:inline;" />Use Bouncer</a></li>
-		</ul>
-		<ul>
-			<li><a><input type="button" value="Link In" id="linkbutton" onclick="if(name_reg) disconnect(); else setname(namein.value);" /></a></li>
-			<li style="display:none;"><a><input type="button" value="PrivateChat" id="pcbtn" onclick="openprivate(wholist.value)" /></a></li>
-			<li><a><input type="button" value="Ignore" id="ibtn" onclick="ignoreUser(wholist.value)" /></a></li>
-		</ul>
-		<ul class="op">
-			<li><a><input type="button" value="MakeMeCyan" onclick="setmylevel(1)" style="color:#00ffff;" /></a></li>
-			<li><a><input type="button" value="MakeGuest" onclick="setlevel(wholist.value, 4)" style="color:#ffc800;" /></a></li>
-			<li><a><input type="button" value="MakeNormal" onclick="setlevel(wholist.value, 0)" /></a></li>
-			<li><a><input type="button" value="Kick/Ban" onclick="kickuser(wholist.value)" /></a></li>
-		</ul>
-		<ul class="admin">
-			<li><a><input type="button" value="ServMsg" onclick="servmsg(textin.value);textin.value=''" style="color:#00ff00;" /></a></li>
-			<li><a><input type="button" value="ReloadConfig" onclick="reload()" style="color:#00ff00;" /></a></li>
-			<li><a><input type="button" value="Shutdown" onclick="shutdown()" style="color:#ff0000;" /></a></li>
-		</ul>
+		<div id="controls">
+			<ul>
+				<li><a><input type="text" id="nameinput" placeholder="Enter Name" onkeypress="nameenter(event)"/></a></li>
+				<li><a><input type="checkbox" id="timestampsid" onclick="toggletimes()" style="width:1em;display:inline;" />Show Timestamps</a></li>
+				<li><a><input type="checkbox" id="bounceid" onclick="togglebounce()" style="width:1em;display:inline;" />Use Bouncer</a></li>
+			</ul>
+			<ul>
+				<li><a><input type="button" value="Link In" id="linkbutton" onclick="if(name_reg) disconnect(); else setname(namein.value);" /></a></li>
+				<li style="display:none;"><a><input type="button" value="PrivateChat" id="pcbtn" onclick="openprivate(wholist.value)" /></a></li>
+				<li><a><input type="button" value="Ignore" id="ibtn" onclick="ignoreUser(wholist.value)" /></a></li>
+			</ul>
+			<ul class="op">
+				<li><a><input type="button" value="MakeMeCyan" onclick="setmylevel(1)" style="color:#00ffff;" /></a></li>
+				<li><a><input type="button" value="MakeGuest" onclick="setlevel(wholist.value, 4)" style="color:#ffc800;" /></a></li>
+				<li><a><input type="button" value="MakeNormal" onclick="setlevel(wholist.value, 0)" /></a></li>
+				<li><a><input type="button" value="Kick/Ban" onclick="kickuser(wholist.value)" /></a></li>
+			</ul>
+			<ul class="admin">
+				<li><a><input type="button" value="ServMsg" onclick="servmsg(textin.value);textin.value=''" style="color:#00ff00;" /></a></li>
+				<li><a><input type="button" value="ReloadConfig" onclick="reload()" style="color:#00ff00;" /></a></li>
+				<li><a><input type="button" value="Shutdown" onclick="shutdown()" style="color:#ff0000;" /></a></li>
+			</ul>
+		</div>
 	</body>
 </html>
