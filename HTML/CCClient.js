@@ -232,6 +232,9 @@ function recv_cc(line) {
 				// bounce connect accept
 				bounceBursting = 1;
 				currentName = bounceKey.split("|")[0].substring(1);
+				// refresh the cookies so they don't expire
+				setCookie("ccname", currentName);
+				setCookie("bouncekey", bounceKey);
 				lastSessionName = currentName;
 				namein.value = currentName;
 				namein.disabled = true;
