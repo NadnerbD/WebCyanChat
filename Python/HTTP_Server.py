@@ -281,7 +281,7 @@ class HTTP_Server:
 				self.writeHTTP(sock, 301, {"Location": redirect}, "301 Redirect")
 				log(self, "redirected %s from %s to %s" % (addr, resource, self.redirects[resource]), 3)
 				return
-			elif(headers.has_key(redirect["header"]) and redirect["value"] in headers[redirect["header"]]):
+			elif(headers.has_key(redirect["header"]) and headers[redirect["header"]].find(redirect["value"]) != -1):
 				self.writeHTTP(sock, 301, {"Location": redirect["location"]}, "301 Redirect")
 				log(self, "redirected request for %s to %s due to %s value containing %s" % ( \
 					resource, \
