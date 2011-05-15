@@ -1043,7 +1043,7 @@ class IRC_Server:
 								paramIndex += 1
 								# we go on and let the flag be set or unset on the channel as well
 							elif(flag == 'b'):
-								if(paramIndex >= len(msg.params)):
+								if(paramIndex >= len(modeParams)):
 									self.sendReply(connection, 461) # ERR_NEEDMOREPARAMS
 									continue
 								# add or remove bans
