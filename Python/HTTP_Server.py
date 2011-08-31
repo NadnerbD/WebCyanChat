@@ -3,6 +3,7 @@ from Utils import *
 
 import socket
 import struct
+import base64
 import time
 try:
 	import hashlib
@@ -12,7 +13,8 @@ except:
 class HTTP_Server:
 	statusCodes = { \
 		100: "Continue", \
-		101: "Web Socket Protocol Handshake", \
+		#101: "Web Socket Protocol Handshake", \
+		101: "Switching Protocols", \
 		200: "OK", \
 		201: "Created", \
 		301: "Moved Permanently", \
@@ -316,7 +318,7 @@ class HTTP_Server:
 				self.sessionQueues[headers["WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("Sec-WebSocket-Protocol") and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"])): # protocol draft 76
+			elif(headers.has_key("Sec-WebSocket-Protocol") and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"]) and not headers.has_key("Sec-WebSocket-Version")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
@@ -350,6 +352,18 @@ class HTTP_Server:
 				sock.send("\r\n" + hashlib.md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
 				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
+				return "WebSocket"
+			elif(headers.has_key("Sec-WebSocket-Version") and headers["Sec-WebSocket-Version"] == "8" and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+				responseHeaders = [ \
+					# HTTP/1.1 101 Switching Protocols
+				        ("Upgrade", "websocket"), \
+			        	("Connection", "Upgrade"), \
+			        	("Sec-WebSocket-Accept", base64.b64encode(hashlib.sha1(headers["Sec-WebSocket-Key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())), \
+			        	("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+				]
+				log(self, "got Sec-WebSocket Version 8 from (%s, %s)" % addr, 3)
+				self.writeHTTP(sock, 101, {}, None, responseHeaders)
+				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
