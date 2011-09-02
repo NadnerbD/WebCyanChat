@@ -1,8 +1,6 @@
 from Logger import *
 from Utils import *
 
-from itertools import izip, cycle
-
 import socket
 import struct
 import base64
@@ -211,6 +209,13 @@ class HTTP_Server:
 				self.sock.send(struct.pack("B", len(data)))
 			self.sock.send(data)
 
+		def decode(data, key):
+			out = ''
+			for i in range(len(data)):
+				out += chr(ord(data[i]) ^ ord(key[i % len(key)]))
+			return out
+		decode = staticmethod(decode)
+
 		def recvFrame(self):
 			while(True):
 				opcode = struct.unpack("B", self.sock.recv(1))[0] & 0x0F
@@ -220,7 +225,7 @@ class HTTP_Server:
 				elif(payLen == 127):
 					payLen = struct.unpack(">Q", self.sock.recv(8))[0]
 				key = self.sock.recv(4)
-				data = ''.join(chr(ord(x) ^ ord(y)) for (x,y) in izip(self.sock.recv(payLen), cycle(key)))
+				data = self.decode(self.sock.recv(payLen), key)
 				if(opcode == 8): # close opcode
 					log(self, "recieved close frame: %r" % data)
 					self.closed = True
