@@ -7,8 +7,13 @@ import base64
 import time
 try:
 	import hashlib
+	md5 = hashlib.md5
+	sha1 = hashlib.sha1
 except:
-	import md5 as hashlib
+	import md5
+	import sha
+	md5 = md5.md5
+	sha1 = sha.sha
 
 class HTTP_Server:
 	statusCodes = { \
@@ -411,16 +416,15 @@ class HTTP_Server:
 				# finish the handshake
 				log(self, "got Sec-WebSocket from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
-				sock.send("\r\n" + hashlib.md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
+				sock.send("\r\n" + md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
 				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
 			elif(headers.has_key("Sec-WebSocket-Version") and headers["Sec-WebSocket-Version"] == "8" and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
-					# HTTP/1.1 101 Switching Protocols
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
-			        	("Sec-WebSocket-Accept", base64.b64encode(hashlib.sha1(headers["Sec-WebSocket-Key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())), \
+					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["Sec-WebSocket-Key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
 			        	("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
 				]
 				log(self, "got Sec-WebSocket Version 8 from (%s, %s)" % addr, 3)
