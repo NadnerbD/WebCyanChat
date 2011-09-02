@@ -1,6 +1,8 @@
 from Logger import *
 from Utils import *
 
+from itertools import izip, cycle
+
 import socket
 import struct
 import base64
@@ -190,6 +192,61 @@ class HTTP_Server:
 		
 		def close(self):
 			self.sock.close()
+
+	class WebSocket2:
+		def __init__(self, sock):
+			self.sock = sock
+			self.buffer = list()
+			self.closed = False
+
+		def send(self, data, opcode=1): # opcode 1 is text, 9 is ping, A is pong
+			self.sock.send(struct.pack("B", 0x80 | (0x0F & opcode))) # final frame of opcode type
+			if(len(data) > 0xFFFF):
+				self.sock.send(struct.pack("B", 127))
+				self.sock.send(struct.pack(">Q", len(data)))
+			elif(len(data) > 125):
+				self.sock.send(struct.pack("B", 126))
+				self.sock.send(struct.pack(">H", len(data)))
+			else:
+				self.sock.send(struct.pack("B", len(data)))
+			self.sock.send(data)
+
+		def recvFrame(self):
+			while(True):
+				opcode = struct.unpack("B", self.sock.recv(1))[0] & 0x0F
+				payLen = struct.unpack("B", self.sock.recv(1))[0] & 0xEF
+				if(payLen == 126):
+					payLen = struct.unpack(">H", self.sock.recv(2))[0]
+				elif(payLen == 127):
+					payLen = struct.unpack(">Q", self.sock.recv(8))[0]
+				key = self.sock.recv(4)
+				data = ''.join(chr(ord(x) ^ ord(y)) for (x,y) in izip(self.sock.recv(payLen), cycle(key)))
+				if(opcode == 8): # close opcode
+					log(self, "recieved close frame: %r" % data)
+					self.closed = True
+					return ''
+				elif(opcode == 9): # ping opcode
+					self.send(data, 0x0A) # pong
+					log(self, "recieved ping frame: %r" % data, 4)
+				elif(opcode == 1 or opcode == 2):
+					# opcodes 1 and 2 are text and binary data
+					log(self, "recieved data frame: %r" % data, 4)
+					return data
+
+		def recv(self, count):
+			data = ''
+			while(len(data) < count):
+				if(self.closed):
+					return ''
+				while(len(self.buffer) and len(data) < count):
+					data += self.buffer.pop(0)
+				if(len(data) < count):
+					self.buffer.extend(self.recvFrame())
+			return data
+
+		def close(self):
+			self.send('', 0x08) # close opcode
+			self.sock.close()
 	
 	class acceptQueue:
 		def __init__(self):
@@ -363,7 +420,8 @@ class HTTP_Server:
 				]
 				log(self, "got Sec-WebSocket Version 8 from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
-				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
+				sock.send("\r\n")
+				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket2(sock), addr))
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
