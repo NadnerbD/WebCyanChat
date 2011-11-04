@@ -3,6 +3,7 @@
 from CC_Server import CC_Server
 from CC_Relay import CC_Relay
 from TIA_Server import TIA_Server
+from CC_Skype_Relay import CC_Skype_Relay
 
 import sys
 
@@ -10,6 +11,7 @@ serverClasses = { \
 	"cc": CC_Server, \
 	"tia": TIA_Server, \
 	"relay": CC_Relay, \
+	"skype": CC_Skype_Relay, \
 }
 serverClass = None
 for arg in sys.argv:

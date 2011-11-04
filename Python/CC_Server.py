@@ -192,7 +192,7 @@ class CC_Server:
 			self.bounceEnable = 0
 			self.bounceBufferSize = 0
 			self.bounceKey = hex(random.randint(0, 0x7FFFFFFE))[2:]
-			self.bounceDisconnected = 0
+			self.bounceDisconnected = threading.Event()
 			self.bounceBursting = 0
 			self.bounceConnect = threading.Event()
 			self.bounceBuffer = []
@@ -443,11 +443,11 @@ class CC_Server:
 			if(not line or connection.status == 0):
 				if(connection.bounceEnable and connection.named and connection.status != 0):
 					log(self, "bounced session %s disconnected" % connection, 2)
-					connection.bounceDisconnected = 1
+					connection.bounceDisconnected.set()
 					connection.bounceConnect.wait()
 					# when the session is reconnected, bounceConnect will be set
 					connection.bounceConnect.clear()
-					connection.bounceDisconnected = 0
+					connection.bounceDisconnected.clear()
 					continue
 				else:
 					log(self, "lost connection to %s" % connection, 2)
@@ -565,7 +565,10 @@ class CC_Server:
 			msg = msg.split("|")
 			# this method will break if the user has it's level changed while disconnected
 			bounceTarget = self.connections.findByName(msg[0])
-			if(bounceTarget and bounceTarget.bounceDisconnected and bounceTarget.bounceKey == msg[1]):
+			if(bounceTarget and bounceTarget.bounceKey == msg[1]):
+				if(not bounceTarget.bounceDisconnected.isSet()):
+					bounceTarget.sock.close()
+					bounceTarget.bounceDisconnected.wait()
 				bounceTarget.sock = connection.sock
 				connection.status = 0 # mark this session to be removed
 				connection.sock = None # remove the sock from the original session
