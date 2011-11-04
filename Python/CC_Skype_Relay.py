@@ -24,19 +24,22 @@ class CC_Skype_Relay(CC_Server):
 
 	def __init__(self):
 		CC_Server.__init__(self)
+		skypePrefs = {
+			"room_id": '#mattwitkowski/$cbd88fa129f3d1f0', \
+		}
+		self.prefs.update(skypePrefs)
 		self.skype = Skype4Py.Skype(Events=self)
-		self.listenName = '#mattwitkowski/$cbd88fa129f3d1f0'
 		for chat in self.skype.Chats:
-			if(chat.Name == self.listenName):
+			if(chat.Name == self.prefs["room_id"]):
 				self.chat = chat
-		log(self, "listening to %s" % self.listenName)
+		log(self, "listening to %s" % self.prefs["room_id"])
 
 	def UserStatus(self, status):
 		log(self, status)
 	
 	def MessageStatus(self, message, status):
-		log(self, (status, message.ChatName, self.listenName))
-		if((status == "SENT" or status == "RECEIVED") and message.ChatName == self.listenName):
+		log(self, (status, message.ChatName, self.prefs["room_id"]))
+		if((status == "SENT" or status == "RECEIVED") and message.ChatName == self.prefs["room_id"]):
 			log(self, "%s: %s" % (message.Sender.Handle, message.Body))
 			self.connections.sendChat(self.CC_Skype_User(message.Sender), message.Body.encode('utf-8'))
 

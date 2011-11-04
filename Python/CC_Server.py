@@ -439,7 +439,7 @@ class CC_Server:
 				line = readTo(connection.sock, '\n', ['\r'])
 			except:
 				log(self, "error reading from socket on %s" % connection, 2)
-				return
+				line = None
 			if(not line or connection.status == 0):
 				if(connection.bounceEnable and connection.named and connection.status != 0):
 					log(self, "bounced session %s disconnected" % connection, 2)
