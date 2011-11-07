@@ -216,11 +216,12 @@ class CC_Server:
 				# this naively buffers all messages, probably non-optimal, but simple
 				while(len(self.bounceBuffer) > self.bounceBufferSize):
 					self.bounceBuffer.remove(self.bounceBuffer[0])
-			try:
-				log(self, "sending: %s to %s" % (repr(message), self), 2)
-				self.sock.send(message + "\r\n")
-			except:
-				log(self, "send error to: %s" % self, 2)
+			if(not self.bounceDisconnected.isSet() or self.bounceBursting):
+				try:
+					log(self, "sending: %s to %s" % (repr(message), self), 2)
+					self.sock.send(message + "\r\n")
+				except:
+					log(self, "send error to: %s" % self, 2)
 			self.comLock.release()
 	
 	def __init__(self):
