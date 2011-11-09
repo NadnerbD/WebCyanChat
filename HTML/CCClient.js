@@ -449,7 +449,7 @@ function setname(name) {
 }
 
 function sendprivate(target, message) {
-	if(wholist.value.length > 0) {
+	if(target.length > 0) {
 		lines = message.split("\n")
 		for(line = 0; line < lines.length; line++) {
 			send_cc("20|" + target + "|^1" + lines[line]);

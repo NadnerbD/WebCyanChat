@@ -40,8 +40,9 @@ class CC_Skype_Relay(CC_Server):
 	def MessageStatus(self, message, status):
 		log(self, (status, message.ChatName, self.prefs["room_id"]))
 		if((status == "SENT" or status == "RECEIVED") and message.ChatName == self.prefs["room_id"]):
-			log(self, "%s: %s" % (message.Sender.Handle, message.Body))
-			self.connections.sendChat(self.CC_Skype_User(message.Sender), message.Body.encode('utf-8'))
+			for line in message.Body.split('\n'):
+				log(self, "%s: %s" % (message.Sender.Handle, line))
+				self.connections.sendChat(self.CC_Skype_User(message.Sender), line.encode('utf-8'))
 
 	def handleMsg(self, connection, cmd, msg):
 		if(cmd == 30 and connection.authLevel > 0): # send chat
