@@ -224,7 +224,7 @@ class HTTP_Server:
 		def recvFrame(self):
 			while(True):
 				opcode = struct.unpack("B", self.sock.recv(1))[0] & 0x0F
-				payLen = struct.unpack("B", self.sock.recv(1))[0] & 0xEF
+				payLen = struct.unpack("B", self.sock.recv(1))[0] & 0x7F
 				if(payLen == 126):
 					payLen = struct.unpack(">H", self.sock.recv(2))[0]
 				elif(payLen == 127):
