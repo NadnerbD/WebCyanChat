@@ -283,10 +283,11 @@ class HTTP_Server:
 					self.waitLock.wait()
 					self.waitLock.clear()
 	
-	def __init__(self):
+	def __init__(self, webRoot="../HTML"):
 		self.sessionList = self.sessionList()
 		self.sessionQueues = dict()
 		self.redirects = dict()
+		self.webRoot = webRoot
 	
 	def readHTTP(self, sock):
 		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
@@ -438,7 +439,7 @@ class HTTP_Server:
 				return
 		elif(method == "GET"):
 			try:
-				resourceFile = file("../HTML/%s" % resource, "rb")
+				resourceFile = file("%s/%s" % (self.webRoot, resource), "rb")
 				resourceData = resourceFile.read()
 				resourceFile.close()
 			except:
@@ -458,7 +459,7 @@ class HTTP_Server:
 							self.writeHTTP(sock, 400, {}, "empty filename")
 							return
 						newFileURI = "images/%s" % filename
-						outputFile = file("../HTML/%s" % newFileURI, "wb")
+						outputFile = file("%s/%s" % (self.webRoot, newFileURI), "wb")
 						outputFile.write(part["data"])
 						outputFile.close()
 						log(self, "sucessfully uploaded file: %s" % filename, 3)
