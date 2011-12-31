@@ -192,6 +192,15 @@ class HTTP_Server:
 				data = data.replace('\xFF', '')
 			log(self, "recieved data from WebSocket: %r" % data, 4)
 			return data
+
+		def recvFrame(self):
+			data = ''
+			assert(self.sock.recv(1) == '\x00')
+			while True:
+				byte = self.sock.recv(1)
+				if(byte == '\xFF'):
+					return data
+				data += byte
 		
 		def close(self):
 			self.sock.close()
