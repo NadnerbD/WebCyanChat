@@ -1,0 +1,190 @@
+<html>
+	<head>
+		<title>Console</title>
+		<script type="text/javascript">
+			var sock;
+			var width = 0;
+			var height = 0;
+			var modCtrl = false;
+			var grid = new Array();
+			var cursor;
+
+			var colors = [
+				"gray",
+				"red",
+				"green",
+				"yellow",
+				"blue",
+				"magenta",
+				"cyan",
+				""
+			];
+			var bgcolors = [
+				"",
+				"red",
+				"green",
+				"yellow",
+				"blue",
+				"magenta",
+				"cyan",
+				"white"
+			];
+			var weights = [
+				"normal",
+				"bold"
+			];
+			var decorations = [
+				"none",
+				"underline"
+			]
+
+			function unpackStyle(value) {
+				return {
+					fontWeight: weights[value & 0x01],
+					textDecoration: decorations[(value & (0x01 << 1)) >> 1],
+					color: colors[(value & (0x07 << 2)) >> 2],
+					backgroundColor: bgcolors[(value & (0x07 << 5)) >> 5]
+				};
+			}
+
+			function createGrid(container) {
+				var cells = new Array();
+				for(var y = 0; y < height; y++) {
+					for(var x = 0; x < width; x++) {
+						var cell = document.createElement("span");
+						var char = document.createTextNode(" ");
+						cell.appendChild(char);
+						container.appendChild(cell);
+						cells.push(cell);
+					}
+					if(y < height - 1) {
+						var br = document.createElement("br");
+						container.appendChild(br);
+					}
+				}
+				return cells;
+			}
+
+			function setCursor(index) {
+				cursor.className = undefined;
+				cursor = grid[index];
+				cursor.className = "cursor";
+			}
+
+			function init() {
+				document.addEventListener("keypress", keypress, false);
+				document.addEventListener("keydown", keydown, false);
+				document.addEventListener("keyup", keyup, false);
+
+				sock = new WebSocket("ws://" + window.location.host + "/web-socket", "term");
+				sock.onmessage = function (msgEvent) {
+					//console.log(msgEvent.data);
+					var msg = JSON.parse(atob(msgEvent.data));
+					if(msg.cmd == "init" && (width != msg.size[0] || height != msg.size[1])) {
+						var container = document.getElementById("grid");
+						while(container.children.length)
+							container.children.pop();
+						width = msg.size[0];
+						height = msg.size[1];
+						grid = createGrid(container);
+						cursor = grid[msg.cur];
+					}
+					if(msg.cmd == "init" || msg.cmd == "change") {
+						for(var i in msg.data) {
+							grid[i].firstChild.data = msg.data[i];
+							var style = unpackStyle(msg.styles[i].charCodeAt(0));
+							for(var s in style) {
+								grid[i].style[s] = style[s];
+							}
+						}
+					}
+					setCursor(msg.cur);
+				}
+			}
+
+			function keypress(event) {
+				// most keypresses will be handled here
+				// capitalization and such is handled by the browser
+				if(modCtrl) {
+					sock.send(event.which - 96);
+					modCtrl = false;
+				}else{
+					sock.send(event.which);
+				}
+				event.preventDefault();
+			}
+
+			var cursorCodes = {35: 52, 36: 49, 37: 68, 38: 65, 39: 67, 40: 66, 33: 53, 34: 54, 45: 50, 46: 51}; // 41DACB5623
+			function keydown(event) {
+				// directional and special keys will only be
+				// picked up here
+				//console.log(event.which);
+				handled = true;
+				switch(event.which) {
+					// cursor keys
+					case 37: // left
+					case 38: // up
+					case 39: // right
+					case 40: // down
+						sock.send(27); // Esc
+						//sock.send(91); // [ (normal mode)
+						sock.send(79); // O (application mode)
+						sock.send(cursorCodes[event.which]);
+						break;
+					// editing keys
+					case 33: // pg up
+					case 34: // pg down
+					case 35: // end
+					case 36: // home
+					case 45: // insert
+					case 46: // del
+						sock.send(27); // Esc
+						sock.send(91); // [
+						sock.send(cursorCodes[event.which]);
+						sock.send(126); // ~
+						break;
+					case 27: // esc
+					case 9: // Tab
+					case 8: // Backspace
+						sock.send(event.which);
+						break;
+					case 17: // Ctrl
+						modCtrl = true;
+						break;
+					default:
+						handled = false;
+						break;
+				}
+				if(handled)
+					event.preventDefault();
+			}
+
+			function keyup(event) {
+				if(event.which == 17) {
+					modCtrl = false;
+					event.preventDefault();
+				}
+			}
+		</script>
+		<style>
+			textarea {
+				font-family: monospace;
+				font-weight: bold;
+			}
+			#grid span {
+				font-family: monospace;
+				background-color: black;
+				white-space: pre;
+				color: white;
+			}
+			#grid span.cursor {
+				color: black;
+				background-color: white;
+			}
+		</style>
+	</head>
+	<body onload="init()">
+		<div id="grid"></div>
+		<input type="button" value="Ctrl" onclick="modCtrl=true;"/>
+	</body>
+</html>

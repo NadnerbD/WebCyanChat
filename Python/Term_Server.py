@@ -1,0 +1,445 @@
+import threading
+import termios
+import signal
+import struct
+import base64
+import fcntl
+import json
+import sys
+import os
+
+from Logger import log
+from HTTP_Server import HTTP_Server
+from VTParse import CommandParser
+
+class Style:
+	# this object represents the font style of a single character
+	# it bit-packs 4 attributes (fgColor, bgColor, bold, underline) into a one byte
+	# representation
+	def __init__(self, init=None):
+		if(init):
+			self.bold = init.bold
+			self.underline = init.underline
+			self.fgColor = init.fgColor
+			self.bgColor = init.bgColor
+			self.inverted = init.inverted
+		else:
+			self.bold = False
+			self.underline = False
+			self.fgColor = 7
+			self.bgColor = 0
+			self.inverted = False
+
+	def __str__(self):
+		# bbbfffub
+		if(not self.inverted):
+			return chr( \
+				(self.bold      & 0x01)      | \
+				(self.underline & 0x01) << 1 | \
+				(self.fgColor   & 0x07) << 2 | \
+				(self.bgColor   & 0x07) << 5   \
+			)
+		else:
+			return chr( \
+				(self.bold      & 0x01)      | \
+				(self.underline & 0x01) << 1 | \
+				(self.bgColor   & 0x07) << 2 | \
+				(self.fgColor   & 0x07) << 5   \
+			)
+
+	def update(self, value):
+		# the update takes the form of the integer portion of the
+		# 'm' character attribute command
+		if(value == 0):
+			self.__init__()
+		elif(value == 1):
+			self.bold = True
+		elif(value == 4):
+			self.underline = True
+		elif(value == 7):
+			self.inverted = True
+		elif(value == 22):
+			self.bold = False
+		elif(value == 24):
+			self.underline = False
+		elif(value == 27):
+			self.inverted = False
+		else:
+			cmd = value / 10
+			num = value % 10
+			if(cmd == 3):
+				if(num == 9):
+					self.fgColor = 7
+				else:
+					self.fgColor = num
+			elif(cmd == 4):
+				if(num == 9):
+					self.bgColor = 0
+				else:
+					self.bgColor = num
+
+class Buffer:
+	def __init__(self, width=80, height=24):
+		self.size = (width, height)
+		self.len = width * height
+		self.pos = 0
+		self.atEnd = False
+		self.chars = [' ' for i in range(self.len)]
+		self.attrs = [Style() for i in range(self.len)]
+		self.cdiff = dict()
+		self.sdiff = dict()
+
+	def __len__(self):
+		return self.len
+
+	def __setitem__(self, i, d):
+		self.chars[i] = d[0]
+		self.attrs[i] = d[1]
+		self.cdiff[i] = d[0]
+		self.sdiff[i] = d[1]
+
+	def __getitem__(self, i):
+		return zip(self.chars[i], self.attrs[i])
+
+	def initMsg(self):
+		return json.dumps({"cmd": "init", "data": ''.join(self.chars), "styles": ''.join(map(str, self.attrs)), "cur": self.pos, "size": self.size}, ensure_ascii=False)
+
+	def diffMsg(self):
+		if(len(self.cdiff) > self.len / 2):
+			msg = self.initMsg()
+		else:
+			msg = json.dumps({"cmd": "change", "data": self.cdiff, "styles": dict(map(lambda i: (i, str(self.sdiff[i])), self.sdiff)), "cur": self.pos}, ensure_ascii=False)
+		self.cdiff = dict()
+		self.sdiff = dict()
+		return msg
+
+class Terminal:
+	def __init__(self, conns, width=80, height=24):
+		self.buffers = [Buffer(width, height), Buffer(width, height)]
+		self.buffer = self.buffers[0]
+		self.bufferIndex = 0
+		# stuff which is not duplicated with buffers
+		self.scrollRegion = [1, height]
+		self.echo = True
+		self.edit = True
+		self.attrs = Style()
+		self.showCursor = True
+		self.savedPos = 0
+		self.connections = conns
+		# this is mainly to prevent message mixing during the initial state burst
+		self.bufferLock = threading.Lock()
+
+	def swapBuffers(self):
+		self.bufferIndex = not self.bufferIndex
+		self.buffer = self.buffers[self.bufferIndex]
+
+	def getPos(self):
+		return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0])
+
+	def setPos(self, x, y):
+		while(y >= self.buffer.size[1]):
+			y -= 1
+			self.scroll(1)
+		self.buffer.atEnd = False
+		self.buffer.pos = x + y * self.buffer.size[0]
+
+	def move(self, x, y):
+		start = self.getPos()
+		self.setPos(start[0] + x, start[1] + y)
+
+	def erase(self, start, stop, setNormal=False):
+		for x in range(start, stop):
+			if(setNormal):
+				self.buffer[x] = (' ', Style())
+			else:
+				self.buffer[x] = (' ', Style(self.attrs))
+	
+	def scroll(self, value):
+		# shifts the scroll region contents by value (positive shifts up, negative down)
+		start = (self.scrollRegion[0] - 1) * self.buffer.size[0] 
+		end = self.scrollRegion[1] * self.buffer.size[0]
+		offset = -value * self.buffer.size[0]
+		# shift within the scroll window area only
+		self.shift(max(start, start - offset), min(end, end - offset), offset)
+
+	def shift(self, start, end, offset):
+		# shift the contents of the specified area by offset
+		buffer = self.buffer[start:end]
+		index = min(start + offset, start)
+		while index < max(end + offset, end) and index < self.buffer.len:
+			if(index < start + offset or index >= end + offset):
+				self.buffer[index] = (' ', Style())
+			else:
+				self.buffer[index] = buffer[index - start - offset]
+			index += 1
+
+	def add(self, char):
+		if(char == '\r'):
+			self.buffer.pos -= self.buffer.pos % self.buffer.size[0]
+			self.buffer.atEnd = False
+		elif(char == '\n'):
+			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+				self.scroll(1)
+			else:
+				self.buffer.pos += self.buffer.size[0]
+			self.buffer.atEnd = False
+		elif(char == '\t'):
+			for i in range(8 - (self.buffer.pos % self.buffer.size[0]) % 8):
+				self.add(' ')
+		elif(char == '\x08'):
+			self.buffer.pos -= 1
+			self.buffer.atEnd = False
+		elif(char == '\x07'):
+			pass # bell
+		else:
+			if(self.buffer.atEnd):
+				self.buffer.pos += 1
+				self.buffer.atEnd = False
+				if(self.buffer.pos == self.scrollRegion[1] * self.buffer.size[0]):
+					self.scroll(1)
+					self.buffer.pos -= self.buffer.size[0]
+			if(self.buffer.pos >= self.buffer.len):
+				self.buffer.pos = self.buffer.len - 1
+			self.buffer[self.buffer.pos] = (char, Style(self.attrs))
+			if(self.buffer.pos % self.buffer.size[0] == self.buffer.size[0] - 1 and self.buffer.atEnd == False):
+				self.buffer.atEnd = True
+			else:
+				self.buffer.pos += 1
+
+	def broadcast(self, msg):
+		lost = []
+		for sock in self.connections:
+			try:
+				sock.send(base64.b64encode(msg))
+			except:
+				lost.append(sock)
+		for sock in lost:
+			self.connections.remove(sock)
+			log(self, "Removed connection: %r" % sock)
+
+	def handleCmd(self, cmd):
+		self.bufferLock.acquire()
+		reInit = False
+		# do stuff
+		if(cmd.cmd == "add"):
+			self.add(cmd.args)
+		elif(cmd.cmd == "home"):
+			if(len(cmd.args) == 2):
+				self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
+			else:
+				self.setPos(0, 0)
+		elif(cmd.cmd == "saveCursor"):
+			self.savedPos = self.buffer.pos
+		elif(cmd.cmd == "restoreCursor"):
+			self.buffer.pos = self.savedPos
+		elif(cmd.cmd == "cursorFwd"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.move(cmd.args, 0)
+		elif(cmd.cmd == "cursorBack"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.move(-cmd.args, 0)
+		elif(cmd.cmd == "cursorUp"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.move(0, -cmd.args)
+		elif(cmd.cmd == "cursorDown"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.move(0, cmd.args)
+		elif(cmd.cmd == "linePosAbs"):
+			if(len(cmd.args) == 2):
+				self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
+			elif(len(cmd.args) == 1):
+				self.setPos(self.getPos()[0], cmd.args[0] - 1)
+			else:
+				self.setPos(self.getPos()[0], 0)
+		elif(cmd.cmd == "curCharAbs"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.setPos(cmd.args - 1, self.getPos()[1])
+		elif(cmd.cmd == "reverseIndex"):
+			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[0] - 1):
+				self.scroll(-1)
+			else:
+				self.move(0, -1)
+		elif(cmd.cmd == "eraseOnDisplay"):
+			if(cmd.args == 1): # Above
+				self.erase(0, self.buffer.pos)
+			elif(cmd.args == 2): # All
+				self.erase(0, self.buffer.len)
+			else: # 0 (Default) Below
+				self.erase(self.buffer.pos, self.buffer.len)
+		elif(cmd.cmd == "eraseOnLine"):
+			lineStart = self.getPos()[1] * self.buffer.size[0]
+			if(cmd.args == 1): # Left
+				self.erase(lineStart, self.buffer.pos)
+			elif(cmd.args == 2): # All
+				self.erase(lineStart, lineStart + self.buffer.size[0])
+			else: # 0 (Default) Right
+				self.erase(self.buffer.pos, lineStart + self.buffer.size[0])
+		elif(cmd.cmd == "scrollUp"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.scroll(cmd.args)
+		elif(cmd.cmd == "scrollDown"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.scroll(-cmd.args)
+		elif(cmd.cmd == "insertLines"):
+			# adds (erases) lines at curPos and pushes (scrolls) subsequent ones down
+			if(cmd.args == None):
+				cmd.args = 1
+			tmp = self.scrollRegion # store scroll region
+			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
+			self.scroll(-cmd.args)
+			self.scrollRegion = tmp # restore scroll region
+		elif(cmd.cmd == "removeLines"):
+			# removes (erases) lines at curPos and pulls (scrolls) subsequent ones up
+			if(cmd.args == None):
+				cmd.args = 1
+			tmp = self.scrollRegion # store scroll region
+			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
+			self.scroll(cmd.args)
+			self.scrollRegion = tmp # restore scroll region
+		elif(cmd.cmd == "deleteChars"):
+			# delete n chars in the current line starting at curPos, pulling the rest back
+			if(cmd.args == None):
+				cmd.args = 1
+			self.shift(self.buffer.pos + cmd.args, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args)
+		elif(cmd.cmd == "addBlanks"):
+			# insert n blanks in the current line starting at curPos, pushing the rest forward
+			if(cmd.args == None):
+				cmd.args = 1
+			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args), cmd.args)
+		elif(cmd.cmd == "eraseChars"):
+			if(cmd.args == None):
+				cmd.args = 1
+			self.erase(self.buffer.pos, self.buffer.pos + cmd.args, True)
+		elif(cmd.cmd == "setScrollRegion"):
+			if(cmd.args[0] == None):
+				cmd.args = [1, self.buffer.size[1]]
+			self.scrollRegion = cmd.args
+		elif(cmd.cmd == "resetDECMode"):
+			if(25 in cmd.args):
+				self.showCursor = False
+			if(1049 in cmd.args and self.bufferIndex == 1):
+				self.swapBuffers()
+				reInit = True
+		elif(cmd.cmd == "setDECMode"):
+			if(25 in cmd.args):
+				self.showCursor = True
+			if(1049 in cmd.args and self.bufferIndex == 0):
+				self.swapBuffers()
+				# clear the alt buffer when switching to it
+				self.erase(0, self.buffer.len - 1)
+				self.buffer.pos = 0
+				self.buffer.atEnd = False
+				reInit = True
+		elif(cmd.cmd == "charAttributes"):
+			for arg in cmd.args:
+				if(arg == None):
+					arg = 0
+				self.attrs.update(arg)
+		if(reInit):
+			# reInit is set if we've switched buffers
+			self.broadcast(self.buffer.initMsg())
+		elif(self.showCursor):
+			# if the cursor is disabled, this is usually because the app is busy redrawing the screen
+			# we save all changes until the cursor is reenabled, and then send only the final delta
+			self.broadcast(self.buffer.diffMsg())
+		self.bufferLock.release()
+
+	def sendInit(self, sock):	
+		self.bufferLock.acquire()
+		sock.send(base64.b64encode(self.buffer.initMsg()))
+		self.bufferLock.release()
+
+class Term_Server:
+	def __init__(self, proc="/bin/bash", args=(), port=8080, size=(80, 24)):
+		self.HTTP_Port = port
+		self.server = HTTP_Server(webRoot=".")
+		self.server.redirects["/"] = "console.html"
+		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
+		self.sessionQueue = self.server.registerProtocol("term")
+		self.connections = list()
+		self.terminal = Terminal(self.connections, size[0], size[1])
+		self.proc = proc
+		self.args = args
+		self.size = size
+	
+	def run(self):
+		(pid, master) = os.forkpty()
+		if(pid == 0):
+			# launch the target
+			os.execv(self.proc, self.args)
+
+		# set the attributes of the terminal (size, for now)
+		# winsize is 4 unsigned shorts: (ws_row, ws_col, ws_xpixel, ws_ypixel)
+		winsize = struct.pack('HHHH', self.size[1], self.size[0], 0, 0)
+		fcntl.ioctl(master, termios.TIOCSWINSZ, winsize)
+
+		# open the psuedo terminal master file (this is what we read/write to)
+		wstream = os.fdopen(master, "w")
+		rstream = os.fdopen(master, "r")
+
+		# start a loop to accept incoming http sessions
+		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(wstream,))
+		a.daemon = True
+		a.start()
+
+		# start a thread to read output from the shell
+		o = threading.Thread(target=self.handleOutput, name="oThread", args=(rstream,))
+		o.daemon = True
+		o.start()
+
+		# start the http server
+		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.HTTP_Port,))
+		s.daemon = True
+		s.start()
+
+		# now wait for the subprocess to terminate, and for us to flush the last of it's output
+		try:
+			os.waitpid(pid, 0)
+		except KeyboardInterrupt:
+			os.kill(pid, signal.SIGKILL)
+			os.waitpid(pid, 0) # wait on the process so we don't create a zombie
+
+	def handleOutput(self, stream):
+		parser = CommandParser(stream)
+		while True:
+			command = parser.getCommand()
+			if(command == None):
+				return
+			log(self, "cmd: %r" % command, 4)
+			self.terminal.handleCmd(command)
+			
+	def handleInput(self, sock, stream):
+		self.terminal.sendInit(sock)
+		while True:
+			char = chr(int(sock.recvFrame()))
+			if(char == '\r'):
+				char = '\n'
+			log(self, "recvd: %r" % char, 4)
+			stream.write(char)
+			stream.flush()
+
+	def sessionLoop(self, stream):
+		while True:
+			(sock, addr) = self.sessionQueue.acceptHTTPSession()
+			self.connections.append(sock)
+			# start a thread to send input to the shell
+			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, stream))
+			i.daemon = True
+			i.start()
+		
+if __name__ == "__main__":
+	port = 8080
+	proc = "/bin/bash"
+	if(len(sys.argv) > 1):
+		proc = sys.argv[1]
+	if(len(sys.argv) > 2):
+		port = int(sys.argv[2])
+	server = Term_Server(size=(130, 50), port=port, proc=proc)
+	server.run()
