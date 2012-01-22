@@ -3,12 +3,14 @@ import termios
 import signal
 import struct
 import base64
+import shlex
 import fcntl
 import json
 import sys
 import os
 
 from Logger import log
+from Utils import parseToDict
 from HTTP_Server import HTTP_Server
 from VTParse import CommandParser
 
@@ -357,27 +359,47 @@ class Terminal:
 		self.bufferLock.release()
 
 class Term_Server:
-	def __init__(self, proc="/bin/bash", args=(), port=8080, size=(80, 24)):
-		self.HTTP_Port = port
-		self.server = HTTP_Server(webRoot=".")
+	def __init__(self):
+		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
 		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
 		self.sessionQueue = self.server.registerProtocol("term")
 		self.connections = list()
-		self.terminal = Terminal(self.connections, size[0], size[1])
-		self.proc = proc
-		self.args = args
-		self.size = size
+		self.prefs = { \
+			"http_port": 8080, \
+			"term_proc": "/bin/bash", \
+			"term_args": "", \
+			"term_height": 24, \
+			"term_width": 80, \
+		}
+
+	def readPrefs(self, filename="TermServer.conf"):
+		global logging
+		log(self, "reading %s" % filename)
+		prefsFile = file(filename, 'r')
+		prefsData = prefsFile.read()
+		prefsFile.close()
+		newPrefs = parseToDict(prefsData, ':', '\n')
+		for pref in newPrefs:
+			newPrefs[pref] = newPrefs[pref].strip()
+			if(newPrefs[pref].isdigit()):
+				newPrefs[pref] = int(newPrefs[pref])
+			if(pref == "log_level"):
+				logging = int(newPrefs[pref])
+		self.prefs.update(newPrefs)
 	
-	def run(self):
+	def start(self):
+		# init the terminal emulator
+		self.terminal = Terminal(self.connections, self.prefs["term_width"], self.prefs["term_height"])
+
 		(pid, master) = os.forkpty()
 		if(pid == 0):
 			# launch the target
-			os.execv(self.proc, self.args)
+			os.execv(self.prefs["term_proc"], shlex.split(self.prefs["term_args"]))
 
 		# set the attributes of the terminal (size, for now)
 		# winsize is 4 unsigned shorts: (ws_row, ws_col, ws_xpixel, ws_ypixel)
-		winsize = struct.pack('HHHH', self.size[1], self.size[0], 0, 0)
+		winsize = struct.pack('HHHH', self.prefs["term_height"], self.prefs["term_width"], 0, 0)
 		fcntl.ioctl(master, termios.TIOCSWINSZ, winsize)
 
 		# open the psuedo terminal master file (this is what we read/write to)
@@ -395,7 +417,7 @@ class Term_Server:
 		o.start()
 
 		# start the http server
-		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.HTTP_Port,))
+		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"],))
 		s.daemon = True
 		s.start()
 
@@ -433,13 +455,4 @@ class Term_Server:
 			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, stream))
 			i.daemon = True
 			i.start()
-		
-if __name__ == "__main__":
-	port = 8080
-	proc = "/bin/bash"
-	if(len(sys.argv) > 1):
-		proc = sys.argv[1]
-	if(len(sys.argv) > 2):
-		port = int(sys.argv[2])
-	server = Term_Server(size=(130, 50), port=port, proc=proc)
-	server.run()
+
