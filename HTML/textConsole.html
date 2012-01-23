@@ -41,7 +41,7 @@
 				sock = new WebSocket("ws://" + window.location.host + "/web-socket", "term");
 				sock.onmessage = function (msgEvent) {
 					//console.log(msgEvent.data);
-					var msg = JSON.parse(atob(msgEvent.data));
+					var msg = JSON.parse(msgEvent.data);
 					if(msg.cmd == "init") {
 						width = msg.size[0];
 						height = msg.size[1];

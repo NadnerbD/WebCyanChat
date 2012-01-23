@@ -53,10 +53,21 @@ class CommandParser:
 		# begin parsing
 		if(self.accept('\x1b')):
 			return self.escapeCode()
+		if(self.accept('\x00')):
+			return self.command('padding', None)
 		elif(self.accept('')): #EOF
 			return None
 		else:
-			return self.command('add', self.consume())
+			# this will consume one UTF-8 character
+			# in case of invalid UTF-8 input, this will modify the stream
+			char = self.consume()
+			charLen = 0
+			while((ord(char[0]) << charLen) & 0x80):
+				charLen += 1
+			if(charLen > 1 and charLen <= 4):
+				for i in range(charLen - 1):
+					char += self.consume()
+			return self.command('add', unicode(char, "utf-8", errors='replace'))
 
 	def escapeCode(self):
 		if(self.accept('[')):

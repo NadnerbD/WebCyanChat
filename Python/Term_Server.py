@@ -104,13 +104,24 @@ class Buffer:
 		return zip(self.chars[i], self.attrs[i])
 
 	def initMsg(self):
-		return json.dumps({"cmd": "init", "data": ''.join(self.chars), "styles": ''.join(map(str, self.attrs)), "cur": self.pos, "size": self.size}, ensure_ascii=False)
+		return json.dumps({ \
+			"cmd": "init", \
+			"data": ''.join(self.chars), \
+			"styles": base64.b64encode(''.join(map(str, self.attrs))), \
+			"cur": self.pos, \
+			"size": self.size \
+		})
 
 	def diffMsg(self):
 		if(len(self.cdiff) > self.len / 2):
 			msg = self.initMsg()
 		else:
-			msg = json.dumps({"cmd": "change", "data": self.cdiff, "styles": dict(map(lambda i: (i, str(self.sdiff[i])), self.sdiff)), "cur": self.pos}, ensure_ascii=False)
+			msg = json.dumps({ \
+				"cmd": "change", \
+				"data": self.cdiff, \
+				"styles": base64.b64encode(json.dumps(dict(map(lambda i: (i, str(self.sdiff[i])), self.sdiff)), ensure_ascii=False)), \
+				"cur": self.pos \
+			})
 		self.cdiff = dict()
 		self.sdiff = dict()
 		return msg
@@ -212,7 +223,7 @@ class Terminal:
 		lost = []
 		for sock in self.connections:
 			try:
-				sock.send(base64.b64encode(msg))
+				sock.send(msg)
 			except:
 				lost.append(sock)
 		for sock in lost:
@@ -355,7 +366,7 @@ class Terminal:
 
 	def sendInit(self, sock):	
 		self.bufferLock.acquire()
-		sock.send(base64.b64encode(self.buffer.initMsg()))
+		sock.send(self.buffer.initMsg())
 		self.bufferLock.release()
 
 class Term_Server:
