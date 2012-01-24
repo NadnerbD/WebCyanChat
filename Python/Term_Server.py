@@ -32,17 +32,17 @@ class Style:
 			self.bgColor = 0
 			self.inverted = False
 
-	def __str__(self):
+	def pack(self):
 		# bbbfffub
 		if(not self.inverted):
-			return chr( \
+			return unichr( \
 				(self.bold      & 0x01)      | \
 				(self.underline & 0x01) << 1 | \
 				(self.fgColor   & 0x07) << 2 | \
 				(self.bgColor   & 0x07) << 5   \
 			)
 		else:
-			return chr( \
+			return unichr( \
 				(self.bold      & 0x01)      | \
 				(self.underline & 0x01) << 1 | \
 				(self.bgColor   & 0x07) << 2 | \
@@ -107,7 +107,7 @@ class Buffer:
 		return json.dumps({ \
 			"cmd": "init", \
 			"data": ''.join(self.chars), \
-			"styles": base64.b64encode(''.join(map(str, self.attrs))), \
+			"styles": ''.join([x.pack() for x in self.attrs]), \
 			"cur": self.pos, \
 			"size": self.size \
 		})
@@ -119,7 +119,7 @@ class Buffer:
 			msg = json.dumps({ \
 				"cmd": "change", \
 				"data": self.cdiff, \
-				"styles": base64.b64encode(json.dumps(dict(map(lambda i: (i, str(self.sdiff[i])), self.sdiff)), ensure_ascii=False)), \
+				"styles": dict([(x, y.pack()) for x, y in self.sdiff.items()]), \
 				"cur": self.pos \
 			})
 		self.cdiff = dict()

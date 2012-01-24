@@ -92,10 +92,7 @@
 					if(msg.cmd == "init" || msg.cmd == "change") {
 						for(var i in msg.data) {
 							grid[i].firstChild.data = msg.data[i];
-							var styles = atob(msg.styles);
-							if(msg.cmd == "change")
-								styles = JSON.parse(styles);
-							var style = unpackStyle(styles[i].charCodeAt(0));
+							var style = unpackStyle(msg.styles[i].charCodeAt(0));
 							for(var s in style) {
 								grid[i].style[s] = style[s];
 							}
