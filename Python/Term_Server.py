@@ -6,6 +6,7 @@ import base64
 import shlex
 import fcntl
 import json
+import time
 import sys
 import os
 
@@ -103,24 +104,24 @@ class Buffer:
 	def __getitem__(self, i):
 		return zip(self.chars[i], self.attrs[i])
 
-	def initMsg(self):
+	def initMsg(self, showCursor):
 		return json.dumps({ \
 			"cmd": "init", \
 			"data": ''.join(self.chars), \
 			"styles": ''.join([x.pack() for x in self.attrs]), \
-			"cur": self.pos, \
+			"cur": (showCursor * self.pos) + (-1 * (not showCursor)), \
 			"size": self.size \
 		})
 
-	def diffMsg(self):
+	def diffMsg(self, showCursor):
 		if(len(self.cdiff) > self.len / 2):
-			msg = self.initMsg()
+			msg = self.initMsg(showCursor)
 		else:
 			msg = json.dumps({ \
 				"cmd": "change", \
 				"data": self.cdiff, \
 				"styles": dict([(x, y.pack()) for x, y in self.sdiff.items()]), \
-				"cur": self.pos \
+				"cur": (showCursor * self.pos) + (-1 * (not showCursor)) \
 			})
 		self.cdiff = dict()
 		self.sdiff = dict()
@@ -139,6 +140,8 @@ class Terminal:
 		self.showCursor = True
 		self.savedPos = 0
 		self.connections = conns
+		self.updateEvent = threading.Event()
+		self.lastUpdate = 0
 		# this is mainly to prevent message mixing during the initial state burst
 		self.bufferLock = threading.Lock()
 
@@ -357,16 +360,20 @@ class Terminal:
 				self.attrs.update(arg)
 		if(reInit):
 			# reInit is set if we've switched buffers
-			self.broadcast(self.buffer.initMsg())
-		elif(self.showCursor):
-			# if the cursor is disabled, this is usually because the app is busy redrawing the screen
-			# we save all changes until the cursor is reenabled, and then send only the final delta
-			self.broadcast(self.buffer.diffMsg())
+			self.broadcast(self.buffer.initMsg(self.showCursor))
+		else:
+			self.lastUpdate = time.clock()
+			self.updateEvent.set()
 		self.bufferLock.release()
 
 	def sendInit(self, sock):	
 		self.bufferLock.acquire()
-		sock.send(self.buffer.initMsg())
+		sock.send(self.buffer.initMsg(self.showCursor))
+		self.bufferLock.release()
+
+	def sendDiff(self):
+		self.bufferLock.acquire()
+		self.broadcast(self.buffer.diffMsg(self.showCursor))
 		self.bufferLock.release()
 
 class Term_Server:
@@ -432,6 +439,11 @@ class Term_Server:
 		s.daemon = True
 		s.start()
 
+		# start a thrad to push diff updates to the clients
+		u = threading.Thread(target=self.updateLoop, name="updateThread", args=())
+		u.daemon = True
+		u.start()
+
 		# now wait for the subprocess to terminate, and for us to flush the last of it's output
 		try:
 			os.waitpid(pid, 0)
@@ -466,4 +478,18 @@ class Term_Server:
 			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, stream))
 			i.daemon = True
 			i.start()
+
+	def updateLoop(self):
+		# condenses rapid updates into a single message
+		while True:
+			self.terminal.updateEvent.wait()
+			prev = self.terminal.lastUpdate
+			while True:
+				time.sleep(0.01)
+				if(prev != self.terminal.lastUpdate):
+					prev = self.terminal.lastUpdate
+				else:
+					break
+			self.terminal.sendDiff()
+			self.terminal.updateEvent.clear()
 

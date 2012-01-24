@@ -66,9 +66,12 @@
 			}
 
 			function setCursor(index) {
-				cursor.className = undefined;
-				cursor = grid[index];
-				cursor.className = "cursor";
+				if(cursor)
+					cursor.className = undefined;
+				if(index != -1) {
+					cursor = grid[index];
+					cursor.className = "cursor";
+				}
 			}
 
 			function init() {
