@@ -362,7 +362,7 @@ class Terminal:
 			# reInit is set if we've switched buffers
 			self.broadcast(self.buffer.initMsg(self.showCursor))
 		else:
-			self.lastUpdate = time.clock()
+			self.lastUpdate += 1
 			self.updateEvent.set()
 		self.bufferLock.release()
 
@@ -374,6 +374,7 @@ class Terminal:
 	def sendDiff(self):
 		self.bufferLock.acquire()
 		self.broadcast(self.buffer.diffMsg(self.showCursor))
+		self.lastUpdate = 0
 		self.bufferLock.release()
 
 class Term_Server:
@@ -485,7 +486,7 @@ class Term_Server:
 			self.terminal.updateEvent.wait()
 			prev = self.terminal.lastUpdate
 			while True:
-				time.sleep(0.01)
+				time.sleep(0.001)
 				if(prev != self.terminal.lastUpdate):
 					prev = self.terminal.lastUpdate
 				else:
