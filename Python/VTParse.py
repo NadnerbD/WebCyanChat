@@ -1,5 +1,10 @@
 from Logger import log
 
+class ParseException(Exception):
+	# Special exception for parsing errors, so that the try doesn't 
+	# silence more important errors
+	pass
+
 class CommandParser:
 	class command:
 		def __init__(self, cmd, args):
@@ -46,10 +51,18 @@ class CommandParser:
 			self.error('Expected %r' % char)
 
 	def error(self, string):
-		raise Exception("Error parsing: %r\n%s" % (self.lastCode, string))
+		log(self, "Error parsing: %r (%s)" % (self.lastCode, string))
+		raise ParseException
 		
 	def getCommand(self):
-		self.lastCode = str()
+		while True:
+			self.lastCode = str()
+			try:
+				return self.parse()
+			except ParseException:
+				pass
+
+	def parse(self):
 		# begin parsing
 		if(self.accept('\x1b')):
 			return self.escapeCode()

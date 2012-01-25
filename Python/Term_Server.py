@@ -155,7 +155,6 @@ class Terminal:
 	def setPos(self, x, y):
 		while(y >= self.buffer.size[1]):
 			y -= 1
-			self.scroll(1)
 		self.buffer.atEnd = False
 		self.buffer.pos = x + y * self.buffer.size[0]
 
@@ -413,8 +412,10 @@ class Term_Server:
 
 		(pid, master) = os.forkpty()
 		if(pid == 0):
+			# ensure that the right terminal type is set
+			os.environ['TERM'] = 'xterm'
 			# launch the target
-			os.execv(self.prefs["term_proc"], shlex.split(self.prefs["term_args"]))
+			os.execv(self.prefs["term_proc"], [self.prefs["term_proc"]] + shlex.split(self.prefs["term_args"]))
 
 		# set the attributes of the terminal (size, for now)
 		# winsize is 4 unsigned shorts: (ws_row, ws_col, ws_xpixel, ws_ypixel)
