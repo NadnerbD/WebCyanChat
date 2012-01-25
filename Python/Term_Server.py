@@ -206,6 +206,8 @@ class Terminal:
 			self.buffer.atEnd = False
 		elif(char == '\x07'):
 			pass # bell
+		elif(ord(char) < 0x20):
+			pass # other ascii control chars we don't understand
 		else:
 			if(self.buffer.atEnd):
 				self.buffer.pos += 1

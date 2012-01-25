@@ -16,9 +16,13 @@ class CommandParser:
 
 	def __init__(self, stream):
 		self.stream = stream
-		self.char = str()
+		# debug state
 		self.lastCode = str()
+		# fetch state
+		self.char = str()
 		self.needChar = True
+		# parser state
+		self.parseState = self.base
 
 	def accept(self, char):
 		# in order to parse to the end of the stream without needing to fetch a
@@ -52,6 +56,8 @@ class CommandParser:
 
 	def error(self, string):
 		log(self, "Error parsing: %r (%s)" % (self.lastCode, string))
+		self.consume()
+		self.parseState = self.base
 		raise ParseException
 		
 	def getCommand(self):
@@ -64,12 +70,23 @@ class CommandParser:
 
 	def parse(self):
 		# begin parsing
+		while True:
+			# passthrough all ascii control characters (except ESC)
+			if(self.accept([chr(i) for i in range(0x20) if i != 0x1b])):
+				return self.command('add', self.char)
+			elif(self.accept('')): # EOF
+				return None
+			# main parse loop
+			nextState = self.parseState()
+			if(isinstance(nextState, self.command)):
+				self.parseState = self.base
+				return nextState
+			else:
+				self.parseState = nextState
+
+	def base(self):
 		if(self.accept('\x1b')):
-			return self.escapeCode()
-		if(self.accept('\x00')):
-			return self.command('padding', None)
-		elif(self.accept('')): #EOF
-			return None
+			return self.escapeCode
 		else:
 			# this will consume one UTF-8 character
 			# in case of invalid UTF-8 input, this will modify the stream
@@ -84,9 +101,9 @@ class CommandParser:
 
 	def escapeCode(self):
 		if(self.accept('[')):
-			return self.paramCmd()
+			return self.paramCmd
 		elif(self.accept(']')):
-			return self.osCmd()
+			return self.osCmd
 		elif(self.accept('=')):
 			return self.command('setAppKeys', None)
 		elif(self.accept('>')):
@@ -114,9 +131,9 @@ class CommandParser:
 
 	def paramCmd(self):
 		if(self.accept('?')):
-			return self.DECModeCmd()
+			return self.DECModeCmd
 		elif(self.accept('>')):
-			return self.termCmd()
+			return self.termCmd
 		elif(self.accept('s')):
 			return self.command('saveCursor', None)
 		elif(self.accept('u')):
