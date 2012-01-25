@@ -274,11 +274,15 @@ class Terminal:
 			if(cmd.args == None):
 				cmd.args = 1
 			self.setPos(cmd.args - 1, self.getPos()[1])
+		elif(cmd.cmd == "index"):
+			self.scroll(1)
 		elif(cmd.cmd == "reverseIndex"):
 			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[0] - 1):
 				self.scroll(-1)
 			else:
 				self.move(0, -1)
+		elif(cmd.cmd == "newLine"):
+			self.move(0, 1)
 		elif(cmd.cmd == "eraseOnDisplay"):
 			if(cmd.args == 1): # Above
 				self.erase(0, self.buffer.pos)

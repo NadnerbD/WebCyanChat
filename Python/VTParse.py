@@ -83,7 +83,9 @@ class CommandParser:
 			return self.command('add', unicode(char, "utf-8", errors='replace'))
 
 	def escapeCode(self):
-		if(self.accept('[')):
+		if(self.accept('?')):
+			return self.DECModeCmd()
+		elif(self.accept('[')):
 			return self.paramCmd()
 		elif(self.accept(']')):
 			return self.osCmd()
@@ -95,6 +97,10 @@ class CommandParser:
 			return self.command('setG0CharSet', self.consume())
 		elif(self.accept(')')):
 			return self.command('setG1CharSet', self.consume())
+		elif(self.accept('D')):
+			return self.command('index', None)
+		elif(self.accept('E')):
+			return self.command('newLine', None)
 		elif(self.accept('M')):
 			return self.command('reverseIndex', None)
 		elif(self.accept('#') and self.accept('8')):
@@ -118,7 +124,7 @@ class CommandParser:
 		elif(self.accept('u')):
 			return self.command('restoreCursor', None)
 		values = self.numberList()
-		if(self.accept('H')):
+		if(self.accept('H') or self.accept('f')):
 			return self.command('home', values)
 		elif(self.accept('r')):
 			return self.command('setScrollRegion', values)
