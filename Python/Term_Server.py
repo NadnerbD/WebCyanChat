@@ -153,8 +153,8 @@ class Terminal:
 		return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0])
 
 	def setPos(self, x, y):
-		while(y >= self.buffer.size[1]):
-			y -= 1
+		x = min(max(x, 0), self.buffer.size[0] - 1)
+		y = min(max(y, 0), self.buffer.size[1] - 1)
 		self.buffer.atEnd = False
 		self.buffer.pos = x + y * self.buffer.size[0]
 
@@ -250,10 +250,12 @@ class Terminal:
 		elif(cmd.cmd == "cursorFwd"):
 			if(cmd.args == None):
 				cmd.args = 1
+			cmd.args = max(cmd.args, 1)
 			self.move(cmd.args, 0)
 		elif(cmd.cmd == "cursorBack"):
 			if(cmd.args == None):
 				cmd.args = 1
+			cmd.args = max(cmd.args, 1)
 			self.move(-cmd.args, 0)
 		elif(cmd.cmd == "cursorUp"):
 			if(cmd.args == None):
@@ -292,7 +294,7 @@ class Terminal:
 				self.move(0, -1)
 		elif(cmd.cmd == "eraseOnDisplay"):
 			if(cmd.args == 1): # Above
-				self.erase(0, self.buffer.pos)
+				self.erase(0, self.buffer.pos + 1)
 			elif(cmd.args == 2): # All
 				self.erase(0, self.buffer.len)
 			else: # 0 (Default) Below
@@ -300,7 +302,7 @@ class Terminal:
 		elif(cmd.cmd == "eraseOnLine"):
 			lineStart = self.getPos()[1] * self.buffer.size[0]
 			if(cmd.args == 1): # Left
-				self.erase(lineStart, self.buffer.pos)
+				self.erase(lineStart, self.buffer.pos + 1)
 			elif(cmd.args == 2): # All
 				self.erase(lineStart, lineStart + self.buffer.size[0])
 			else: # 0 (Default) Right
