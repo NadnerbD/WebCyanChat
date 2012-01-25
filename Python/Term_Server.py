@@ -162,12 +162,12 @@ class Terminal:
 		start = self.getPos()
 		self.setPos(start[0] + x, start[1] + y)
 
-	def erase(self, start, stop, setNormal=False):
+	def erase(self, start, stop, setNormal=False, char=' '):
 		for x in range(start, stop):
 			if(setNormal):
-				self.buffer[x] = (' ', Style())
+				self.buffer[x] = (char, Style())
 			else:
-				self.buffer[x] = (' ', Style(self.attrs))
+				self.buffer[x] = (char, Style(self.attrs))
 	
 	def scroll(self, value):
 		# shifts the scroll region contents by value (positive shifts up, negative down)
@@ -357,6 +357,8 @@ class Terminal:
 				if(arg == None):
 					arg = 0
 				self.attrs.update(arg)
+		elif(cmd.cmd == "screenAlignment"):
+			self.erase(0, self.buffer.len, True, 'E')
 		if(reInit):
 			# reInit is set if we've switched buffers
 			self.broadcast(self.buffer.initMsg(self.showCursor))

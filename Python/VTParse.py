@@ -97,6 +97,8 @@ class CommandParser:
 			return self.command('setG1CharSet', self.consume())
 		elif(self.accept('M')):
 			return self.command('reverseIndex', None)
+		elif(self.accept('#') and self.accept('8')):
+			return self.command('screenAlignment', None)
 		else:
 			self.error("Unknown escape code")
 
