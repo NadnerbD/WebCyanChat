@@ -274,6 +274,17 @@ class Terminal:
 			if(cmd.args == None):
 				cmd.args = 1
 			self.setPos(cmd.args - 1, self.getPos()[1])
+		elif(cmd.cmd == "nextLine"):
+			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+				self.scroll(1)
+			else:
+				self.move(0, 1)
+			self.buffer.pos -= self.buffer.pos % self.buffer.size[0]
+		elif(cmd.cmd == "index"):
+			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+				self.scroll(1)
+			else:
+				self.move(0, 1)
 		elif(cmd.cmd == "reverseIndex"):
 			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[0] - 1):
 				self.scroll(-1)

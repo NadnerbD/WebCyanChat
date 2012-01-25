@@ -95,6 +95,10 @@ class CommandParser:
 			return self.command('setG0CharSet', self.consume())
 		elif(self.accept(')')):
 			return self.command('setG1CharSet', self.consume())
+		elif(self.accept('E')):
+			return self.command('nextLine', None)
+		elif(self.accept('D')):
+			return self.command('index', None)
 		elif(self.accept('M')):
 			return self.command('reverseIndex', None)
 		elif(self.accept('#') and self.accept('8')):
@@ -118,7 +122,7 @@ class CommandParser:
 		elif(self.accept('u')):
 			return self.command('restoreCursor', None)
 		values = self.numberList()
-		if(self.accept('H')):
+		if(self.accept('H') or self.accept('f')):
 			return self.command('home', values)
 		elif(self.accept('r')):
 			return self.command('setScrollRegion', values)
