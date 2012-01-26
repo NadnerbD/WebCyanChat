@@ -192,16 +192,15 @@ class Terminal:
 		if(char == '\r'):
 			self.buffer.pos -= self.buffer.pos % self.buffer.size[0]
 			self.buffer.atEnd = False
-		elif(char == '\n'):
+		elif(char == '\n' or char == '\x0b' or char == '\x0c'): # LineFeed, VerticalTab, FormFeed
 			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
 				self.scroll(1)
 			else:
 				self.buffer.pos += self.buffer.size[0]
 			self.buffer.atEnd = False
 		elif(char == '\t'):
-			for i in range(8 - (self.buffer.pos % self.buffer.size[0]) % 8):
-				self.add(' ')
-		elif(char == '\x08'):
+			self.move(8 - (self.buffer.pos % self.buffer.size[0]) % 8, 0)
+		elif(char == '\x08'): # backspace
 			self.buffer.pos -= 1
 			self.buffer.atEnd = False
 		elif(char == '\x07'):
@@ -349,13 +348,24 @@ class Terminal:
 			if(cmd.args[0] == None):
 				cmd.args = [1, self.buffer.size[1]]
 			self.scrollRegion = cmd.args
+			self.buffer.pos = 0
 		elif(cmd.cmd == "resetDECMode"):
+			if(3 in cmd.args):
+				# switch to 80 column mode
+				# currently we just clear the screen instead
+				self.erase(0, self.buffer.len - 1)
+				self.buffer.pos = 0
 			if(25 in cmd.args):
 				self.showCursor = False
 			if(1049 in cmd.args and self.bufferIndex == 1):
 				self.swapBuffers()
 				reInit = True
 		elif(cmd.cmd == "setDECMode"):
+			if(3 in cmd.args):
+				# switch to 132 column mode
+				# currently we just clear the screen instead
+				self.erase(0, self.buffer.len - 1)
+				self.buffer.pos = 0
 			if(25 in cmd.args):
 				self.showCursor = True
 			if(1049 in cmd.args and self.bufferIndex == 0):
