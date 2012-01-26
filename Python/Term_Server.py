@@ -128,7 +128,7 @@ class Buffer:
 		return msg
 
 class Terminal:
-	def __init__(self, conns, width=80, height=24):
+	def __init__(self, parent, width=80, height=24):
 		self.buffers = [Buffer(width, height), Buffer(width, height)]
 		self.buffer = self.buffers[0]
 		self.bufferIndex = 0
@@ -139,7 +139,7 @@ class Terminal:
 		self.attrs = Style()
 		self.showCursor = True
 		self.savedPos = 0
-		self.connections = conns
+		self.parent = parent
 		self.updateEvent = threading.Event()
 		self.lastUpdate = 0
 		# this is mainly to prevent message mixing during the initial state burst
@@ -148,6 +148,18 @@ class Terminal:
 	def swapBuffers(self):
 		self.bufferIndex = not self.bufferIndex
 		self.buffer = self.buffers[self.bufferIndex]
+
+	def resize(self, nWidth, nHeight, copyData=True):
+		newBuffers = [Buffer(nWidth, nHeight), Buffer(nWidth, nHeight)]
+		(oWidth, oHeight) = self.buffers[0].size
+		if(copyData):
+			for i in range(2):
+				for y in range(min(oHeight, nHeight)):
+					for x in range(min(oWidth, nWidth)):
+						newBuffers[i][x + y * nWidth] = self.buffers[i][x + y * oWidth]
+		self.buffer = newBuffers[self.bufferIndex]
+		self.buffers = newBuffers
+		self.parent.resize(nWidth, nHeight)
 
 	def getPos(self):
 		return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0])
@@ -224,13 +236,13 @@ class Terminal:
 
 	def broadcast(self, msg):
 		lost = []
-		for sock in self.connections:
+		for sock in self.parent.connections:
 			try:
 				sock.send(msg)
 			except:
 				lost.append(sock)
 		for sock in lost:
-			self.connections.remove(sock)
+			self.parent.connections.remove(sock)
 			log(self, "Removed connection: %r" % sock)
 
 	def handleCmd(self, cmd):
@@ -354,9 +366,8 @@ class Terminal:
 		elif(cmd.cmd == "resetDECMode"):
 			if(3 in cmd.args):
 				# switch to 80 column mode
-				# currently we just clear the screen instead
-				self.erase(0, self.buffer.len - 1)
-				self.buffer.pos = 0
+				self.resize(80, 24, False)
+				reInit = True
 			if(25 in cmd.args):
 				self.showCursor = False
 			if(1049 in cmd.args and self.bufferIndex == 1):
@@ -365,9 +376,8 @@ class Terminal:
 		elif(cmd.cmd == "setDECMode"):
 			if(3 in cmd.args):
 				# switch to 132 column mode
-				# currently we just clear the screen instead
-				self.erase(0, self.buffer.len - 1)
-				self.buffer.pos = 0
+				self.resize(132, 24, False)
+				reInit = True
 			if(25 in cmd.args):
 				self.showCursor = True
 			if(1049 in cmd.args and self.bufferIndex == 0):
@@ -410,6 +420,7 @@ class Term_Server:
 		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
 		self.sessionQueue = self.server.registerProtocol("term")
 		self.connections = list()
+		self.master = None
 		self.prefs = { \
 			"http_port": 8080, \
 			"term_proc": "/bin/bash", \
@@ -432,26 +443,30 @@ class Term_Server:
 			if(pref == "log_level"):
 				logging = int(newPrefs[pref])
 		self.prefs.update(newPrefs)
+
+	def resize(self, width, height):
+		# winsize is 4 unsigned shorts: (ws_row, ws_col, ws_xpixel, ws_ypixel)
+		winsize = struct.pack('HHHH', height, width, 0, 0)
+		fcntl.ioctl(self.master, termios.TIOCSWINSZ, winsize)
+		
 	
 	def start(self):
 		# init the terminal emulator
-		self.terminal = Terminal(self.connections, self.prefs["term_width"], self.prefs["term_height"])
+		self.terminal = Terminal(self, self.prefs["term_width"], self.prefs["term_height"])
 
-		(pid, master) = os.forkpty()
+		(pid, self.master) = os.forkpty()
 		if(pid == 0):
 			# ensure that the right terminal type is set
 			os.environ['TERM'] = 'xterm'
 			# launch the target
 			os.execv(self.prefs["term_proc"], [self.prefs["term_proc"]] + shlex.split(self.prefs["term_args"]))
-
+		
 		# set the attributes of the terminal (size, for now)
-		# winsize is 4 unsigned shorts: (ws_row, ws_col, ws_xpixel, ws_ypixel)
-		winsize = struct.pack('HHHH', self.prefs["term_height"], self.prefs["term_width"], 0, 0)
-		fcntl.ioctl(master, termios.TIOCSWINSZ, winsize)
+		self.resize(self.prefs["term_width"], self.prefs["term_height"])
 
 		# open the psuedo terminal master file (this is what we read/write to)
-		wstream = os.fdopen(master, "w")
-		rstream = os.fdopen(master, "r")
+		wstream = os.fdopen(self.master, "w")
+		rstream = os.fdopen(self.master, "r")
 
 		# start a loop to accept incoming http sessions
 		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(wstream,))

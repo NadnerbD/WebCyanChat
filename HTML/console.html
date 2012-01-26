@@ -85,8 +85,8 @@
 					var msg = JSON.parse(msgEvent.data);
 					if(msg.cmd == "init" && (width != msg.size[0] || height != msg.size[1])) {
 						var container = document.getElementById("grid");
-						while(container.children.length)
-							container.children.pop();
+						while(container.childNodes.length)
+							container.removeChild(container.firstChild);
 						width = msg.size[0];
 						height = msg.size[1];
 						grid = createGrid(container);
