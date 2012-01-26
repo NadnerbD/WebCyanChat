@@ -5,6 +5,11 @@ class ParseException(Exception):
 	# silence more important errors
 	pass
 
+class ReturnException(Exception):
+	# this is hax, never do this
+	def __init__(self, value):
+		self.value = value
+
 class CommandParser:
 	class command:
 		def __init__(self, cmd, args):
@@ -22,7 +27,9 @@ class CommandParser:
 		self.char = str()
 		self.needChar = True
 		# parser state
-		self.parseState = self.base
+		self.generator = self.base()
+		self.callStack = []
+		self.returnValue = None
 
 	def accept(self, char):
 		# in order to parse to the end of the stream without needing to fetch a
@@ -57,7 +64,11 @@ class CommandParser:
 	def error(self, string):
 		log(self, "Error parsing: %r (%s)" % (self.lastCode, string))
 		self.consume()
-		self.parseState = self.base
+		# reset the parser
+		self.generator = self.base()
+		self.callStack = []
+		self.returnValue = None
+		# escaaape
 		raise ParseException
 		
 	def getCommand(self):
@@ -77,16 +88,23 @@ class CommandParser:
 			elif(self.accept('')): # EOF
 				return None
 			# main parse loop
-			nextState = self.parseState()
-			if(isinstance(nextState, self.command)):
-				self.parseState = self.base
-				return nextState
-			else:
-				self.parseState = nextState
+			try:
+				call = self.generator.next()
+				if(call != None):
+					self.callStack.append(self.generator)
+					self.generator = call()
+			except ReturnException as ret:
+				self.returnValue = ret.value
+				if(len(self.callStack)):
+					self.generator = self.callStack.pop()
+				else:
+					self.generator = self.base()
+					return self.returnValue
 
 	def base(self):
 		if(self.accept('\x1b')):
-			return self.escapeCode
+			yield self.escapeCode
+			raise ReturnException(self.returnValue)
 		else:
 			# this will consume one UTF-8 character
 			# in case of invalid UTF-8 input, this will modify the stream
@@ -97,137 +115,151 @@ class CommandParser:
 			if(charLen > 1 and charLen <= 4):
 				for i in range(charLen - 1):
 					char += self.consume()
-			return self.command('add', unicode(char, "utf-8", errors='replace'))
+			raise ReturnException(self.command('add', unicode(char, "utf-8", errors='replace')))
 
 	def escapeCode(self):
 		if(self.accept('[')):
-			return self.paramCmd
+			yield self.paramCmd
+			raise ReturnException(self.returnValue)
 		elif(self.accept(']')):
-			return self.osCmd
+			yield self.osCmd
+			raise ReturnException(self.returnValue)
 		elif(self.accept('=')):
-			return self.command('setAppKeys', None)
+			raise ReturnException(self.command('setAppKeys', None))
 		elif(self.accept('>')):
-			return self.command('setNormKeys', None)
+			raise ReturnException(self.command('setNormKeys', None))
 		elif(self.accept('(')):
-			return self.command('setG0CharSet', self.consume())
+			raise ReturnException(self.command('setG0CharSet', self.consume()))
 		elif(self.accept(')')):
-			return self.command('setG1CharSet', self.consume())
+			raise ReturnException(self.command('setG1CharSet', self.consume()))
 		elif(self.accept('E')):
-			return self.command('nextLine', None)
+			raise ReturnException(self.command('nextLine', None))
 		elif(self.accept('D')):
-			return self.command('index', None)
+			raise ReturnException(self.command('index', None))
 		elif(self.accept('M')):
-			return self.command('reverseIndex', None)
+			raise ReturnException(self.command('reverseIndex', None))
 		elif(self.accept('#') and self.accept('8')):
-			return self.command('screenAlignment', None)
+			raise ReturnException(self.command('screenAlignment', None))
 		else:
 			self.error("Unknown escape code")
 
 	def osCmd(self):
-		cmd = self.number()
+		yield self.number
+		cmd = self.returnValue
 		self.expect(';')
-		value = self.string()
-		return self.command('OSCommand', [cmd, value])
+		yield self.string
+		value = self.returnValue
+		raise ReturnException(self.command('OSCommand', [cmd, value]))
 
 	def paramCmd(self):
 		if(self.accept('?')):
-			return self.DECModeCmd
+			yield self.DECModeCmd
+			raise ReturnException(self.returnValue)
 		elif(self.accept('>')):
-			return self.termCmd
+			yield self.termCmd
+			raise ReturnException(self.returnValue)
 		elif(self.accept('s')):
-			return self.command('saveCursor', None)
+			raise ReturnException(self.command('saveCursor', None))
 		elif(self.accept('u')):
-			return self.command('restoreCursor', None)
-		values = self.numberList()
+			raise ReturnException(self.command('restoreCursor', None))
+		yield self.numberList
+		values = self.returnValue
 		if(self.accept('H') or self.accept('f')):
-			return self.command('home', values)
+			raise ReturnException(self.command('home', values))
 		elif(self.accept('r')):
-			return self.command('setScrollRegion', values)
+			raise ReturnException(self.command('setScrollRegion', values))
 		elif(self.accept('m')):
-			return self.command('charAttributes', values)
+			raise ReturnException(self.command('charAttributes', values))
 		elif(self.accept('h')):
-			return self.command('setMode', values)
+			raise ReturnException(self.command('setMode', values))
 		elif(self.accept('l')):
-			return self.command('resetMode', values)
+			raise ReturnException(self.command('resetMode', values))
 		elif(self.accept('d')):
-			return self.command('linePosAbs', values)
+			raise ReturnException(self.command('linePosAbs', values))
 		elif(self.accept('G')):
-			return self.command('curCharAbs', values[0])
+			raise ReturnException(self.command('curCharAbs', values[0]))
 		elif(self.accept('J')):
-			return self.command('eraseOnDisplay', values[0])
+			raise ReturnException(self.command('eraseOnDisplay', values[0]))
 		elif(self.accept('K')):
-			return self.command('eraseOnLine', values[0])
+			raise ReturnException(self.command('eraseOnLine', values[0]))
 		elif(self.accept('S')):
-			return self.command('scrollUp', values[0])
+			raise ReturnException(self.command('scrollUp', values[0]))
 		elif(self.accept('T')):
-			return self.command('scrollDown', values[0])
+			raise ReturnException(self.command('scrollDown', values[0]))
 		elif(self.accept('L')):
-			return self.command('insertLines', values[0])
+			raise ReturnException(self.command('insertLines', values[0]))
 		elif(self.accept('M')):
-			return self.command('removeLines', values[0])
+			raise ReturnException(self.command('removeLines', values[0]))
 		#ABCD - up, down, forward, back
 		elif(self.accept('A')):
-			return self.command('cursorUp', values[0])
+			raise ReturnException(self.command('cursorUp', values[0]))
 		elif(self.accept('B')):
-			return self.command('cursorDown', values[0])
+			raise ReturnException(self.command('cursorDown', values[0]))
 		elif(self.accept('C')):
-			return self.command('cursorFwd', values[0])
+			raise ReturnException(self.command('cursorFwd', values[0]))
 		elif(self.accept('D')):
-			return self.command('cursorBack', values[0])
+			raise ReturnException(self.command('cursorBack', values[0]))
 		elif(self.accept('P')):
-			return self.command('deleteChars', values[0])
+			raise ReturnException(self.command('deleteChars', values[0]))
 		elif(self.accept('@')):
-			return self.command('addBlanks', values[0])
+			raise ReturnException(self.command('addBlanks', values[0]))
 		elif(self.accept('X')):
-			return self.command('eraseChars', values[0])
+			raise ReturnException(self.command('eraseChars', values[0]))
 		else:
 			self.error("Unknown paramCmd code")
 	
 	def DECModeCmd(self):
-		values = self.numberList()
+		yield self.numberList
+		values = self.returnValue
 		if(self.accept('h')):
-			return self.command('setDECMode', values)
+			raise ReturnException(self.command('setDECMode', values))
 		elif(self.accept('l')):
-			return self.command('resetDECMode', values)
+			raise ReturnException(self.command('resetDECMode', values))
 		else:
 			self.error("Unknown DEC mode command")
 
 	def termCmd(self):
-		values = self.numberList()
+		yield self.numberList
+		values = self.returnValue
 		if(self.accept('T')):
-			return self.command('resetTitleMode', values)
+			raise ReturnException(self.command('resetTitleMode', values))
 		elif(self.accept('c')):
-			return self.command('sendDeviceAttributes2', values[0])
+			raise ReturnException(self.command('sendDeviceAttributes2', values[0]))
 		elif(self.accept('m')):
-			return self.command('setModifierSeqs', values)
+			raise ReturnException(self.command('setModifierSeqs', values))
 		elif(self.accept('n')):
-			return self.command('resetModifierSeqs', values)
+			raise ReturnException(self.command('resetModifierSeqs', values))
 		elif(self.accept('p')):
-			return self.command('setPointerMode', values[0])
+			raise ReturnException(self.command('setPointerMode', values[0]))
 		elif(self.accept('t')):
-			return self.command('setTitleModeFeatures', values[0])
+			raise ReturnException(self.command('setTitleModeFeatures', values[0]))
 		else:
 			self.error("Unknown termCmd")
 		
 	def numberList(self):
 		# accepts 0 or more numbers
-		values = [self.number()]
+		yield self.number
+		values = [self.returnValue]
 		while(self.accept(';')):
-			values.append(self.number())
-		return values
+			yield self.number
+			values.append(self.returnValue)
+		raise ReturnException(values)
 
 	def number(self):
 		value = str()
 		while(self.accept(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])):
 			value += self.char
+			yield None
 		if(len(value)):
-			return int(value)
+			raise ReturnException(int(value))
 		else:
-			return None
+			raise ReturnException(None)
 
 	def string(self):
 		value = str()
+		# this does not yield to the parser state machine
+		# as it's terminator is one of the passthrough characters
 		while(not self.accept(['\x9c', '\x07'])):
 			value += self.char
 			self.consume()
-		return value
+		raise ReturnException(value)
