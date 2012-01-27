@@ -10,6 +10,74 @@ class ReturnException(Exception):
 	def __init__(self, value):
 		self.value = value
 
+escapeCodeStrings = {
+	'=': 'setAppKeys', \
+	'>': 'setNormKeys', \
+	'(': 'setG0CharSet', \
+	')': 'setG1CharSet', \
+	'E': 'nextLine', \
+	'D': 'index', \
+	'M': 'reverseIndex', \
+	'#': 'screenAlignment', \
+	'8': 'screenAlignment', \
+}
+
+paramCmdStrings = {
+	's': 'saveCursor', \
+	'u': 'restoreCursor', \
+	'H': 'home', \
+	'f': 'home', \
+	'r': 'setScrollRegion', \
+	'm': 'charAttributes', \
+	'h': 'setMode', \
+	'l': 'resetMode', \
+	'd': 'linePosAbs', \
+	'G': 'curCharAbs', \
+	'J': 'eraseOnDisplay', \
+	'K': 'eraseOnLine', \
+	'S': 'scrollUp', \
+	'T': 'scrollDown', \
+	'L': 'insertLines', \
+	'M': 'removeLines', \
+	'A': 'cursorUp', \
+	'B': 'cursorDown', \
+	'C': 'cursorFwd', \
+	'D': 'cursorBack', \
+	'P': 'deleteChars', \
+	'@': 'addBlanks', \
+	'X': 'eraseChars', \
+}
+
+DECModeCmdStrings = {
+	'h': 'setDECMode', \
+	'l': 'resetDECMode', \
+}
+
+termCmdStrings = {
+	'T': 'resetTitleMode', \
+	'c': 'sendDeviceAttributes2', \
+	'm': 'setModifierSeqs', \
+	'n': 'resetModifierSeqs', \
+	'p': 'setPointerMode', \
+	't': 'setTitleModeFeatures', \
+}
+
+parserStates = {
+	base,
+	escapeCode,
+	paramCmd,
+	DECModeCmd,
+	termCmd,
+	string,
+	integerList,
+	integer,
+}
+
+	def getCommand(self):
+		while True:
+			state = getNextState()
+		
+
 class CommandParser:
 	class command:
 		def __init__(self, cmd, args):
