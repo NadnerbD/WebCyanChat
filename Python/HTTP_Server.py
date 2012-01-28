@@ -269,28 +269,16 @@ class HTTP_Server:
 	
 	class acceptQueue:
 		def __init__(self):
-			self.accessLock = threading.Lock()
-			self.waitLock = threading.Event()
+			self.queueLen = threading.Semaphore(0)
 			self.queue = list()
 			
 		def insert(self, session):
-			self.accessLock.acquire()
 			self.queue.insert(0, session)
-			self.accessLock.release()
-			self.waitLock.set()
+			self.queueLen.release()
 		
 		def acceptHTTPSession(self): #Called by external application to get incoming HTTP sessions
-			# funky interlocking locks act to cause function to block until there is a session in the queue
-			while 1:
-				self.accessLock.acquire()
-				if(len(self.queue)):
-					sock = self.queue.pop()
-					self.accessLock.release()
-					return sock
-				else:
-					self.accessLock.release()
-					self.waitLock.wait()
-					self.waitLock.clear()
+			self.queueLen.acquire()
+			return self.queue.pop()
 	
 	def __init__(self, webRoot="../HTML"):
 		self.sessionList = self.sessionList()
