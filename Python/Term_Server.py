@@ -202,6 +202,7 @@ class Terminal:
 		self.shift_out = 0
 		self.showCursor = True
 		self.autoWrap = True
+		self.originMode = False
 		self.savedPos = 0
 		self.savedStyle = Style()
 		self.savedShift = 0
@@ -229,11 +230,19 @@ class Terminal:
 		self.parent.resize(nWidth, nHeight)
 
 	def getPos(self):
-		return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0])
+		if(self.originMode):
+			return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0] \
+				- (self.scrollRegion[0] - 1))
+		else:
+			return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0])
 
 	def setPos(self, x, y):
 		x = min(max(x, 0), self.buffer.size[0] - 1)
-		y = min(max(y, 0), self.buffer.size[1] - 1)
+		if(self.originMode):
+			y = min(max(y, 0), self.scrollRegion[1] - self.scrollRegion[0]) \
+				+ self.scrollRegion[0] - 1
+		else:
+			y = min(max(y, 0), self.buffer.size[1] - 1)
 		self.buffer.atEnd = False
 		self.buffer.pos = x + y * self.buffer.size[0]
 
@@ -449,6 +458,9 @@ class Terminal:
 				# switch to 80 column mode
 				self.resize(80, 24, False)
 				reInit = True
+			if(6 in cmd.args):
+				self.originMode = False
+				self.setPos(0, 0)
 			if(7 in cmd.args):
 				self.autoWrap = False
 			if(25 in cmd.args):
@@ -461,6 +473,9 @@ class Terminal:
 				# switch to 132 column mode
 				self.resize(132, 24, False)
 				reInit = True
+			if(6 in cmd.args):
+				self.originMode = True
+				self.setPos(0, 0)
 			if(7 in cmd.args):
 				self.autoWrap = True
 			if(25 in cmd.args):
