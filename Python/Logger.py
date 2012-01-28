@@ -1,6 +1,10 @@
 import threading
 import sys
 
+# The purpose of this module is to provide simple logging capabilities
+# and to redirect stderr to a file in order to record server exceptions
+# while it is running nohup
+
 # Logging level reference
 # 0: Chat and join/leave messages only
 # 1: PMs, name attempts, ignores
