@@ -138,6 +138,7 @@ class Terminal:
 		self.edit = True
 		self.attrs = Style()
 		self.showCursor = True
+		self.autoWrap = True
 		self.savedPos = 0
 		self.parent = parent
 		self.updateEvent = threading.Event()
@@ -218,7 +219,7 @@ class Terminal:
 		elif(char == '\x07'):
 			pass # bell
 		else:
-			if(self.buffer.atEnd):
+			if(self.buffer.atEnd and self.autoWrap):
 				self.buffer.pos += 1
 				self.buffer.atEnd = False
 				if(self.buffer.pos == self.scrollRegion[1] * self.buffer.size[0]):
@@ -229,7 +230,7 @@ class Terminal:
 			self.buffer[self.buffer.pos] = (char, Style(self.attrs))
 			if(self.buffer.pos % self.buffer.size[0] == self.buffer.size[0] - 1 and self.buffer.atEnd == False):
 				self.buffer.atEnd = True
-			else:
+			elif(not (self.buffer.atEnd and self.autoWrap == False)):
 				self.buffer.pos += 1
 
 	def broadcast(self, msg):
@@ -366,6 +367,8 @@ class Terminal:
 				# switch to 80 column mode
 				self.resize(80, 24, False)
 				reInit = True
+			if(7 in cmd.args):
+				self.autoWrap = False
 			if(25 in cmd.args):
 				self.showCursor = False
 			if(1049 in cmd.args and self.bufferIndex == 1):
@@ -376,6 +379,8 @@ class Terminal:
 				# switch to 132 column mode
 				self.resize(132, 24, False)
 				reInit = True
+			if(7 in cmd.args):
+				self.autoWrap = True
 			if(25 in cmd.args):
 				self.showCursor = True
 			if(1049 in cmd.args and self.bufferIndex == 0):
