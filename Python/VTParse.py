@@ -11,8 +11,7 @@ escapeCodeStrings = { \
 	'E': 'nextLine', \
 	'D': 'index', \
 	'M': 'reverseIndex', \
-	'#': 'screenAlignment', \
-	'8': 'screenAlignment', \
+	'#8': 'screenAlignment', \
 }
 
 paramCmdStrings = { \
@@ -176,8 +175,8 @@ class Parser:
 
 	def esc_dispatch(self):
 		cmd = self.privateMarker + self.char
-		if(cmd in escapeCodeCmdStrings):
-			self.putCommand(Command(escapeCodeCmdStrings[cmd], None))
+		if(cmd in escapeCodeStrings):
+			self.putCommand(Command(escapeCodeStrings[cmd], None))
 		else:
 			log(self, 'Unrecognized ESC code: %r' % self.debugStr)
 
