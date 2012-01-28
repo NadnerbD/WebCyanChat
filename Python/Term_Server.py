@@ -13,7 +13,7 @@ import os
 from Logger import log
 from Utils import parseToDict
 from HTTP_Server import HTTP_Server
-from VTParse import CommandParser
+from VTParse import Parser
 
 class Style:
 	# this object represents the font style of a single character
@@ -496,7 +496,7 @@ class Term_Server:
 			os.waitpid(pid, 0) # wait on the process so we don't create a zombie
 
 	def handleOutput(self, stream):
-		parser = CommandParser(stream)
+		parser = Parser(stream)
 		while True:
 			command = parser.getCommand()
 			if(command == None):
