@@ -203,7 +203,9 @@ class Terminal:
 		self.showCursor = True
 		self.autoWrap = True
 		self.savedPos = 0
-		self.savedSytle = Style()
+		self.savedStyle = Style()
+		self.savedShift = 0
+		self.savedCharsets = ['B', '0']
 		self.parent = parent
 		self.updateEvent = threading.Event()
 		self.lastUpdate = 0
@@ -342,9 +344,15 @@ class Terminal:
 		elif(cmd.cmd == "saveCursor"):
 			self.savedPos = self.buffer.pos
 			self.savedStyle = Style(self.attrs)
+			self.savedShift = self.shift_out
+			self.savedCharsets[0] = self.charmaps[0].mode
+			self.savedCharsets[1] = self.charmaps[1].mode
 		elif(cmd.cmd == "restoreCursor"):
 			self.buffer.pos = self.savedPos
 			self.attrs = self.savedStyle
+			self.shift_out = self.savedShift
+			self.charmaps[0].setMode(self.savedCharsets[0])
+			self.charmaps[1].setMode(self.savedCharsets[1])
 		elif(cmd.cmd == "cursorFwd"):
 			argDefaults(cmd.args, [1])
 			self.move(cmd.args[0], 0)

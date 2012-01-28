@@ -6,10 +6,8 @@ from Logger import log
 escapeCodeStrings = { \
 	'=': 'setAppKeys', \
 	'>': 'setNormKeys', \
-	'(B': 'setG0CharSet', \
-	'(0': 'setG0CharSet', \
-	')B': 'setG1CharSet', \
-	')0': 'setG1CharSet', \
+	'(': 'setG0CharSet', \
+	')': 'setG1CharSet', \
 	'E': 'nextLine', \
 	'D': 'index', \
 	'M': 'reverseIndex', \
