@@ -174,8 +174,17 @@ class Parser:
 	def execute(self):
 		self.putCommand(Command('add', self.char))
 
-	def print_act(self):
+	def print_ascii(self):
 		self.putCommand(Command('add', self.char))
+
+	def print_utf8(self):
+		# consumes directly from the stream to the end of the utf-8 character
+		charLen = 0
+		while((ord(self.char) << charLen) & 0x80):
+			charLen += 1
+		for i in range(charLen - 1):
+			self.char += self.stream.read(1)
+		self.putCommand(Command('add', unicode(self.char, 'utf-8')))
 
 	def esc_dispatch(self):
 		cmd = self.privateMarker + self.char
@@ -217,7 +226,9 @@ class Parser:
 		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
 			self.execute()
 		elif(self.rangeTest([[0x20, 0x7F]])):
-			self.print_act()
+			self.print_ascii()
+		elif(self.rangeTest([[0xC0, 0xDF], [0xE0, 0xEF], [0xF0, 0xF7]])):
+			self.print_utf8()
 		else:
 			self.missingAction('ground')
 
