@@ -6,11 +6,14 @@ from Logger import log
 escapeCodeStrings = { \
 	'=': 'setAppKeys', \
 	'>': 'setNormKeys', \
-	'(': 'setG0CharSet', \
-	')': 'setG1CharSet', \
+	'(B': 'setG0CharSet', \
+	'(0': 'setG0CharSet', \
+	')B': 'setG1CharSet', \
+	')0': 'setG1CharSet', \
 	'E': 'nextLine', \
 	'D': 'index', \
 	'M': 'reverseIndex', \
+	'H': 'tabSet', \
 	'7': 'saveCursor', \
 	'8': 'restoreCursor', \
 	'#8': 'screenAlignment', \
@@ -26,6 +29,7 @@ paramCmdStrings = { \
 	'h': 'setMode', \
 	'l': 'resetMode', \
 	'd': 'linePosAbs', \
+	'g': 'tabClear', \
 	'G': 'curCharAbs', \
 	'J': 'eraseOnDisplay', \
 	'K': 'eraseOnLine', \
@@ -93,7 +97,7 @@ class Parser:
 				return True
 			elif(len(range) == 2 and test >= range[0] and test <= range[1]):
 				return True
-			elif(len(range) > 2 and len(range) < 1):
+			elif(len(range) > 2 or len(range) < 1):
 				raise Exception("invalid range")
 		return False
 

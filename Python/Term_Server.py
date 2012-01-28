@@ -142,6 +142,7 @@ class Terminal:
 		self.bufferIndex = 0
 		# stuff which is not duplicated with buffers
 		self.scrollRegion = [1, height]
+		self.horizontalTabs = set()
 		self.echo = True
 		self.edit = True
 		self.attrs = Style()
@@ -220,7 +221,14 @@ class Terminal:
 				self.buffer.pos += self.buffer.size[0]
 			self.buffer.atEnd = False
 		elif(char == '\t'):
-			self.move(8 - (self.buffer.pos % self.buffer.size[0]) % 8, 0)
+			hpos = self.buffer.pos % self.buffer.size[0]
+			# move to the first available tab stop
+			for tab in self.horizontalTabs:
+				if(tab > hpos):
+					self.move(tab - hpos, 0)
+					return
+			# if we don't encounter a tab stop, move to the right margin
+			self.move(self.buffer.size[0] - 1 - hpos, 0)
 		elif(char == '\x08'): # backspace
 			self.buffer.pos -= 1
 			self.buffer.atEnd = False
@@ -263,6 +271,15 @@ class Terminal:
 		elif(cmd.cmd == "home"):
 			argDefaults(cmd.args, [0, 0])
 			self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
+		elif(cmd.cmd == "tabSet"):
+			self.horizontalTabs.add(self.buffer.pos % self.buffer.size[0])
+		elif(cmd.cmd == "tabClear"):
+			argDefaults(cmd.args, [0])
+			hpos = self.buffer.pos % self.buffer.size[0]
+			if(cmd.args[0] == 0 and hpos in self.horizontalTabs):
+				self.horizontalTabs.remove(hpos)
+			elif(cmd.args[0] == 3):
+				self.horizontalTabs = set()
 		elif(cmd.cmd == "saveCursor"):
 			self.savedPos = self.buffer.pos
 			self.savedStyle = Style(self.attrs)
