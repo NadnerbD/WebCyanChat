@@ -127,6 +127,14 @@ class Buffer:
 		self.sdiff = dict()
 		return msg
 
+# for setting default argument values
+def argDefaults(srcArgs, defArgs):
+	for i in range(max(len(srcArgs), len(defArgs))):
+		if(len(srcArgs) == i):
+			srcArgs.append(defArgs[i])
+		elif(srcArgs[i] == 0):
+			srcArgs[i] = defArgs[i]
+
 class Terminal:
 	def __init__(self, parent, width=80, height=24):
 		self.buffers = [Buffer(width, height), Buffer(width, height)]
@@ -250,34 +258,26 @@ class Terminal:
 		reInit = False
 		# do stuff
 		if(cmd.cmd == "add"):
-			self.add(cmd.args)
+			self.add(cmd.args[0])
 		elif(cmd.cmd == "home"):
-			if(len(cmd.args) == 2):
-				self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
-			else:
-				self.setPos(0, 0)
+			argDefaults(cmd.args, [0, 0])
+			self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
 		elif(cmd.cmd == "saveCursor"):
 			self.savedPos = self.buffer.pos
 		elif(cmd.cmd == "restoreCursor"):
 			self.buffer.pos = self.savedPos
 		elif(cmd.cmd == "cursorFwd"):
-			if(cmd.args == None):
-				cmd.args = 1
-			cmd.args = max(cmd.args, 1)
-			self.move(cmd.args, 0)
+			argDefaults(cmd.args, [1])
+			self.move(cmd.args[0], 0)
 		elif(cmd.cmd == "cursorBack"):
-			if(cmd.args == None):
-				cmd.args = 1
-			cmd.args = max(cmd.args, 1)
-			self.move(-cmd.args, 0)
+			argDefaults(cmd.args, [1])
+			self.move(-cmd.args[0], 0)
 		elif(cmd.cmd == "cursorUp"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.move(0, -cmd.args)
+			argDefaults(cmd.args, [1])
+			self.move(0, -cmd.args[0])
 		elif(cmd.cmd == "cursorDown"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.move(0, cmd.args)
+			argDefaults(cmd.args, [1])
+			self.move(0, cmd.args[0])
 		elif(cmd.cmd == "linePosAbs"):
 			if(len(cmd.args) == 2):
 				self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
@@ -286,9 +286,8 @@ class Terminal:
 			else:
 				self.setPos(self.getPos()[0], 0)
 		elif(cmd.cmd == "curCharAbs"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.setPos(cmd.args - 1, self.getPos()[1])
+			argDefaults(cmd.args, [1])
+			self.setPos(cmd.args[0] - 1, self.getPos()[1])
 		elif(cmd.cmd == "nextLine"):
 			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
 				self.scroll(1)
@@ -306,60 +305,55 @@ class Terminal:
 			else:
 				self.move(0, -1)
 		elif(cmd.cmd == "eraseOnDisplay"):
-			if(cmd.args == 1): # Above
+			argDefaults(cmd.args, [0])
+			if(cmd.args[0] == 1): # Above
 				self.erase(0, self.buffer.pos + 1)
-			elif(cmd.args == 2): # All
+			elif(cmd.args[0] == 2): # All
 				self.erase(0, self.buffer.len)
 			else: # 0 (Default) Below
 				self.erase(self.buffer.pos, self.buffer.len)
 		elif(cmd.cmd == "eraseOnLine"):
+			argDefaults(cmd.args, [0])
 			lineStart = self.getPos()[1] * self.buffer.size[0]
-			if(cmd.args == 1): # Left
+			if(cmd.args[0] == 1): # Left
 				self.erase(lineStart, self.buffer.pos + 1)
-			elif(cmd.args == 2): # All
+			elif(cmd.args[0] == 2): # All
 				self.erase(lineStart, lineStart + self.buffer.size[0])
 			else: # 0 (Default) Right
 				self.erase(self.buffer.pos, lineStart + self.buffer.size[0])
 		elif(cmd.cmd == "scrollUp"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.scroll(cmd.args)
+			argDefaults(cmd.args, [1])
+			self.scroll(cmd.args[0])
 		elif(cmd.cmd == "scrollDown"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.scroll(-cmd.args)
+			argDefaults(cmd.args, [1])
+			self.scroll(-cmd.args[0])
 		elif(cmd.cmd == "insertLines"):
 			# adds (erases) lines at curPos and pushes (scrolls) subsequent ones down
-			if(cmd.args == None):
-				cmd.args = 1
+			argDefaults(cmd.args, [1])
 			tmp = self.scrollRegion # store scroll region
 			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
-			self.scroll(-cmd.args)
+			self.scroll(-cmd.args[0])
 			self.scrollRegion = tmp # restore scroll region
 		elif(cmd.cmd == "removeLines"):
 			# removes (erases) lines at curPos and pulls (scrolls) subsequent ones up
-			if(cmd.args == None):
-				cmd.args = 1
+			argDefaults(cmd.args, [1])
 			tmp = self.scrollRegion # store scroll region
 			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
-			self.scroll(cmd.args)
+			self.scroll(cmd.args[0])
 			self.scrollRegion = tmp # restore scroll region
 		elif(cmd.cmd == "deleteChars"):
 			# delete n chars in the current line starting at curPos, pulling the rest back
-			if(cmd.args == None):
-				cmd.args = 1
-			self.shift(self.buffer.pos + cmd.args, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args)
+			argDefaults(cmd.args, [1])
+			self.shift(self.buffer.pos + cmd.args, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args[0])
 		elif(cmd.cmd == "addBlanks"):
 			# insert n blanks in the current line starting at curPos, pushing the rest forward
-			if(cmd.args == None):
-				cmd.args = 1
-			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args), cmd.args)
+			argDefaults(cmd.args, [1])
+			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args), cmd.args[0])
 		elif(cmd.cmd == "eraseChars"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.erase(self.buffer.pos, self.buffer.pos + cmd.args, True)
+			argDefaults(cmd.args, [1])
+			self.erase(self.buffer.pos, self.buffer.pos + cmd.args[0], True)
 		elif(cmd.cmd == "setScrollRegion"):
-			if(cmd.args[0] == None):
+			if(len(cmd.args) != 2):
 				cmd.args = [1, self.buffer.size[1]]
 			self.scrollRegion = cmd.args
 			self.buffer.pos = 0
@@ -388,9 +382,9 @@ class Terminal:
 				self.buffer.atEnd = False
 				reInit = True
 		elif(cmd.cmd == "charAttributes"):
+			if(len(cmd.args) == 0):
+				self.attrs.update(0)
 			for arg in cmd.args:
-				if(arg == None):
-					arg = 0
 				self.attrs.update(arg)
 		elif(cmd.cmd == "screenAlignment"):
 			self.erase(0, self.buffer.len, True, 'E')
