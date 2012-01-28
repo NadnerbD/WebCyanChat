@@ -347,11 +347,11 @@ class Terminal:
 		elif(cmd.cmd == "deleteChars"):
 			# delete n chars in the current line starting at curPos, pulling the rest back
 			argDefaults(cmd.args, [1])
-			self.shift(self.buffer.pos + cmd.args, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args[0])
+			self.shift(self.buffer.pos + cmd.args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args[0])
 		elif(cmd.cmd == "addBlanks"):
 			# insert n blanks in the current line starting at curPos, pushing the rest forward
 			argDefaults(cmd.args, [1])
-			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args), cmd.args[0])
+			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args[0]), cmd.args[0])
 		elif(cmd.cmd == "eraseChars"):
 			argDefaults(cmd.args, [1])
 			self.erase(self.buffer.pos, self.buffer.pos + cmd.args[0], True)
