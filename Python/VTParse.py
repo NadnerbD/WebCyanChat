@@ -11,6 +11,8 @@ escapeCodeStrings = { \
 	'E': 'nextLine', \
 	'D': 'index', \
 	'M': 'reverseIndex', \
+	'7': 'saveCursor', \
+	'8': 'restoreCursor', \
 	'#8': 'screenAlignment', \
 }
 

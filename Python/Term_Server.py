@@ -147,6 +147,7 @@ class Terminal:
 		self.attrs = Style()
 		self.showCursor = True
 		self.savedPos = 0
+		self.savedSytle = Style()
 		self.parent = parent
 		self.updateEvent = threading.Event()
 		self.lastUpdate = 0
@@ -264,8 +265,10 @@ class Terminal:
 			self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
 		elif(cmd.cmd == "saveCursor"):
 			self.savedPos = self.buffer.pos
+			self.savedStyle = Style(self.attrs)
 		elif(cmd.cmd == "restoreCursor"):
 			self.buffer.pos = self.savedPos
+			self.attrs = self.savedStyle
 		elif(cmd.cmd == "cursorFwd"):
 			argDefaults(cmd.args, [1])
 			self.move(cmd.args[0], 0)
