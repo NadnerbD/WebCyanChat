@@ -515,6 +515,7 @@ class Terminal:
 		self.bufferLock.acquire()
 		self.broadcast(self.buffer.diffMsg(self.showCursor))
 		self.lastUpdate = 0
+		self.updateEvent.clear()
 		self.bufferLock.release()
 
 class Term_Server:
@@ -639,5 +640,4 @@ class Term_Server:
 				else:
 					break
 			self.terminal.sendDiff()
-			self.terminal.updateEvent.clear()
 
