@@ -183,6 +183,8 @@ class Parser:
 		cmd = self.privateMarker + self.char
 		if(cmd in escapeCodeStrings):
 			self.putCommand(Command(escapeCodeStrings[cmd], None))
+		elif(cmd[0] in escapeCodeStrings):
+			self.putCommand(Command(escapeCodeStrings[cmd[0]], [cmd[1]]))
 		else:
 			log(self, 'Unrecognized ESC code: %r' % self.debugStr)
 

@@ -127,6 +127,58 @@ class Buffer:
 		self.sdiff = dict()
 		return msg
 
+class Charmap:
+	graphics_map = {\
+		'_': u'\u2400',\
+		'`': u'\u25C6',\
+		'a': u'\u2592',\
+		'b': u'\u2409',\
+		'c': u'\u240C',\
+		'd': u'\u240D',\
+		'e': u'\u240A',\
+		'f': u'\u00B0',\
+		'g': u'\u00B1',\
+		'h': u'\u2424',\
+		'i': u'\u240B',\
+		'j': u'\u2518',\
+		'k': u'\u2510',\
+		'l': u'\u250C',\
+		'm': u'\u2514',\
+		'n': u'\u253C',\
+		'o': u'\u23BA',\
+		'p': u'\u23BB',\
+		'q': u'\u2500',\
+		'r': u'\u23BC',\
+		's': u'\u23BD',\
+		't': u'\u251C',\
+		'u': u'\u2524',\
+		'v': u'\u2534',\
+		'w': u'\u252C',\
+		'x': u'\u2502',\
+		'y': u'\u2264',\
+		'z': u'\u2265',\
+		'{': u'\u03C0',\
+		'|': u'\u2260',\
+		'}': u'\u00A3',\
+		'~': u'\u00B7',\
+	}
+
+	def __init__(self, mode='B'):
+		self.mode = mode
+
+	def setMode(self, mode):
+		self.mode = mode
+
+	def map(self, char):
+		if self.mode == 'A':
+			if char == '#':
+				return u'\u00A3'
+		elif self.mode == '0':
+			if char in Charmap.graphics_map:
+				return Charmap.graphics_map[char]
+		return char
+
+
 # for setting default argument values
 def argDefaults(srcArgs, defArgs):
 	for i in range(max(len(srcArgs), len(defArgs))):
@@ -146,6 +198,8 @@ class Terminal:
 		self.echo = True
 		self.edit = True
 		self.attrs = Style()
+		self.charmaps = [Charmap('B'), Charmap('0')]
+		self.shift_out = 0
 		self.showCursor = True
 		self.autoWrap = True
 		self.savedPos = 0
@@ -235,7 +289,11 @@ class Terminal:
 			self.buffer.atEnd = False
 		elif(char == '\x07'):
 			pass # bell
-		elif(ord(char) < 0x20):
+		elif(char == '\x0E'):
+			self.shift_out = 1
+		elif(char == '\x0F'):
+			self.shift_out = 0
+		elif(ord(char) < 0x20 or char == '\x7F'):
 			pass # other ascii control chars we don't understand
 		else:
 			if(self.buffer.atEnd and self.autoWrap):
@@ -246,7 +304,7 @@ class Terminal:
 					self.buffer.pos -= self.buffer.size[0]
 			if(self.buffer.pos >= self.buffer.len):
 				self.buffer.pos = self.buffer.len - 1
-			self.buffer[self.buffer.pos] = (char, Style(self.attrs))
+			self.buffer[self.buffer.pos] = (self.charmaps[self.shift_out].map(char), Style(self.attrs))
 			if(self.buffer.pos % self.buffer.size[0] == self.buffer.size[0] - 1 and self.buffer.atEnd == False):
 				self.buffer.atEnd = True
 			elif(not (self.buffer.atEnd and self.autoWrap == False)):
@@ -411,6 +469,10 @@ class Terminal:
 				self.attrs.update(0)
 			for arg in cmd.args:
 				self.attrs.update(arg)
+		elif(cmd.cmd == "setG0CharSet"):
+			self.charmaps[0].setMode(cmd.args[0])
+		elif(cmd.cmd == "setG1CharSet"):
+			self.charmaps[1].setMode(cmd.args[0])
 		elif(cmd.cmd == "screenAlignment"):
 			self.erase(0, self.buffer.len, True, 'E')
 		if(reInit):
