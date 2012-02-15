@@ -143,8 +143,16 @@ class CC_Server:
 			return 0
 		
 		def kick(self, target):
-			if(target.authLevel < 2):
-				self.sendPM(CC_Server.chatServer(3), target, "An oscillating inharmonic interference error(OIIE) was detected. Please close and restart your browser.", 1)
+			# disconnected admins may be kicked, as they may be ghosting
+			if(target.authLevel < 2 or target.bounceDisconnected.isSet()):
+				# prevent the bouncer from holding on to the connection if we're kicking it
+				target.bounceEnable = False
+				if(target.bounceDisconnected.isSet()):
+					# restart the target's sock loop so it will be cleaned up and not wait forever
+					target.bounceConnect.set()
+				else:
+					# only send this PM if there's a connected client to see it
+					self.sendPM(CC_Server.chatServer(3), target, "An oscillating inharmonic interference error(OIIE) was detected. Please close and restart your browser.", 1)
 				self.remove(target, 2)
 				if(self.parent.prefs["enable_bans"]):
 					self.parent.banlist.append(target.addr[0])
@@ -568,7 +576,9 @@ class CC_Server:
 			bounceTarget = self.connections.findByName(msg[0])
 			if(bounceTarget and bounceTarget.bounceKey == msg[1]):
 				if(not bounceTarget.bounceDisconnected.isSet()):
+					# forcibly disconnect the client
 					bounceTarget.sock.close()
+					# and wait for sockLoop to notice
 					bounceTarget.bounceDisconnected.wait()
 				bounceTarget.sock = connection.sock
 				connection.status = 0 # mark this session to be removed
