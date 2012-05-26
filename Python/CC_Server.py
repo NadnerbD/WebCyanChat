@@ -43,6 +43,12 @@ class CC_Server:
 				if(user.name == name):
 					return user
 			return None
+
+		def findByBounceKey(self, key):
+			for user in self.connections:
+				if(user.bounceKey == key):
+					return user
+			return None
 		
 		def debugMsg(self, connection, message):
 			if(self.parent.prefs["debug_mode"]):
@@ -159,6 +165,9 @@ class CC_Server:
 		
 		def insert(self, connection):
 			self.accessLock.acquire()
+			# give the connection a random (unique) bounceKey
+			while(connection.bounceKey == "" or self.findByBounceKey(connection.bounceKey) != None):
+				connection.bounceKey = hex(random.randint(0, 0x7FFFFFFE))[2:]
 			self.connections.append(connection)
 			if(len(self.connections) > self.parent.maxconnections):
 				self.parent.maxconnections = len(self.connections)
@@ -199,7 +208,7 @@ class CC_Server:
 			# bouncer data
 			self.bounceEnable = 0
 			self.bounceBufferSize = 0
-			self.bounceKey = hex(random.randint(0, 0x7FFFFFFE))[2:]
+			self.bounceKey = ""
 			self.bounceDisconnected = threading.Event()
 			self.bounceBursting = 0
 			self.bounceConnect = threading.Event()
@@ -567,14 +576,12 @@ class CC_Server:
 	
 	def handleBounce(self, connection, cmd, msg):
 		if(cmd == 100): # bounce key request
-			connection.send("101|%s|%s" % (connection.name, connection.bounceKey))
+			connection.send("101|%s" % connection.bounceKey)
 			connection.bounceEnable = 1
 			connection.bounceBufferSize = self.prefs["bounce_buffer_size"]
 		elif(cmd == 102): # bounce connect request
-			msg = msg.split("|")
-			# this method will break if the user has it's level changed while disconnected
-			bounceTarget = self.connections.findByName(msg[0])
-			if(bounceTarget and bounceTarget.bounceKey == msg[1]):
+			bounceTarget = self.connections.findByBounceKey(msg)
+			if(bounceTarget):
 				if(not bounceTarget.bounceDisconnected.isSet()):
 					# forcibly disconnect the client
 					bounceTarget.sock.close()
@@ -584,7 +591,7 @@ class CC_Server:
 				connection.status = 0 # mark this session to be removed
 				connection.sock = None # remove the sock from the original session
 				bounceTarget.bounceBursting = 1
-				bounceTarget.send("103") # bounce connect accept
+				bounceTarget.send("103|%s" % bounceTarget.name) # bounce connect accept
 				for line in bounceTarget.bounceBuffer:
 					bounceTarget.send(line)
 				bounceTarget.send("104") # end of bounce init burst
