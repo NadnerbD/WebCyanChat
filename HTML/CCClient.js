@@ -185,9 +185,6 @@ function recv_cc(line) {
 				// on a successful name set, we set the name cookie so we can autoname ourselves on the next visit
 				// store the cookie for a week
 				setCookie("ccname", currentName);
-				if(bounceEnable.checked) {
-					send_cc("100"); // bounce key request
-				}
 			break;
 			case "10":
 				// name rejected message
@@ -218,11 +215,12 @@ function recv_cc(line) {
 			case "101":
 				// bounce key response
 				// store the cookie for a week
-				bounceKey = pipelist[1] + "|" + pipelist[2];
+				bounceKey = pipelist[1];
 				setCookie("bouncekey", bounceKey);
 			break;
 			case "102":
 				// bounce connect reject
+				send_cc("100"); // bounce key request
 				send_cc("40|1"); // log in normally
 				// we should delete the cookie so that we don't try to use it again later
 				deleteCookie("bouncekey");
@@ -231,7 +229,7 @@ function recv_cc(line) {
 			case "103":
 				// bounce connect accept
 				bounceBursting = 1;
-				currentName = bounceKey.split("|")[0].substring(1);
+				currentName = pipelist[1].substring(1);
 				// refresh the cookies so they don't expire
 				setCookie("ccname", currentName);
 				setCookie("bouncekey", bounceKey);

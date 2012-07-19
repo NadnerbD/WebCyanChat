@@ -5,6 +5,7 @@ import socket
 import struct
 import base64
 import time
+import ssl
 try:
 	import hashlib
 	md5 = hashlib.md5
@@ -280,11 +281,12 @@ class HTTP_Server:
 			self.queueLen.acquire()
 			return self.queue.pop()
 	
-	def __init__(self, webRoot="../HTML"):
+	def __init__(self, webRoot="../HTML", useSSL=False):
 		self.sessionList = self.sessionList()
 		self.sessionQueues = dict()
 		self.redirects = dict()
 		self.webRoot = webRoot
+		self.useSSL = useSSL
 	
 	def readHTTP(self, sock):
 		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
@@ -374,7 +376,7 @@ class HTTP_Server:
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("WebSocket-Origin", headers["Origin"]), \
-					("WebSocket-Location", "ws://%s/web-socket" % headers["Host"]), \
+					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["Host"])), \
 					("WebSocket-Protocol", headers["WebSocket-Protocol"]), \
 				]
 				log(self, "got WebSocket from (%s, %s)" % addr, 3)
@@ -388,7 +390,7 @@ class HTTP_Server:
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("Sec-WebSocket-Origin", headers["Origin"]), \
-					("Sec-WebSocket-Location", "ws://%s/web-socket" % headers["Host"]), \
+					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["Host"])), \
 					("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
 				]
 				# now we have to figure out the key
@@ -502,6 +504,12 @@ class HTTP_Server:
 		while 1:
 			listener.listen(1)
 			(sock, addr) = listener.accept()
+			if(self.useSSL):
+				try:
+					sock = ssl.wrap_socket(sock, server_side=True, certfile="server.crt", keyfile="server.key", suppress_ragged_eofs=True)
+				except Exception as error:
+					log(self, "Error during SSL handshake: %s" % error)
+					continue
 			sockThread = threading.Thread(None, self.sockLoop, "sockLoop", (sock, addr))
 			sockThread.setDaemon(1)
 			sockThread.start()

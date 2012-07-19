@@ -38,10 +38,15 @@
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("keyup", keyup, false);
 
-				sock = new WebSocket("ws://" + window.location.host + "/web-socket", "term");
+				sock = new WebSocket("wss://" + window.location.host + "/web-socket", "term");
 				sock.onmessage = function (msgEvent) {
 					//console.log(msgEvent.data);
 					var msg = JSON.parse(msgEvent.data);
+					if(msg.cmd == "badpass") {
+						alert("Server rejected password");
+						deleteCookie("term_pass");
+						return;
+					}
 					if(msg.cmd == "init") {
 						width = msg.size[0];
 						height = msg.size[1];
@@ -56,6 +61,40 @@
 					setContent(buffer);
 					setCursor(msg.cur);
 				}
+				sock.onopen = function () {
+					var passwd = getCookie("term_pass");
+					if(passwd == "") {
+						passwd = prompt("Enter your password", "");
+						setCookie("term_pass", passwd);
+					}
+					sock.send(passwd);
+				}
+			}
+
+			function setCookie(name, value) {
+				// cookies are set to expire in one week
+				var today = new Date();
+				expire_date = new Date(today.getTime() + (7 * 1000 * 60 * 60 * 24));
+				expire_string = expire_date.toGMTString();
+				document.cookie = name + "=" + escape(value) + ";path=/;expires=" + expire_string;
+			}
+
+			function getCookie(name) {
+				// first check if the cookie exists
+				if(document.cookie.split(name + "=").length > 1) {
+					// if so, extract it
+					return unescape(document.cookie.split(name + "=")[1].split(";")[0]);
+				}else{
+					// otherwise return an empty string
+					return "";
+				}
+			}
+
+			function deleteCookie(name) {
+				// we delete cookies by setting their expiry date to the past
+				today = new Date();
+				expire_string = new Date(today.getTime() - 1).toGMTString();
+				document.cookie = name + "=;path=/;expires=" + expire_string
 			}
 
 			function keypress(event) {
