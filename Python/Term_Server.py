@@ -433,7 +433,7 @@ class Terminal:
 
 class Term_Server:
 	def __init__(self):
-		self.server = HTTP_Server()
+		self.server = HTTP_Server(useSSL=True)
 		self.server.redirects["/"] = "console.html"
 		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
 		self.sessionQueue = self.server.registerProtocol("term")
@@ -445,6 +445,7 @@ class Term_Server:
 			"term_args": "", \
 			"term_height": 24, \
 			"term_width": 80, \
+			"term_pass": "pass", \
 		}
 
 	def readPrefs(self, filename="TermServer.conf"):
@@ -496,7 +497,7 @@ class Term_Server:
 		o.daemon = True
 		o.start()
 
-		# start the http server
+		# start the http server (using ssl)
 		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"],))
 		s.daemon = True
 		s.start()
@@ -522,7 +523,15 @@ class Term_Server:
 			log(self, "cmd: %r" % command, 4)
 			self.terminal.handleCmd(command)
 			
-	def handleInput(self, sock, stream):
+	def handleInput(self, sock, stream, addr):
+		# the first frame sent over the socket must be the password
+		passwd = sock.recvFrame()
+		if(passwd != self.prefs["term_pass"]):
+			log(self, "Incorrect password attempt from %s: %r" % (addr, passwd))
+			sock.send("{\"cmd\": \"badpass\"}")
+			sock.close()
+			return
+		log(self, "Accepted password from (%s, %s)" % addr)
 		self.terminal.sendInit(sock)
 		while True:
 			char = chr(int(sock.recvFrame()))
@@ -537,7 +546,7 @@ class Term_Server:
 			(sock, addr) = self.sessionQueue.acceptHTTPSession()
 			self.connections.append(sock)
 			# start a thread to send input to the shell
-			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, stream))
+			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, stream, addr))
 			i.daemon = True
 			i.start()
 
