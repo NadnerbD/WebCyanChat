@@ -84,10 +84,8 @@ class HTTP_Server:
 				log(self, "pingloop running, %ss since last activity" % lagTime, 3)
 				if(lagTime > 60):
 					self.sessions.remove(session)
-					session.timedOut = 1
+					session.close()
 					log(self, "removed timed out session: %s" % session.sid, 3)
-					session.waitLock.set()
-					session.sendLock.release()
 					return
 				elif(lagTime > 30):
 					if(session.sendSock):
@@ -108,10 +106,11 @@ class HTTP_Server:
 			self.sendLock = threading.Lock()
 			self.waitLock = threading.Event()
 			self.sendBuffer = StringIO()
-			self.recvBuffer = StringIO()
+			self.frameBuffer = list()
+			self.recvBuffer = list()
 			self.sendSock = None
 			self.lastResponseTime = time.time()
-			self.timedOut = 0
+			self.closed = False
 		
 		def flush(self):
 			self.sendBuffer.seek(0)
@@ -131,38 +130,43 @@ class HTTP_Server:
 			else:
 				log(self, "buffered send to: %s" % self.sid, 3)
 			self.sendLock.release()
-		
-		def recv(self, count):
-			while 1:
-				log(self, "attempted recv from: %s" % self.sid, 4)
-				self.recvLock.acquire()
-				if(self.timedOut):
-					self.recvLock.release()
-					log(self, "timed out, return null: %s" % self.sid, 3)
+
+		def recvFrame(self):
+			self.recvLock.acquire()
+			log(self, "attempting recvFrame from: %s" % self.sid, 4)
+			while(len(self.frameBuffer) < 1):
+				log(self, "no data, holding: %s" % self.sid, 4)
+				self.recvLock.release()
+				self.waitLock.wait()
+				self.waitLock.clear()
+				if(self.closed):
 					return ''
-				self.recvBuffer.seek(0)
-				output = self.recvBuffer.read(count)
-				if(output):
-					currentBuffer = self.recvBuffer.read()
-					self.recvBuffer = StringIO()
-					self.recvBuffer.write(currentBuffer)
-					log(self, "sucessful recv from buffer %s: %s" % (self.sid, repr(output)), 4)
-					self.recvLock.release()
-					return output
-				else:
-					log(self, "no data, holding: %s" % self.sid, 4)
-					self.recvLock.release()
-					self.waitLock.wait()
-					self.waitLock.clear()
+				self.recvLock.acquire()
+			frame = self.frameBuffer.pop(0)
+			self.recvLock.release()
+			return frame
+
+		def recv(self, count):
+			data = ''
+			while(len(data) < count):
+				if(self.closed):
+					return ''
+				while(len(self.recvBuffer) and len(data) < count):
+					data += self.recvBuffer.pop(0)
+				if(len(data) < count):
+					self.recvBuffer.extend(self.recvFrame())
+			return data
 		
 		def close(self):
-			pass
+			self.closed = True
+			self.waitLock.set()
+			self.sendLock.release()
 		
 		def queueRecvData(self, data):
 			self.recvLock.acquire()
-			self.recvBuffer.write(data)
+			self.frameBuffer.append(data)
 			log(self, "received data from %s" % self.sid, 3)
-			#log(self, "buffered data: %s" % repr(data), 4)
+			#log(self, "buffered frame: %s" % repr(data), 4)
 			self.recvLock.release()
 			self.waitLock.set()
 		
