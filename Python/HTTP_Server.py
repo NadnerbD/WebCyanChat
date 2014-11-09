@@ -23,7 +23,8 @@ class HTTP_Server:
 		101: "Switching Protocols", \
 		200: "OK", \
 		201: "Created", \
-		301: "Moved Permanently", \
+		#301: "Moved Permanently", \
+		302: "Found", \
 		400: "Bad Request", \
 		403: "Forbidden", \
 		404: "Not Found", \
@@ -351,11 +352,11 @@ class HTTP_Server:
 		if(self.redirects.has_key(resource)):
 			redirect = self.redirects[resource]
 			if(type(redirect) == type(str())):
-				self.writeHTTP(sock, 301, {"Location": redirect}, "301 Redirect")
+				self.writeHTTP(sock, 302, {"Location": redirect}, "302 Redirect")
 				log(self, "redirected %s from %s to %s" % (addr, resource, self.redirects[resource]), 3)
 				return
 			elif(headers.has_key(redirect["header"]) and headers[redirect["header"]].find(redirect["value"]) != -1):
-				self.writeHTTP(sock, 301, {"Location": redirect["location"]}, "301 Redirect")
+				self.writeHTTP(sock, 302, {"Location": redirect["location"]}, "302 Redirect")
 				log(self, "redirected request for %s to %s due to %s value containing %s" % ( \
 					resource, \
 					redirect["location"], \
