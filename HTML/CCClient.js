@@ -1,5 +1,5 @@
 // the control script goes here
-var styles = ['', 'cyane', 'server', 'client', 'guest', 'client'];
+var styles = ['normal', 'cyan', 'server', 'client', 'guest', 'client'];
 
 var version = "0.14";
 var client_name = "js_cc version " + version + " (NadCC)";
@@ -297,10 +297,10 @@ function addTextOut(nick, nickflag, message, messageflag) {
 	nickflag = parseInt(nickflag);
 	now = new Date();
 	// start from the beginning
-	newline = addElement(0, "span", "", "", 0);
+	newline = document.createElement("p");
 	newline = addElement(newline, "span", "[" + intPlaces(now.getHours(), 2) + ":" + intPlaces(now.getMinutes(), 2) + "] ", "timestamp", 0);
 	if(messageflag == "0") {
-		newline = addElement(newline, "span", "Private message from ", "pretext", 0);
+		newline = addElement(newline, "span", "Private message from ", "magenta", 0);
 	}else if(messageflag == "2") {
 		newline = addElement(newline, "span", "\\\\\\\\\\", "server", 0);
 	}else if(messageflag == "3") {
@@ -334,7 +334,6 @@ function addTextOut(nick, nickflag, message, messageflag) {
 	}else if(messageflag == "3") {
 		newline = addElement(newline, "span", "\\\\\\\\\\", "server", 0);
 	}
-	newline = addElement(newline, "br", "", "", 0);
 	textout.insertBefore(newline, textout.childNodes[0]);
 	startFlash();
 }

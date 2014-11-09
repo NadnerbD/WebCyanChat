@@ -455,8 +455,8 @@ class CC_Server:
 		while 1:
 			try:
 				line = readTo(connection.sock, '\n', ['\r'])
-			except:
-				log(self, "error reading from socket on %s" % connection, 2)
+			except Exception as error:
+				log(self, "error reading from socket on %s: %s" % (connection, error), 2)
 				line = None
 			if(not line or connection.status == 0):
 				if(connection.bounceEnable and connection.named and connection.status != 0):
