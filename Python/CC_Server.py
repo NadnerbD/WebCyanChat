@@ -472,7 +472,7 @@ class CC_Server:
 					return
 			#line = line.rstrip("\r\n")
 			line = line.strip()
-			log(self, "received: %s from %s" % (line, connection), 2) 
+			log(self, "received: %r from %s" % (line, connection), 2) 
 			line = self.censor(line)
 			if(type(line) == int):
 				if(line == 1): # warn
