@@ -67,8 +67,25 @@
 				right: 0px;
 			}
 			#font_floater {
+				border: solid 1px #886;
+				border-radius: 3px;
+				box-shadow: 1px 1px 2px #888;
+				background-color: #DDA;
+				padding: 15px;
+				margin: 3px;
 				visibility: hidden;
+				position: fixed;
+				top: 41px;
+				right: 41px;
+			}
+			#canvas_container {
+				position: relative;
+			}
+			#font_canvas {
 				cursor: crosshair;
+				position: absolute;
+				top: 0px;
+				left: 0px;
 			}
 			#edit_button {
 				float: right;
@@ -87,11 +104,6 @@
 				background-color: #DDA;
 				text-align: center;
 			}
-			canvas {
-				position: fixed;
-				top: 41px;
-				right: 41px;
-			}
 		</style>
 		<script type="text/javascript">
 			var font_edit = false;
@@ -106,7 +118,7 @@
 		<div id="titlebar">
 			Cursive Chat
 			<span id="connectstatusid">Browser does not support Javascript</span>
-			<span class="fa fa-edit" id="edit_button" onclick="toggleFontFloater()"></span>
+			<span class="fa fa-lg fa-edit" id="edit_button" onclick="toggleFontFloater()"></span>
 			<!-- junk elements -->
 		</div>
 		<div id="input_bar">
@@ -116,8 +128,15 @@
 			<!-- output goes here -->
 		</div>
 		<div id="font_floater">
-			<canvas id="grid_canvas" height="512" width="516"></canvas>
-			<canvas id="font_canvas" height="512" width="516"></canvas>
+			<div id="canvas_container">
+				<canvas id="grid_canvas" height="512" width="516"></canvas>
+				<canvas id="font_canvas" height="512" width="516"></canvas>
+			</div>
+			<input type="button" value="Toggle Erase" title="Shortcut: E" onclick="toggleEraseMode()" />
+			<input type="button" value="Toggle Mask" title="Shortcut: M" onclick="toggleLetterMask()" />
+			<input type="button" value="Save Font" title="Shortcut: CTRL+S" onclick="saveFontImage()" />
+			<input type="button" value="Undo" title="Shortcut: CTRL+Z" onclick="undoStroke()" />
+			<input type="checkbox" checked="true" onclick="setUseTabletCoords(event.target.checked)" />Use Tablet Coords
 		</div>
 		<div id="join_floater">
 			<div class="centerbox">

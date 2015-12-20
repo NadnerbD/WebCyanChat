@@ -59,5 +59,10 @@ class Cursive_Server(CC_Server):
 			self.connections.updateUserFont(connection, msg)
 		elif(cmd == 202): # avatar update cmd
 			self.connections.updateUserAvatar(connection, msg)
+
+	def readPrefs(self, filename="CCServer.conf"):
+		# force the censor off, it interferes with sending images
+		CC_Server.readPrefs(self, filename)
+		self.prefs["censor_level"] = 0
 			
 			
