@@ -289,9 +289,12 @@ function changeRule(name, property, value) {
 		for(rule = 0; rule < rules.length; rule++) {
 			if(rules[rule].selectorText == name) {
 				rules[rule].style.setProperty(property, value, null);
+				return;
 			}
 		}
 	}
+	// if we get here, we failed to find a rule to change, so we need to add a rule
+	document.getElementById("cursive-data-style").sheet.insertRule(name + " {" + property + ": " + value + "; }", 0);
 }
 
 function escHTML(string) {
