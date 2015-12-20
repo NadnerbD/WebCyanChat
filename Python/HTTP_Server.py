@@ -16,6 +16,12 @@ except:
 	md5 = md5.md5
 	sha1 = sha.sha
 
+def recvall(sock, size):
+	data = ''
+	while(len(data) < size):
+		data += sock.recv(size - len(data))
+	return data
+
 class HTTP_Server:
 	statusCodes = { \
 		100: "Continue", \
@@ -243,7 +249,7 @@ class HTTP_Server:
 			elif(payLen == 127):
 				payLen = struct.unpack(">Q", self.sock.recv(8))[0]
 			key = self.sock.recv(4)
-			return self.decode(self.sock.recv(payLen, socket.MSG_WAITALL), key)
+			return self.decode(recvall(self.sock, payLen), key)
 
 		def recvFrame(self):
 			data = ''
@@ -265,6 +271,9 @@ class HTTP_Server:
 					pingdata = self.recvPayload()
 					self.send(pingdata, 0x0A) # pong
 					log(self, "recieved ping frame: %r" % pingdata, 4)
+				elif(opcode == 10): # pong opcode
+					pongdata = self.recvPayload()
+					log(self, "received pong frame: %r" % pongdata, 4)
 
 		def recv(self, count):
 			data = ''
@@ -312,12 +321,11 @@ class HTTP_Server:
 			(resource, getOptions) = resource.split("?", 1)
 			getOptions = parseToDict(getOptions, '=', '&')
 		headers = parseToDict(data, ": ", "\r\n")
-		body = str()
+		body = False
 		if(headers.has_key("Expect") and headers["Expect"] == "100-continue"):
 			sock.send("HTTP/1.1 100 Continue\r\n\r\n")
 		if(headers.has_key("Content-Length")):
-			while(len(body) < int(headers["Content-Length"])):
-				body += sock.recv(int(headers["Content-Length"], socket.MSG_WAITALL) - len(body))
+			body = recvall(sock, int(headers["Content-Length"]))
 		if(headers.has_key("Content-Type") and headers["Content-Type"].startswith("multipart/form-data")):
 			formHeaders = parseToDict(headers["Content-Type"], '=', "; ")
 			log(self, "multipart/form-data boundary: %s" % formHeaders["boundary"], 3)
