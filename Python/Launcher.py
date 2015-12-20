@@ -7,6 +7,7 @@ serverClasses = { \
 	"relay": "CC_Relay", \
 	"skype": "CC_Skype_Relay", \
 	"term": "Term_Server", \
+	"cursive": "Cursive_Server", \
 }
 serverClass = None
 if(len(sys.argv) == 2 and serverClasses.has_key(sys.argv[1])):

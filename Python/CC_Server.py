@@ -237,8 +237,8 @@ class CC_Server:
 				try:
 					log(self, "sending: %s to %s" % (repr(message), self), 2)
 					self.sock.send(message + "\r\n")
-				except:
-					log(self, "send error to: %s" % self, 2)
+				except Exception as error:
+					log(self, "send error to %s: %s" % (self, error), 2)
 			self.comLock.release()
 	
 	def __init__(self):
