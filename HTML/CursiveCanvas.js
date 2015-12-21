@@ -14,7 +14,7 @@ function initCanvas() {
 		ct.fillRect(0, y * ySpacing + ySpacing * 0.75, rect.width, 1);
 	}
 	ct.textBaseline = "top";
-	ct.font = ySpacing / 4 + "px monospace";
+	ct.font = ySpacing / 4 + "px \"Lucida Console\", Monaco, monospace bold";
 	var char = 32;
 	for(y = 0; y < gridSize[1]; y++) {
 		for(x = 0; x < gridSize[0]; x++) {
@@ -48,7 +48,7 @@ function initCanvas() {
 	// create the default system font for non-user messages
 	fct.textBaseline = "top";
 	fct.fillStyle = "rgb(0, 0, 0)";
-	fct.font = ySpacing + "px monospace";
+	fct.font = ySpacing + "px \"Lucida Console\", Monaco, monospace bold";
 	char = 32;
 	for(y = 0; y < gridSize[1]; y++) {
 		for(x = 0; x < gridSize[0]; x++) {
