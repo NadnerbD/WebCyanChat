@@ -302,15 +302,21 @@ function escHTML(string) {
 }
 
 function addElement(parent, childtype, childtext, childclass, href) {
-	child = document.createElement(childtype);
+	if(childtype) {
+		child = document.createElement(childtype);
+	}else{
+		child = document.createDocumentFragment();
+	}
 	if(href) {
 		child.href = href;
 		child.target = "_blank"; // this makes the link open in a new window
 	}
 	if(childtype != "br") {
-		child.appendChild(createString(childtext.replace(/ /g, '\u00a0')));
+		child.appendChild(createString(childtext));
 	}
-	child.className = childclass;
+	if(childclass) {
+		child.className = childclass;
+	}
 	if(parent) {
 		parent.appendChild(child);
 		return parent;
@@ -325,13 +331,13 @@ function addTextOut(nick, nickflag, message, messageflag, userid) {
 	now = new Date();
 	// start from the beginning
 	newline = addElement(0, "p", "", userid ? "l-uid-" + userid : "l-uid-0", 0);
-	newline = addElement(newline, "span", "[" + intPlaces(now.getHours(), 2) + ":" + intPlaces(now.getMinutes(), 2) + "] ", "timestamp", 0);
+	addElement(newline, "span", "[" + intPlaces(now.getHours(), 2) + ":" + intPlaces(now.getMinutes(), 2) + "] ", "timestamp", 0);
 	if(messageflag == "0") {
-		newline = addElement(newline, "span", "Private message from ", "pretext", 0);
+		addElement(newline, "span", "Private message from ", "pretext", 0);
 	}else if(messageflag == "2") {
-		newline = addElement(newline, "span", "\\\\\\\\\\", "server", 0);
+		addElement(newline, "span", "\\\\\\\\\\", "server", 0);
 	}else if(messageflag == "3") {
-		newline = addElement(newline, "span", "/////", "server", 0);
+		addElement(newline, "span", "/////", "server", 0);
 	}
 	newline = addElement(newline, "span", "[" + nick + "] ", styles[nickflag], 0);
 	if((message.substring(0, 1) == "*")&&(message.substring(message.length - 1, message.length) == "*")) {
@@ -339,6 +345,7 @@ function addTextOut(nick, nickflag, message, messageflag, userid) {
 	}else{
 		msgclass = 'msg';
 	}
+	msg = addElement(0, "span", "", msgclass, 0);
 	var wordlist = message.split(' ');
 	var wordline = "";
 	for(var i = 0; i < wordlist.length; i++) {
@@ -346,20 +353,21 @@ function addTextOut(nick, nickflag, message, messageflag, userid) {
 		||(wordlist[i].substring(0, 8) == "https://")
 		||(wordlist[i].substring(0, 6) == "ftp://")) {
 			if(wordline != "") {
-				newline = addElement(newline, "span", wordline, msgclass, 0);
+				addElement(msg, 0, wordline, "", 0);
 				wordline = "";
 			}
-			newline = addElement(newline, "a", wordlist[i], msgclass, wordlist[i]);
+			addElement(msg, "a", wordlist[i], "", wordlist[i]);
 			wordline += " ";
 		}else{
 			wordline += wordlist[i] + " ";
 		}
 	}
-	newline = addElement(newline, "span", wordline.substring(0, wordline.length - 1), msgclass, 0);
+	addElement(msg, 0, wordline.substring(0, wordline.length - 1), "", 0);
+	newline.appendChild(msg);
 	if(messageflag == "2") {
-		newline = addElement(newline, "span", "/////", "server", 0);
+		addElement(newline, "span", "/////", "server", 0);
 	}else if(messageflag == "3") {
-		newline = addElement(newline, "span", "\\\\\\\\\\", "server", 0);
+		addElement(newline, "span", "\\\\\\\\\\", "server", 0);
 	}
 	// check if we'll need to autoscroll
 	var autoscroll = textout.scrollTop == textout.scrollTopMax;
