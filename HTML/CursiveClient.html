@@ -134,6 +134,13 @@
 			#avatar_canvas {
 				border-radius: 25px;
 			}
+			.avatar {
+				width: 50px;
+				height: 50px;
+				border-radius: 25px;
+				background-color: lightgray;
+				display: inline-block;
+			}
 		</style>
 		<script type="text/javascript">
 			var font_edit = false;
@@ -147,8 +154,14 @@
 				img.onload = function () {
 					var cv = document.getElementById("avatar_canvas");
 					var ctx = cv.getContext("2d");
-					ctx.drawImage(img, 0, 0, cv.height, cv.width);
-					send_cc("202|" + cv.toDataURL());
+					if(img.height / img.width > cv.height / cv.width) {
+						ctx.drawImage(img, 0, 0, cv.width, cv.height * (img.height / img.width));
+					}else{
+						ctx.drawImage(img, 0, 0, cv.width * (img.width / img.height), cv.height);
+					}
+					var data = cv.toDataURL();
+					localStorage.setItem("avatar_image", data);
+					send_cc("202|" + data);
 				}
 			}
 		</script>

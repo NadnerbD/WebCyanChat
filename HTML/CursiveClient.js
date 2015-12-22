@@ -79,6 +79,7 @@ function connect() {
 			send_cc("40|1");
 			// we push our font now
 			send_cc("201|" + localStorage.getItem("font_image") || "");
+			send_cc("202|" + localStorage.getItem("avatar_image") || "");
 		}
 	};
 	connection.onclose = function () {
@@ -258,7 +259,7 @@ function recv_cc(line) {
 					var ft = pipelist.pop();
 					var id = pipelist.pop();
 					sheet.insertRule(".l-uid-" + id + " .l { background-image: url(" + ft + "); }", 0);
-					sheet.insertRule(".l-uid-" + id + " .a { background-image: url(" + av + "); }", 0);
+					sheet.insertRule(".l-uid-" + id + " .avatar { background-image: url(" + av + "); }", 0);
 				}
 			case "201":
 				// set a font for a user
@@ -266,7 +267,7 @@ function recv_cc(line) {
 			break;
 			case "202":
 				// set avatar for a user
-				changeRule(".l-uid-" + pipelist[1] + " .a", "background-image", "url(" + pipelist[2] + ")");
+				changeRule(".l-uid-" + pipelist[1] + " .avatar", "background-image", "url(" + pipelist[2] + ")");
 			break;
 			default:
 				addTextOut("ChatServer", 2, line, "1");
@@ -331,6 +332,7 @@ function addTextOut(nick, nickflag, message, messageflag, userid) {
 	now = new Date();
 	// start from the beginning
 	newline = addElement(0, "p", "", userid ? "l-uid-" + userid : "l-uid-0", 0);
+	addElement(newline, "span", "", "avatar", 0); // avatar
 	addElement(newline, "span", "[" + intPlaces(now.getHours(), 2) + ":" + intPlaces(now.getMinutes(), 2) + "] ", "timestamp", 0);
 	if(messageflag == "0") {
 		addElement(newline, "span", "Private message from ", "pretext", 0);
