@@ -119,6 +119,9 @@
 				margin-top: 6px;
 				cursor: pointer;
 			}
+			#avatar_container {
+				margin-bottom: 10px;
+			}
 			.centerbox {
 				position: fixed;
 				width: 400px;
@@ -131,15 +134,13 @@
 				background-color: #DDA;
 				text-align: center;
 			}
-			#avatar_canvas {
-				border-radius: 25px;
-			}
 			.avatar {
 				width: 50px;
 				height: 50px;
 				border-radius: 25px;
 				background-color: lightgray;
 				display: inline-block;
+				vertical-align: middle;
 			}
 		</style>
 		<script type="text/javascript">
@@ -155,9 +156,9 @@
 					var cv = document.getElementById("avatar_canvas");
 					var ctx = cv.getContext("2d");
 					if(img.height / img.width > cv.height / cv.width) {
-						ctx.drawImage(img, 0, 0, cv.width, cv.height * (img.height / img.width));
+						ctx.drawImage(img, 0, -cv.height * (img.height / img.width) / 2 + cv.height / 2, cv.width, cv.height * (img.height / img.width));
 					}else{
-						ctx.drawImage(img, 0, 0, cv.width * (img.width / img.height), cv.height);
+						ctx.drawImage(img, -cv.width * (img.width / img.height) / 2 + cv.width / 2, 0, cv.width * (img.width / img.height), cv.height);
 					}
 					var data = cv.toDataURL();
 					localStorage.setItem("avatar_image", data);
@@ -172,7 +173,6 @@
 			<span id="title">Cursive Chat</span>
 			<span id="connectstatusid">Browser does not support Javascript</span>
 			<span class="fa fa-2x fa-edit" id="edit_button" onclick="toggleFontFloater()"></span>
-			<span class="fa fa-2x fa-gear" id="user_button" onclick="toggleUserFloater()"></span>
 		</div>
 		<div id="input_bar">
 			<input type="text" id="input" onkeypress="chatenter(event)" />
@@ -181,6 +181,10 @@
 			<!-- output goes here -->
 		</div>
 		<div id="font_floater">
+			<div id="avatar_container">
+				<canvas id="avatar_canvas" class="avatar" width="50" height="50"></canvas>
+				<input type="file" onchange="setAvatar(event)" />
+			</div>
 			<div id="canvas_container">
 				<canvas id="grid_canvas" height="512" width="516"></canvas>
 				<canvas id="font_canvas" height="512" width="516"></canvas>
@@ -198,10 +202,6 @@
 				<span class="fa fa-undo"></span> Undo
 			</button>
 			<input type="checkbox" checked="true" onclick="setUseTabletCoords(event.target.checked)" />Use Tablet Coords
-		</div>
-		<div id="user_floater">
-			<canvas id="avatar_canvas" width="50" height="50"></canvas>
-			<input type="file" onchange="setAvatar(event)" />
 		</div>
 		<div id="join_floater">
 			<div class="centerbox">
