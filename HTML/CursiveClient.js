@@ -302,75 +302,65 @@ function escHTML(string) {
 	return string.split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");
 }
 
-function addElement(parent, childtype, childtext, childclass, href) {
-	if(childtype) {
-		child = document.createElement(childtype);
-	}else{
-		child = document.createDocumentFragment();
+function createTree(node) {
+	var tag;
+	if(node.tag) {
+		tag = document.createElement(node.tag);
+	}else if(node.node) {
+		// this method of adding existing nodes allows us to add extra attrs
+		tag = node.node;
 	}
-	if(href) {
-		child.href = href;
-		child.target = "_blank"; // this makes the link open in a new window
+	for(var attr in node.attrs) {
+		if(attr in tag) {
+			tag[attr] = node.attrs[attr];
+		}else{
+			tag.setAttribute(attr, node.attrs[attr]);
+		}
 	}
-	if(childtype != "br") {
-		child.appendChild(createString(childtext));
+	if(node.children) {
+		for(var i = 0; i < node.children.length; i++) {
+			if(typeof node.children[i] == "string") {
+				tag.appendChild(createString(node.children[i]));
+			}else{
+				tag.appendChild(createTree(node.children[i]));
+			}
+		}
 	}
-	if(childclass) {
-		child.className = childclass;
+	return tag;
+}
+
+function parseLinks(str) {
+	var outList = [];
+	var words = str.split(" ");
+	var isUrl = /[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/;
+	for(var i in words) {
+		var word = words[i];
+		var l = i == words.length - 1;
+		if(isUrl.test(word)) {
+			outList.push({tag: "a", attrs: {target: "_blank", href: word}, children: [word]});
+		}else if(typeof outList[outList.length - 1] == "string") {
+			outList[outList.length - 1] += word + (l?"":" ");
+		}else{
+			outList.push(word + (l?"":" "));
+		}
 	}
-	if(parent) {
-		parent.appendChild(child);
-		return parent;
-	}else{
-		return child;
-	}
+	return outList;
 }
 
 function addTextOut(nick, nickflag, message, messageflag, userid) {
-	// int for list access
-	nickflag = parseInt(nickflag);
-	now = new Date();
-	// start from the beginning
-	newline = addElement(0, "p", "", userid ? "l-uid-" + userid : "l-uid-0", 0);
-	addElement(newline, "span", "", "avatar", 0); // avatar
-	addElement(newline, "span", "[" + intPlaces(now.getHours(), 2) + ":" + intPlaces(now.getMinutes(), 2) + "] ", "timestamp", 0);
-	if(messageflag == "0") {
-		addElement(newline, "span", "Private message from ", "pretext", 0);
-	}else if(messageflag == "2") {
-		addElement(newline, "span", "\\\\\\\\\\", "server", 0);
-	}else if(messageflag == "3") {
-		addElement(newline, "span", "/////", "server", 0);
+	// we can hide nickflag 2, 3 and 5, (green, red, and client (also red)) they're only for system messages
+	if(nickflag == "2" || nickflag == "3" || nickflag == "5") {
+		return;
 	}
-	newline = addElement(newline, "span", "[" + nick + "] ", styles[nickflag], 0);
-	if((message.substring(0, 1) == "*")&&(message.substring(message.length - 1, message.length) == "*")) {
-		msgclass = 'action';
-	}else{
-		msgclass = 'msg';
-	}
-	msg = addElement(0, "span", "", msgclass, 0);
-	var wordlist = message.split(' ');
-	var wordline = "";
-	for(var i = 0; i < wordlist.length; i++) {
-		if((wordlist[i].substring(0, 7) == "http://")
-		||(wordlist[i].substring(0, 8) == "https://")
-		||(wordlist[i].substring(0, 6) == "ftp://")) {
-			if(wordline != "") {
-				addElement(msg, 0, wordline, "", 0);
-				wordline = "";
-			}
-			addElement(msg, "a", wordlist[i], "", wordlist[i]);
-			wordline += " ";
-		}else{
-			wordline += wordlist[i] + " ";
-		}
-	}
-	addElement(msg, 0, wordline.substring(0, wordline.length - 1), "", 0);
-	newline.appendChild(msg);
-	if(messageflag == "2") {
-		addElement(newline, "span", "/////", "server", 0);
-	}else if(messageflag == "3") {
-		addElement(newline, "span", "\\\\\\\\\\", "server", 0);
-	}
+	
+	// messageflag 0: private, 1: normal, 2: join, 3: leave
+	var structure = {tag: "p", attrs: {className: userid ? "l-uid-" + userid : "l-uid-0"}, children: [
+		{tag: "span", attrs: {className: "avatar"}},
+		{tag: "span", attrs: {className: "username " + styles[parseInt(nickflag)]}, children: [nick]},
+		{tag: "span", attrs: {className: "msg"}, children: parseLinks(message)}
+	]};
+	var newline = createTree(structure);
+	
 	// check if we'll need to autoscroll
 	var autoscroll = textout.scrollTop == textout.scrollTopMax;
 	textout.appendChild(newline);
