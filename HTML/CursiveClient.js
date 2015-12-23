@@ -447,12 +447,16 @@ function refreshGUIUserList(userstring) {
 	for(var i = 0; i < userstring.length; i++) {
 		if(!isUserIgnored(userstring[i])) {
 			user = userstring[i].split(",")[0];
+			userid = userstring[i].split(",")[2];
 			nickflag = parseInt(user.substring(0, 1));
 			// we got our data, now we create an element
 			var newoption = document.createElement("option");
-			newoption.text = escHTML(user.substring(1));
 			newoption.value = user;
-			newoption.className = styles[nickflag];
+			newoption.className = styles[nickflag] + " l-uid-" + userid;
+			var avatar = document.createElement("span");
+			avatar.className = "avatar";
+			newoption.appendChild(avatar);
+			newoption.appendChild(document.createTextNode(user.substring(1)));
 			try {
 				// standards compliant
 				wholist.add(newoption, null);

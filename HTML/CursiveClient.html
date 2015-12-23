@@ -9,7 +9,6 @@
 		<script src="CursiveClient.js"></script>
 		<script src="CursiveCanvas.js"></script>
 		<style type="text/css">
-
 			* { box-sizing: border-box; }
 			body {
 				background-color: #F5F5DC;
@@ -19,7 +18,7 @@
 				position: fixed;
 				top: 0px;
 				left: 0px;
-				width: 100%;
+				right: 175px;
 				height: 41px;
 				padding: 0px 10px 0px 10px;
 				border-bottom: solid 1px #886;
@@ -28,7 +27,7 @@
 				position: fixed;
 				bottom: 0px;
 				left: 0px;
-				width: 100%;
+				right: 175px;
 				height: 44px;
 				padding: 10px;
 				border-top: solid 1px #886;
@@ -50,7 +49,7 @@
 				top: 41px;
 				bottom: 44px;
 				left: 0px;
-				right: 0px;
+				right: 175px;
 				overflow-y: scroll;
 			}
 			#interface {
@@ -88,7 +87,7 @@
 				visibility: hidden;
 				position: fixed;
 				top: 41px;
-				right: 41px;
+				right: 180px;
 			}
 			#canvas_container {
 				position: relative;
@@ -111,8 +110,12 @@
 				margin-top: 6px;
 				cursor: pointer;
 			}
-			#avatar_container {
-				margin-bottom: 10px;
+			#wholistid {
+				position: fixed;
+				right: 0px;
+				top: 0px;
+				bottom: 0px;
+				width: 175px;
 			}
 			.centerbox {
 				position: fixed;
@@ -135,6 +138,7 @@
 				vertical-align: middle;
 				margin-right: 10px;
 				margin-top: 6px;
+				margin-bottom: 6px;
 			}
 			p .avatar {
 				float: left;
@@ -145,6 +149,9 @@
 			}
 			.join, .leave {
 				text-align: center;
+			}
+			.normal {
+				color: black;
 			}
 		</style>
 		<script type="text/javascript">
@@ -214,10 +221,10 @@
 				<input type="button" value="Join" id="linkbutton" onclick="if(name_reg) disconnect(); else setname(namein.value);" />
 			</div>
 		</div>
+		<select id="wholistid" size="20" onchange="whoSelChanged()">
+			<!-- regular users -->
+		</select>
 		<div id="interface">
-			<select id="wholistid" size="20" onchange="whoSelChanged()">
-				<!-- regular users -->
-			</select>
 			<span><input type="checkbox" id="timestampsid" onclick="toggletimes()" style="width:1em;display:inline;" />Show Timestamps</span>
 			<span><input type="checkbox" id="bounceid" onclick="togglebounce()" style="width:1em;display:inline;" />Use Bouncer</span>
 			<input type="button" value="SendPrivate" id="spbtn" onclick="sendprivate(wholist.value, textin.value);textin.value='';" />
