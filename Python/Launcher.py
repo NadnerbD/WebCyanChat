@@ -1,5 +1,8 @@
 #!/usr/bin/python
 import sys
+import os
+
+os.chdir(os.path.dirname(sys.argv[0]))
 
 serverClasses = { \
 	"cc": "CC_Server", \
