@@ -1,0 +1,9 @@
+{
+  "name": "Cursive Chat Demo",
+  "description": "A chat client where you draw your own font",
+  "logo": "",
+  "image": "heroku/python",
+  "repository": "",
+  "keywords": ["python"],
+  "addons": []
+}

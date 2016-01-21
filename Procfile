@@ -1,0 +1,1 @@
+web: python Python/Launcher.py cursive
