@@ -20,6 +20,7 @@ if(len(sys.argv) == 2 and serverClasses.has_key(sys.argv[1])):
 if(serverClass):
 	Server = serverClass()
 	Server.readPrefs("etc/CCServer.conf")
+	Server.prefs["http_port"] = int(os.environ["PORT"])
 	Server.start()
 else:
 	print "usage: python %s [%s]" % (sys.argv[0], '|'.join(serverClasses.keys()))
