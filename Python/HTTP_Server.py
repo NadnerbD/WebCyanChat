@@ -22,6 +22,12 @@ def recvall(sock, size):
 		data += sock.recv(size - len(data))
 	return data
 
+def lowerKeys(in_dict):
+	out_dict = {}
+	for i in in_dict:
+		out_dict[i.lower()] = in_dict[i]
+	return out_dict
+
 class HTTP_Server:
 	statusCodes = { \
 		100: "Continue", \
@@ -320,17 +326,17 @@ class HTTP_Server:
 		if('?' in resource):
 			(resource, getOptions) = resource.split("?", 1)
 			getOptions = parseToDict(getOptions, '=', '&')
-		headers = parseToDict(data, ": ", "\r\n")
+		headers = lowerKeys(parseToDict(data, ": ", "\r\n"))
 		body = False
-		if(headers.has_key("Expect") and headers["Expect"] == "100-continue"):
+		if(headers.has_key("expect") and headers["expect"] == "100-continue"):
 			sock.send("HTTP/1.1 100 Continue\r\n\r\n")
-		if(headers.has_key("Content-Length")):
-			body = recvall(sock, int(headers["Content-Length"]))
-		if(headers.has_key("Content-Type") and headers["Content-Type"].startswith("multipart/form-data")):
-			formHeaders = parseToDict(headers["Content-Type"], '=', "; ")
+		if(headers.has_key("content-length")):
+			body = recvall(sock, int(headers["content-length"]))
+		if(headers.has_key("content-type") and headers["content-type"].startswith("multipart/form-data")):
+			formHeaders = parseToDict(headers["content-type"], '=', "; ")
 			log(self, "multipart/form-data boundary: %s" % formHeaders["boundary"], 3)
 			if(body):
-				log(self, "Nice client gave us a Content-Length: %s" % headers["Content-Length"], 3)
+				log(self, "Nice client gave us a Content-Length: %s" % headers["content-length"], 3)
 			else:# didn't send us a goddamn Content-Length
 				body = readTo(sock, "--%s--" % formHeaders["boundary"], [])
 				log(self, "No Content-Length, read multipart from sock using boundary, length: %d" % len(formData), 3)
@@ -338,9 +344,9 @@ class HTTP_Server:
 			output = list()
 			for data in body:
 				(dataHeaders, data) = data.split("\r\n\r\n", 1)
-				dataHeaders = parseToDict(dataHeaders, ": ", "\r\n")
-				if(dataHeaders.has_key("Content-Disposition")):
-					dataHeaders["Content-Disposition"] = parseToDict(dataHeaders["Content-Disposition"], '=', "; ")
+				dataHeaders = lowerKeys(parseToDict(dataHeaders, ": ", "\r\n"))
+				if(dataHeaders.has_key("content-disposition")):
+					dataHeaders["content-disposition"] = parseToDict(dataHeaders["content-disposition"], '=', "; ")
 				output.append({"headers": dataHeaders, "data": data})
 			body = output
 		return (method, resource, protocol, headers, body, getOptions)
@@ -348,11 +354,11 @@ class HTTP_Server:
 	def writeHTTP(sock, code, headers={}, body=None, orderedHeaders=[]):
 		if(not body and HTTP_Server.defaultResponseData.has_key(code)):
 			body = HTTP_Server.defaultResponseData[code]
-			headers["Content-Type"] = "text/html"
-		if(body and not headers.has_key("Content-Type")):
-			headers["Content-Type"] = "text/plain"
+			headers["content-type"] = "text/html"
+		if(body and not headers.has_key("content-type")):
+			headers["content-type"] = "text/plain"
 		if(body):
-			headers["Content-Length"] = len(body)
+			headers["content-length"] = len(body)
 		sock.send("HTTP/1.1 %d %s\r\n" % (code, HTTP_Server.statusCodes[code]))
 		for header in orderedHeaders:
 			sock.send("%s: %s\r\n" % header)
@@ -392,32 +398,32 @@ class HTTP_Server:
 		else:
 			mimeType = "application/octet-stream"
 		if(method == "GET" and resource == "/web-socket"):
-			if(headers.has_key("WebSocket-Protocol") and self.sessionQueues.has_key(headers["WebSocket-Protocol"])): # protocol draft 75
+			if(headers.has_key("websocket-protocol") and self.sessionQueues.has_key(headers["websocket-protocol"])): # protocol draft 75
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
-					("WebSocket-Origin", headers["Origin"]), \
-					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["Host"])), \
-					("WebSocket-Protocol", headers["WebSocket-Protocol"]), \
+					("WebSocket-Origin", headers["origin"]), \
+					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["host"])), \
+					("WebSocket-Protocol", headers["websocket-protocol"]), \
 				]
 				log(self, "got WebSocket from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n")
-				self.sessionQueues[headers["WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[headers["websocket-protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("Sec-WebSocket-Protocol") and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"]) and not headers.has_key("Sec-WebSocket-Version")): # protocol draft 76
+			elif(headers.has_key("sec-websocket-protocol") and self.sessionQueues.has_key(headers["sec-websocket-protocol"]) and not headers.has_key("sec-websocket-version")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
-					("Sec-WebSocket-Origin", headers["Origin"]), \
-					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["Host"])), \
-					("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+					("Sec-WebSocket-Origin", headers["origin"]), \
+					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["host"])), \
+					("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				# now we have to figure out the key
 				Value1 = 0
 				Spaces1 = 0
-				for char in headers["Sec-WebSocket-Key1"]:
+				for char in headers["sec-websocket-key1"]:
 					if(char.isdigit()):
 						Value1 *= 10
 						Value1 += int(char)
@@ -426,7 +432,7 @@ class HTTP_Server:
 				Value1 /= Spaces1
 				Value2 = 0
 				Spaces2 = 0
-				for char in headers["Sec-WebSocket-Key2"]:
+				for char in headers["sec-websocket-key2"]:
 					if(char.isdigit()):
 						Value2 *= 10
 						Value2 += int(char)
@@ -438,20 +444,20 @@ class HTTP_Server:
 				log(self, "got Sec-WebSocket from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n" + md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
-				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
-			elif(headers.has_key("Sec-WebSocket-Version") and headers["Sec-WebSocket-Version"] in ["8", "13"] and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+			elif(headers.has_key("sec-websocket-version") and headers["sec-websocket-version"] in ["8", "13"] and self.sessionQueues.has_key(headers["sec-websocket-protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
-					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["Sec-WebSocket-Key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
-			        	("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
+			        	("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				log(self, "got Sec-WebSocket Version 8 from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n")
-				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket2(sock), addr))
+				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket2(sock), addr))
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
