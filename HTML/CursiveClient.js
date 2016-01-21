@@ -111,7 +111,7 @@ function send_cc(data) {
 function pingCount() {
 	// if the server reports us missing, this will cause a reconnect
 	if(name_reg) {
-		//send_cc("20||^1ping");
+		send_cc("20||^1ping");
 	}else if(lastAttemptedName != '') {
 		// we might be waiting for a name to free up
 		setname(lastAttemptedName);
