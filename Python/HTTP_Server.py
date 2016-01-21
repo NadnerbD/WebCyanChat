@@ -406,18 +406,18 @@ class HTTP_Server:
 				self.sessionQueues[headers["WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("Sec-WebSocket-Protocol") and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"]) and not headers.has_key("Sec-WebSocket-Version")): # protocol draft 76
+			elif(headers.has_key("Sec-WebSocket-Protocol") and self.sessionQueues.has_key(headers["Sec-Websocket-Protocol"]) and not headers.has_key("Sec-WebSocket-Version")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("Sec-WebSocket-Origin", headers["Origin"]), \
 					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["Host"])), \
-					("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+					("Sec-WebSocket-Protocol", headers["Sec-Websocket-Protocol"]), \
 				]
 				# now we have to figure out the key
 				Value1 = 0
 				Spaces1 = 0
-				for char in headers["Sec-WebSocket-Key1"]:
+				for char in headers["Sec-Websocket-Key1"]:
 					if(char.isdigit()):
 						Value1 *= 10
 						Value1 += int(char)
@@ -426,7 +426,7 @@ class HTTP_Server:
 				Value1 /= Spaces1
 				Value2 = 0
 				Spaces2 = 0
-				for char in headers["Sec-WebSocket-Key2"]:
+				for char in headers["Sec-Websocket-Key2"]:
 					if(char.isdigit()):
 						Value2 *= 10
 						Value2 += int(char)
@@ -438,20 +438,20 @@ class HTTP_Server:
 				log(self, "got Sec-WebSocket from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n" + md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
-				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[headers["Sec-Websocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
-			elif(headers.has_key("Sec-WebSocket-Version") and headers["Sec-WebSocket-Version"] in ["8", "13"] and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+			elif(headers.has_key("Sec-WebSocket-Version") and headers["Sec-Websocket-Version"] in ["8", "13"] and self.sessionQueues.has_key(headers["Sec-Websocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
-					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["Sec-WebSocket-Key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
-			        	("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["Sec-Websocket-Key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
+			        	("Sec-WebSocket-Protocol", headers["Sec-Websocket-Protocol"]), \
 				]
 				log(self, "got Sec-WebSocket Version 8 from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n")
-				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket2(sock), addr))
+				self.sessionQueues[headers["Sec-Websocket-Protocol"]].insert((self.WebSocket2(sock), addr))
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
