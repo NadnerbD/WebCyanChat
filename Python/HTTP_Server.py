@@ -461,7 +461,7 @@ class HTTP_Server:
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
-				log(self, "bad websocket request from (%s, %s)" % addr, 3);
+				log(self, "bad websocket request from %r headers: %r" % (addr, headers), 3);
 				return
 		elif(method == "GET"):
 			try:
