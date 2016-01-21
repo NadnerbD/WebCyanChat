@@ -406,7 +406,7 @@ class HTTP_Server:
 				self.sessionQueues[headers["WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("Sec-WebSocket-Protocol") and self.sessionQueues.has_key(headers["Sec-Websocket-Protocol"]) and not headers.has_key("Sec-WebSocket-Version")): # protocol draft 76
+			elif(headers.has_key("Sec-Websocket-Protocol") and self.sessionQueues.has_key(headers["Sec-Websocket-Protocol"]) and not headers.has_key("Sec-Websocket-Version")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
@@ -441,7 +441,7 @@ class HTTP_Server:
 				self.sessionQueues[headers["Sec-Websocket-Protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
-			elif(headers.has_key("Sec-WebSocket-Version") and headers["Sec-Websocket-Version"] in ["8", "13"] and self.sessionQueues.has_key(headers["Sec-Websocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+			elif(headers.has_key("Sec-Websocket-Version") and headers["Sec-Websocket-Version"] in ["8", "13"] and self.sessionQueues.has_key(headers["Sec-Websocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
