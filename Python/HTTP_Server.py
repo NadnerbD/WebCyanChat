@@ -354,11 +354,11 @@ class HTTP_Server:
 	def writeHTTP(sock, code, headers={}, body=None, orderedHeaders=[]):
 		if(not body and HTTP_Server.defaultResponseData.has_key(code)):
 			body = HTTP_Server.defaultResponseData[code]
-			headers["content-type"] = "text/html"
-		if(body and not headers.has_key("content-type")):
-			headers["content-type"] = "text/plain"
+			headers["Content-Type"] = "text/html"
+		if(body and not headers.has_key("Content-Type")):
+			headers["Content-Type"] = "text/plain"
 		if(body):
-			headers["content-length"] = len(body)
+			headers["Content-Length"] = len(body)
 		sock.send("HTTP/1.1 %d %s\r\n" % (code, HTTP_Server.statusCodes[code]))
 		for header in orderedHeaders:
 			sock.send("%s: %s\r\n" % header)
