@@ -20,14 +20,15 @@ def log(obj, msg, level=0):
 		logLock.release()
 
 class errorLogger:
-	def __init__(self):
+	def __init__(self, stderr):
 		self.errorLog = None
+		self.stderr = stderr
 	
 	def write(self, string):
 		if(type(self.errorLog) != file):
 			self.errorLog = file("CCErrorLog.log", 'w')
 		self.errorLog.write(string)
 		self.errorLog.flush()
-errorOut = errorLogger()
-sys.stderr = errorOut
+		self.stderr.write(string)
+sys.stderr = errorLogger(sys.stderr)
 
