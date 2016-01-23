@@ -62,7 +62,7 @@ function connect() {
 	connectstatus.style.color = "#ff0000";
 	addTextOut("ChatClient", 5, welcome_message, "1");
 	if(window.WebSocket) {
-		connection = new WebSocket("ws://" + window.location.host + "/web-socket", "cyanchat");
+		connection = new WebSocket("ws" + (window.location.protocol == "https:" ? "s" : "") + "://" + window.location.host + "/web-socket", "cyanchat");
 	}else{
 		connection = new XmlHttpSock("/chat-data", "cyanchat");
 	}
@@ -338,6 +338,7 @@ function parseLinks(str) {
 		var l = i == words.length - 1;
 		if(isUrl.test(word)) {
 			outList.push({tag: "a", attrs: {target: "_blank", href: word}, children: [word]});
+			if(!l) outList.push(" ");
 		}else if(typeof outList[outList.length - 1] == "string") {
 			outList[outList.length - 1] += word + (l?"":" ");
 		}else{
