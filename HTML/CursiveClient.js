@@ -338,6 +338,7 @@ function parseLinks(str) {
 		var l = i == words.length - 1;
 		if(isUrl.test(word)) {
 			outList.push({tag: "a", attrs: {target: "_blank", href: word}, children: [word]});
+			if(!l) outList.push(" ");
 		}else if(typeof outList[outList.length - 1] == "string") {
 			outList[outList.length - 1] += word + (l?"":" ");
 		}else{
