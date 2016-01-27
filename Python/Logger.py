@@ -1,6 +1,21 @@
 import threading
 import sys
 
+try:
+	import ctypes
+	handle = ctypes.windll.kernel32.GetStdHandle(-11) # STD_OUTPUT_HANDLE
+except:
+	handle = False
+
+def getAttrs(handle):
+	import struct
+	buf = ctypes.create_string_buffer(22)
+	assert ctypes.windll.kernel32.GetConsoleScreenBufferInfo(handle, buf)
+	return struct.unpack("hhhhHhhhhhh", buf.raw)[4]
+
+def setAttrs(handle, attrs):
+	ctypes.windll.kernel32.SetConsoleTextAttribute(handle, attrs)
+
 # The purpose of this module is to provide simple logging capabilities
 # and to redirect stderr to a file in order to record server exceptions
 # while it is running nohup
@@ -29,6 +44,16 @@ class errorLogger:
 			self.errorLog = file("CCErrorLog.log", 'w')
 		self.errorLog.write(string)
 		self.errorLog.flush()
-		self.stderr.write(string)
+		# we should also pass the error through to the console
+		# writes errors in red on Windows Console and ANSI terminal
+		logLock.acquire()
+		if(handle):
+			reset = getAttrs(handle)
+			setAttrs(handle, 0x000c) # 4 (red) | 8 (intense)
+			self.stderr.write(string)
+			setAttrs(handle, reset)
+		else:
+			self.stderr.write("\x1b[31;1m" + string + "\x1b[0m") # 31 (red); 1 (intense)
+		logLock.release()
 sys.stderr = errorLogger(sys.stderr)
 

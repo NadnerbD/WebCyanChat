@@ -91,28 +91,56 @@ function initCanvas() {
 			lastPoint[2] += dp;
 		}
 	}
+	var cont = document.getElementById("canvas_container");
+	var canvasScale = 1;
+	var canvasOffset = [0, 0];
+	function updateCanvasTransform() {
+		cont.style.transform = "scale(" + canvasScale + ", " + canvasScale + ") translate(" + canvasOffset[0] + "px, " + canvasOffset[1] + "px)";
+	}
+	function panCanvas(e) {
+		canvasOffset[0] += (e.pageX - lastPos[0]) / canvasScale;
+		canvasOffset[1] += (e.pageY - lastPos[1]) / canvasScale;
+		lastPos = [e.pageX, e.pageY];
+		updateCanvasTransform();
+	}
+	function scaleCanvas(value) {
+		canvasScale *= value;
+		updateCanvasTransform();
+	}
+	function resetCanvas() {
+		canvasScale = 1;
+		canvasOffset = [0, 0];
+		updateCanvasTransform();
+	}
 	var undoList = [];
+	var lastPoint, lastPos;
 	function paintStart(e) {
-		// save last state for undo
-		undoList.push(fct.getImageData(0, 0, rect.width, rect.height));
-		fc.addEventListener("mousemove", paintLine, false);
-		lastPoint = getPos(e);
-		// clip drawing to the letter the stroke started in
-		fct.save();
-		if(letterMask) {
-			fct.beginPath();
-			var lx = Math.floor(lastPoint[0] / xSpacing) * xSpacing;
-			var ly = Math.floor(lastPoint[1] / ySpacing) * ySpacing;
-			fct.moveTo(lx + 1, ly + 1);
-			fct.lineTo(lx + xSpacing, ly + 1);
-			fct.lineTo(lx + xSpacing, ly + ySpacing);
-			fct.lineTo(lx + 1, ly + ySpacing);
-			fct.clip();
+		if(spaceDown) {
+			fc.addEventListener("mousemove", panCanvas, false);
+			lastPos = [e.pageX, e.pageY];
+		}else{
+			// save last state for undo
+			undoList.push(fct.getImageData(0, 0, rect.width, rect.height));
+			fc.addEventListener("mousemove", paintLine, false);
+			lastPoint = getPos(e);
+			// clip drawing to the letter the stroke started in
+			fct.save();
+			if(letterMask) {
+				fct.beginPath();
+				var lx = Math.floor(lastPoint[0] / xSpacing) * xSpacing;
+				var ly = Math.floor(lastPoint[1] / ySpacing) * ySpacing;
+				fct.moveTo(lx + 1, ly + 1);
+				fct.lineTo(lx + xSpacing, ly + 1);
+				fct.lineTo(lx + xSpacing, ly + ySpacing);
+				fct.lineTo(lx + 1, ly + ySpacing);
+				fct.clip();
+			}
 		}
 	}
 	fc.addEventListener("mousedown", paintStart, false);
 	function paintEnd(e) {
 		fc.removeEventListener("mousemove", paintLine, false);
+		fc.removeEventListener("mousemove", panCanvas, false);
 		fct.restore(); // this removes the clipping mask
 	}
 	fc.addEventListener("mouseout", paintEnd, false);
@@ -146,15 +174,33 @@ function initCanvas() {
 	document.body.addEventListener("keypress", function(e) {
 		// Chrome support, because why not I guess
 		if(!e.key) e.key = String.fromCharCode(e.charCode);
-		if(e.key == "e") {
+		if(e.key == "e" && e.ctrlKey == true) {
 			toggleEraseMode();
 		}else if(e.key == "z" && e.ctrlKey == true) {
 			undoStroke();
-		}else if(e.key == "m") {
+		}else if(e.key == "m" && e.ctrlKey == true) {
 			toggleLetterMask();
 		}else if(e.key == "s" && e.ctrlKey == true) {
 			e.preventDefault();
 			saveFontImage();
+		}else if(e.key == "PageUp") {
+			scaleCanvas(2);
+		}else if(e.key == "PageDown") {
+			scaleCanvas(0.5);
+		}else if(e.key == "Home") {
+			resetCanvas();
+		}
+	}, false);
+	var spaceDown = false;
+	document.body.addEventListener("keydown", function(e) {
+		if(e.keyCode == 32) { // Space
+			spaceDown = true;
+		}
+	}, false);
+	document.body.addEventListener("keyup", function(e) {
+		if(!e.key) e.key = String.fromCharCode(e.charCode);
+		if(e.keyCode == 32) { // Space
+			spaceDown = false;
 		}
 	}, false);
 	// now we init the chat connection
