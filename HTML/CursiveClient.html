@@ -91,6 +91,10 @@
 			}
 			#canvas_container {
 				position: relative;
+				padding: 0px;
+			}
+			#canvas_viewport {
+				overflow: hidden;
 			}
 			#font_canvas {
 				cursor: crosshair;
@@ -196,14 +200,16 @@
 				<canvas id="avatar_canvas" class="avatar" width="50" height="50"></canvas>
 				<input type="file" onchange="setAvatar(event)" />
 			</div>
-			<div id="canvas_container">
-				<canvas id="grid_canvas" height="512" width="516"></canvas>
-				<canvas id="font_canvas" height="512" width="516"></canvas>
+			<div id="canvas_viewport">
+				<div id="canvas_container">
+					<canvas id="grid_canvas" height="512" width="516"></canvas>
+					<canvas id="font_canvas" height="512" width="516"></canvas>
+				</div>
 			</div>
-			<button title="Shortcut: E" onclick="toggleEraseMode()">
+			<button title="Shortcut: CTRL+E" onclick="toggleEraseMode()">
 				<span class="fa fa-eraser"></span> Erase Mode
 			</button>
-			<button title="Shortcut: M" onclick="toggleLetterMask()">
+			<button title="Shortcut: CTRL+M" onclick="toggleLetterMask()">
 				<span class="fa fa-crop"></span> Mask
 			</button>
 			<button title="Shortcut: CTRL+S" onclick="saveFontImage()">
