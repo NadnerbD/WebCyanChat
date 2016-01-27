@@ -171,6 +171,9 @@ function initCanvas() {
 	setUseTabletCoords = function(use) {
 		useTabCoords = use;
 	};
+	fc.addEventListener("wheel", function(e) {
+		if(e.deltaY != 0) scaleCanvas(e.deltaY < 0 ? e.deltaY / -1.5 : 1.5 / e.deltaY);
+	}, false);
 	document.body.addEventListener("keypress", function(e) {
 		// Chrome support, because why not I guess
 		if(!e.key) e.key = String.fromCharCode(e.charCode);
