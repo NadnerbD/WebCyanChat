@@ -433,14 +433,14 @@ class Terminal:
 
 class Term_Server:
 	def __init__(self):
-		self.server = HTTP_Server(useSSL=True)
+		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
 		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
 		self.sessionQueue = self.server.registerProtocol("term")
 		self.connections = list()
 		self.master = None
 		self.prefs = { \
-			"http_port": 8080, \
+			"https_port": 8080, \
 			"term_proc": "/bin/bash", \
 			"term_args": "", \
 			"term_height": 24, \
@@ -498,7 +498,7 @@ class Term_Server:
 		o.start()
 
 		# start the http server (using ssl)
-		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"],))
+		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["https_port"], True))
 		s.daemon = True
 		s.start()
 

@@ -271,9 +271,11 @@ class CC_Server:
 		self.prefs = { \
 			"server_version": "CyanChat (Py CC Server 2.1)", \
 			"enable_http": 1, \
+			"enable_https": 0, \
 			"enable_cc": 1, \
 			"cc_port": 1812, \
 			"http_port": 81, \
+			"https_port": 443, \
 			"welcome_file": "CCWelcome.conf", \
 			"word_file": "BadWords.conf", \
 			"enable_bans": 0, \
@@ -389,11 +391,33 @@ class CC_Server:
 			acceptThread.setDaemon(1)
 			acceptThread.start()
 		if(self.prefs["enable_http"]):
-			acceptThread = threading.Thread(None, self.acceptHTTP, "acceptHttpLoop", (self.prefs["http_port"],))
+			# start the http server's thread
+			HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (self.prefs["http_port"],))
+			HTTPServThread.setDaemon(1)
+			HTTPServThread.start()
+			HTTPWatchdogThread = threading.Thread(None, self.watchThread, "HTTPWatchdogThread", (HTTPServThread,))
+			HTTPWatchdogThread.setDaemon(1)
+			HTTPWatchdogThread.start()
+		if(self.prefs["enable_https"]):
+			# start the http server's https thread
+			HTTPSServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPSServThread", (self.prefs["https_port"], True))
+			HTTPSServThread.setDaemon(1)
+			HTTPSServThread.start()
+			HTTPSWatchdogThread = threading.Thread(None, self.watchThread, "HTTPSWatchdogThread", (HTTPSServThread,))
+			HTTPSWatchdogThread.setDaemon(1)
+			HTTPSWatchdogThread.start()
+		if(self.prefs["enable_http"] or self.prefs["enable_https"]):
+			# accept websockets from the http server
+			acceptThread = threading.Thread(None, self.acceptHTTP, "acceptHttpLoop", ())
 			acceptThread.setDaemon(1)
 			acceptThread.start()
 		self.run()
 	
+	def watchThread(self, servThread):
+		servThread.join()
+		log(self, "%s terminated" % servThread.getName())
+		self.quit.set() #Terminate the server if a server thread dies
+
 	def run(self):
 		while(not self.quit.isSet()):
 			time.sleep(10)
@@ -429,19 +453,8 @@ class CC_Server:
 			(sock, addr) = listener.accept()
 			self.addConnection(sock, addr)
 	
-	def watchHTTP(self, HTTPServThread):
-		HTTPServThread.join()
-		log(self, "HTTP server thread terminated")
-		self.quit.set() #Terminate the server if the HTTP server dies
-
-	def acceptHTTP(self, port=81): #Threaded per-server
+	def acceptHTTP(self): #Threaded per-server
 		acceptQueue = self.HTTPServ.registerProtocol("cyanchat")
-		HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (port,))
-		HTTPServThread.setDaemon(1)
-		HTTPServThread.start()
-		HTTPWatchdogThread = threading.Thread(None, self.watchHTTP, "HTTPWatchdogThread", (HTTPServThread,))
-		HTTPWatchdogThread.setDaemon(1)
-		HTTPWatchdogThread.start()
 		while 1:
 			(sock, addr) = acceptQueue.acceptHTTPSession()
 			self.addConnection(sock, addr)

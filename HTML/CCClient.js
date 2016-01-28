@@ -62,7 +62,7 @@ function connect() {
 	connectstatus.style.color = "#ff0000";
 	addTextOut("ChatClient", 5, welcome_message, "1");
 	if(window.WebSocket) {
-		connection = new WebSocket("ws://" + window.location.host + "/web-socket", "cyanchat");
+		connection = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "cyanchat");
 	}else{
 		connection = new XmlHttpSock("/chat-data", "cyanchat");
 	}
