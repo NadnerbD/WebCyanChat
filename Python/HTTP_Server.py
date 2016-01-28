@@ -309,12 +309,11 @@ class HTTP_Server:
 			self.queueLen.acquire()
 			return self.queue.pop()
 	
-	def __init__(self, webRoot="../HTML", useSSL=False):
+	def __init__(self, webRoot="../HTML"):
 		self.sessionList = self.sessionList()
 		self.sessionQueues = dict()
 		self.redirects = dict()
 		self.webRoot = webRoot
-		self.useSSL = useSSL
 	
 	def readHTTP(self, sock):
 		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
@@ -373,7 +372,7 @@ class HTTP_Server:
 		resource = resource.replace("%20", ' ')
 		if(self.redirects.has_key(resource)):
 			redirect = self.redirects[resource]
-			if(type(redirect) == type(str())):
+			if(type(redirect) is str):
 				self.writeHTTP(sock, 302, {"Location": redirect}, "302 Redirect")
 				log(self, "redirected %s from %s to %s" % (addr, resource, self.redirects[resource]), 3)
 				return
@@ -403,7 +402,7 @@ class HTTP_Server:
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("WebSocket-Origin", headers["origin"]), \
-					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["host"])), \
+					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
 					("WebSocket-Protocol", headers["websocket-protocol"]), \
 				]
 				log(self, "got WebSocket from (%s, %s)" % addr, 3)
@@ -417,7 +416,7 @@ class HTTP_Server:
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("Sec-WebSocket-Origin", headers["origin"]), \
-					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["host"])), \
+					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
 					("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				# now we have to figure out the key
@@ -519,7 +518,7 @@ class HTTP_Server:
 			self.writeHTTP(sock, 501)
 			log(self, "couldn't handle %s request" % method, 3)
 	
-	def acceptLoop(self, port=80): #Threaded per-server
+	def acceptLoop(self, port=80, useSSL=False): #Threaded per-server port
 		listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		try:
@@ -531,7 +530,7 @@ class HTTP_Server:
 		while 1:
 			listener.listen(1)
 			(sock, addr) = listener.accept()
-			if(self.useSSL):
+			if(useSSL):
 				try:
 					sock = ssl.wrap_socket(sock, server_side=True, certfile="server.crt", keyfile="server.key", suppress_ragged_eofs=True)
 				except Exception as error:
