@@ -219,14 +219,22 @@ function fillCircle(ct, x, y, r) {
 
 function createString(str) {
 	var f = document.createDocumentFragment();
-	// TODO: add span-words so that wrapping will work correctly
-	for(var char in str) {
-		var i = document.createElement("span");
-		// when I use img tags, mysterious ::before elements appear out of nowhere
-		//i.src = "//:0";
-		//i.alt = str.charAt(char);
-		i.className = "l l-" + str.charCodeAt(char);
-		f.appendChild(i);
+	var words = str.split(" ");
+	for(var wi in words) {
+		var word = words[wi] + " ";
+		var we = document.createElement("span");
+		we.style.display = "inline-block";
+		for(var char in word) {
+			var i = document.createElement("span");
+			// when I use img tags, mysterious ::before elements appear out of nowhere
+			//i.src = "//:0";
+			//i.alt = str.charAt(char);
+			i.className = "l l-" + word.charCodeAt(char);
+			we.appendChild(i);
+		}
+		f.appendChild(we);
 	}
+	// remove the space from the last element
+	f.lastChild.removeChild(f.lastChild.lastChild);
 	return f;
 }
