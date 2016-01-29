@@ -221,9 +221,8 @@ function createString(str) {
 	var f = document.createDocumentFragment();
 	var words = str.split(" ");
 	for(var wi in words) {
-		var word = words[wi];
+		var word = words[wi] + " ";
 		var we = document.createElement("span");
-		we.style.whiteSpace = "nowrap";
 		we.style.display = "inline-block";
 		for(var char in word) {
 			var i = document.createElement("span");
@@ -234,10 +233,8 @@ function createString(str) {
 			we.appendChild(i);
 		}
 		f.appendChild(we);
-		var space = document.createElement("span");
-		space.className = "l l-32";
-		f.appendChild(space);
 	}
-	f.removeChild(f.lastChild);
+	// remove the space from the last element
+	f.lastChild.removeChild(f.lastChild.lastChild);
 	return f;
 }
