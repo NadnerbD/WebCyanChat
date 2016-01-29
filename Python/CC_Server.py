@@ -334,8 +334,6 @@ class CC_Server:
 			if(pref == "log_level"):
 				logging = int(newPrefs[pref])
 		self.prefs.update(newPrefs)
-		self.readWelcome()
-		self.readWordList()
 	
 	def readWelcome(self, filename=None):
 		if(not filename):
@@ -386,6 +384,8 @@ class CC_Server:
 	
 	def start(self):
 		self.parseAuth()
+		self.readWelcome()
+		self.readWordList()
 		if(self.prefs["enable_cc"]):
 			acceptThread = threading.Thread(None, self.acceptLoop, "acceptLoop", (self.prefs["cc_port"],))
 			acceptThread.setDaemon(1)
@@ -586,6 +586,9 @@ class CC_Server:
 		elif(cmd == 90): # reload config
 			if(connection.authLevel > 1):
 				self.readPrefs()
+				self.parseAuth()
+				self.readWelcome()
+				self.readWordList()
 	
 	def handleBounce(self, connection, cmd, msg):
 		if(cmd == 100): # bounce key request
@@ -623,14 +626,43 @@ class CC_Server:
 			self.showTime(connection)
 		elif(msg == "stats"):
 			self.showStats(connection)
-		elif(msg == "reload"):
-			self.readPrefs()
+		# extended chat commands for server administration
+		elif(connection.authLevel > 1 and self.prefs["enable_admin_extensions"]):
+			if(msg == "reload"):
+				self.readPrefs()
+			elif(msg.startswith("set ")):
+				args = msg[4:].split(" ", 1)
+				if(len(args) == 2):
+					self.prefs[args[0]] = int(args[1]) if args[1].isdigit() else args[1]
+				self.connections.sendPM(self.chatServer(2), connection, "%s=%r" % (args[0], self.prefs[args[0]]), 1)
+			elif(msg.startswith("get ")):
+				args = msg[4:].split(" ")
+				for arg in args:
+					if(self.prefs.has_key(arg)):
+						self.connections.sendPM(self.chatServer(2), connection, "%s=%r" % (arg, self.prefs[arg]), 1)
+			else:
+				return 0
+			# do these in case a relevant pref was changed
+			self.parseAuth()
+			self.readWelcome()
+			self.readWordList()
 		else:
 			return 0
 		return 1
 	
 	def showHelp(self, connection):
-		commandsmessage = ['!\\time	 (displays server current time)', '!\\stats	(displays server stats)', 'Server commands:']
+		commandsmessage = [
+			'Server commands:', \
+			'!\\stats	(displays server stats)', \
+			'!\\time	(displays server current time)' \
+		]
+		if(connection.authLevel > 1 and self.prefs["enable_admin_extensions"]):
+			commandsmessage += [ \
+				'!\\reload	(reloads server config file)', \
+				'!\\set <pref> <value>	(sets a pref value)', \
+				'!\\get <pref>	(displays a pref value)' \
+			]
+		commandsmessage.reverse()
 		for line in commandsmessage:
 			self.connections.sendPM(self.chatServer(2), connection, line, 1)
 		
