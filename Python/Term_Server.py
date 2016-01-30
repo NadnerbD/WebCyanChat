@@ -498,7 +498,7 @@ class Term_Server:
 		o.start()
 
 		# start the http server (using ssl)
-		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["https_port"], True))
+		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"], False))
 		s.daemon = True
 		s.start()
 
