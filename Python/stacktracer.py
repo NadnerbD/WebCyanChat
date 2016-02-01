@@ -4,9 +4,9 @@
 Usage:
 
 import stacktracer
-stacktracer.start_trace("trace.html",interval=5,auto=True) # Set auto flag to always update file!
+stacktracer.trace_start("trace.html",interval=5,auto=True) # Set auto flag to always update file!
 ....
-stacktracer.stop_trace()
+stacktracer.trace_stop()
 """
 
 
@@ -99,3 +99,4 @@ def trace_stop():
     else:
         _trace.stop()
         _trace = None
+

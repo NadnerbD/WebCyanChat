@@ -4,6 +4,9 @@ from Term_Server import Term_Server
 from threading import Thread
 import os, sys
 
+import stacktracer
+stacktracer.trace_start("/app/HTML/trace.html")
+
 if(os.path.dirname(sys.argv[0])):
 	os.chdir(os.path.dirname(sys.argv[0]))
 
