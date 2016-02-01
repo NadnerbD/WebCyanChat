@@ -16,7 +16,7 @@ from HTTP_Server import HTTP_Server
 from VTParse import CommandParser
 
 import stacktracer
-stacktracer.start_trace("trace.html",interval=5,auto=True)
+stacktracer.trace_start("trace.html",interval=5,auto=True)
 
 class Style:
 	# this object represents the font style of a single character
