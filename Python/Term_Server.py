@@ -535,7 +535,13 @@ class Term_Server:
 		log(self, "Accepted password from (%s, %s)" % addr)
 		self.terminal.sendInit(sock)
 		while True:
-			char = chr(int(sock.recvFrame()))
+			try:
+				char = chr(int(sock.recvFrame()))
+			except Exception as error:
+				# if we hit an error reading from the socket, remove it and end the thread
+				log(self, "Error reading from socket %s: %s" % (sock, error))
+				self.connections.remove(sock)
+				return
 			if(char == '\r'):
 				char = '\n'
 			log(self, "recvd: %r" % char, 4)
