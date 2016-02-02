@@ -244,7 +244,7 @@ class HTTP_Server:
 				data = data[sent:]
 				if(sent == 0):
 					# if we fail to send any data, bail
-					return
+					raise IOError("0 bytes sent")
 
 		def decode(data, key):
 			out = ''

@@ -247,7 +247,8 @@ class Terminal:
 		for sock in self.parent.connections:
 			try:
 				sock.send(msg)
-			except:
+			except Exception as error:
+				log(self, "Send error to %r, %s", (sock, error))
 				lost.append(sock)
 		for sock in lost:
 			self.parent.connections.remove(sock)
