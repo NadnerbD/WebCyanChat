@@ -239,7 +239,12 @@ class HTTP_Server:
 				self.sock.send(struct.pack(">H", len(data)))
 			else:
 				self.sock.send(struct.pack("B", len(data)))
-			self.sock.sendall(data)
+			while(len(data)):
+				sent = self.sock.send(data)
+				data = data[sent:]
+				if(sent == 0):
+					# if we fail to send any data, bail
+					return
 
 		def decode(data, key):
 			out = ''
