@@ -13,7 +13,7 @@ import os
 from Logger import log
 from Utils import parseToDict
 from HTTP_Server import HTTP_Server
-from VTParse import CommandParser
+from VTParse import Parser
 
 class Style:
 	# this object represents the font style of a single character
@@ -127,6 +127,66 @@ class Buffer:
 		self.sdiff = dict()
 		return msg
 
+class Charmap:
+	graphics_map = {\
+		'_': u'\u2400',\
+		'`': u'\u25C6',\
+		'a': u'\u2592',\
+		'b': u'\u2409',\
+		'c': u'\u240C',\
+		'd': u'\u240D',\
+		'e': u'\u240A',\
+		'f': u'\u00B0',\
+		'g': u'\u00B1',\
+		'h': u'\u2424',\
+		'i': u'\u240B',\
+		'j': u'\u2518',\
+		'k': u'\u2510',\
+		'l': u'\u250C',\
+		'm': u'\u2514',\
+		'n': u'\u253C',\
+		'o': u'\u23BA',\
+		'p': u'\u23BB',\
+		'q': u'\u2500',\
+		'r': u'\u23BC',\
+		's': u'\u23BD',\
+		't': u'\u251C',\
+		'u': u'\u2524',\
+		'v': u'\u2534',\
+		'w': u'\u252C',\
+		'x': u'\u2502',\
+		'y': u'\u2264',\
+		'z': u'\u2265',\
+		'{': u'\u03C0',\
+		'|': u'\u2260',\
+		'}': u'\u00A3',\
+		'~': u'\u00B7',\
+	}
+
+	def __init__(self, mode='B'):
+		self.mode = mode
+
+	def setMode(self, mode):
+		self.mode = mode
+
+	def map(self, char):
+		if self.mode == 'A':
+			if char == '#':
+				return u'\u00A3'
+		elif self.mode == '0':
+			if char in Charmap.graphics_map:
+				return Charmap.graphics_map[char]
+		return char
+
+
+# for setting default argument values
+def argDefaults(srcArgs, defArgs):
+	for i in range(max(len(srcArgs), len(defArgs))):
+		if(len(srcArgs) == i):
+			srcArgs.append(defArgs[i])
+		elif(srcArgs[i] == 0):
+			srcArgs[i] = defArgs[i]
+
 class Terminal:
 	def __init__(self, parent, width=80, height=24):
 		self.buffers = [Buffer(width, height), Buffer(width, height)]
@@ -134,13 +194,19 @@ class Terminal:
 		self.bufferIndex = 0
 		# stuff which is not duplicated with buffers
 		self.scrollRegion = [1, height]
+		self.horizontalTabs = set()
 		self.echo = True
 		self.edit = True
 		self.attrs = Style()
+		self.charmaps = [Charmap('B'), Charmap('0')]
+		self.shift_out = 0
 		self.showCursor = True
 		self.autoWrap = True
 		self.originMode = False
 		self.savedPos = 0
+		self.savedStyle = Style()
+		self.savedShift = 0
+		self.savedCharsets = ['B', '0']
 		self.parent = parent
 		self.updateEvent = threading.Event()
 		self.lastUpdate = 0
@@ -221,12 +287,25 @@ class Terminal:
 				self.buffer.pos += self.buffer.size[0]
 			self.buffer.atEnd = False
 		elif(char == '\t'):
-			self.move(8 - (self.buffer.pos % self.buffer.size[0]) % 8, 0)
+			hpos = self.buffer.pos % self.buffer.size[0]
+			# move to the first available tab stop
+			for tab in self.horizontalTabs:
+				if(tab > hpos):
+					self.move(tab - hpos, 0)
+					return
+			# if we don't encounter a tab stop, move to the right margin
+			self.move(self.buffer.size[0] - 1 - hpos, 0)
 		elif(char == '\x08'): # backspace
 			self.buffer.pos -= 1
 			self.buffer.atEnd = False
 		elif(char == '\x07'):
 			pass # bell
+		elif(char == '\x0E'):
+			self.shift_out = 1
+		elif(char == '\x0F'):
+			self.shift_out = 0
+		elif(ord(char) < 0x20 or char == '\x7F'):
+			pass # other ascii control chars we don't understand
 		else:
 			if(self.buffer.atEnd and self.autoWrap):
 				self.buffer.pos += 1
@@ -236,7 +315,7 @@ class Terminal:
 					self.buffer.pos -= self.buffer.size[0]
 			if(self.buffer.pos >= self.buffer.len):
 				self.buffer.pos = self.buffer.len - 1
-			self.buffer[self.buffer.pos] = (char, Style(self.attrs))
+			self.buffer[self.buffer.pos] = (self.charmaps[self.shift_out].map(char), Style(self.attrs))
 			if(self.buffer.pos % self.buffer.size[0] == self.buffer.size[0] - 1 and self.buffer.atEnd == False):
 				self.buffer.atEnd = True
 			elif(not (self.buffer.atEnd and self.autoWrap == False)):
@@ -258,34 +337,43 @@ class Terminal:
 		reInit = False
 		# do stuff
 		if(cmd.cmd == "add"):
-			self.add(cmd.args)
+			self.add(cmd.args[0])
 		elif(cmd.cmd == "home"):
-			if(len(cmd.args) == 2):
-				self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
-			else:
-				self.setPos(0, 0)
+			argDefaults(cmd.args, [0, 0])
+			self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
+		elif(cmd.cmd == "tabSet"):
+			self.horizontalTabs.add(self.buffer.pos % self.buffer.size[0])
+		elif(cmd.cmd == "tabClear"):
+			argDefaults(cmd.args, [0])
+			hpos = self.buffer.pos % self.buffer.size[0]
+			if(cmd.args[0] == 0 and hpos in self.horizontalTabs):
+				self.horizontalTabs.remove(hpos)
+			elif(cmd.args[0] == 3):
+				self.horizontalTabs = set()
 		elif(cmd.cmd == "saveCursor"):
 			self.savedPos = self.buffer.pos
+			self.savedStyle = Style(self.attrs)
+			self.savedShift = self.shift_out
+			self.savedCharsets[0] = self.charmaps[0].mode
+			self.savedCharsets[1] = self.charmaps[1].mode
 		elif(cmd.cmd == "restoreCursor"):
 			self.buffer.pos = self.savedPos
+			self.attrs = self.savedStyle
+			self.shift_out = self.savedShift
+			self.charmaps[0].setMode(self.savedCharsets[0])
+			self.charmaps[1].setMode(self.savedCharsets[1])
 		elif(cmd.cmd == "cursorFwd"):
-			if(cmd.args == None):
-				cmd.args = 1
-			cmd.args = max(cmd.args, 1)
-			self.move(cmd.args, 0)
+			argDefaults(cmd.args, [1])
+			self.move(cmd.args[0], 0)
 		elif(cmd.cmd == "cursorBack"):
-			if(cmd.args == None):
-				cmd.args = 1
-			cmd.args = max(cmd.args, 1)
-			self.move(-cmd.args, 0)
+			argDefaults(cmd.args, [1])
+			self.move(-cmd.args[0], 0)
 		elif(cmd.cmd == "cursorUp"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.move(0, -cmd.args)
+			argDefaults(cmd.args, [1])
+			self.move(0, -cmd.args[0])
 		elif(cmd.cmd == "cursorDown"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.move(0, cmd.args)
+			argDefaults(cmd.args, [1])
+			self.move(0, cmd.args[0])
 		elif(cmd.cmd == "linePosAbs"):
 			if(len(cmd.args) == 2):
 				self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
@@ -294,9 +382,8 @@ class Terminal:
 			else:
 				self.setPos(self.getPos()[0], 0)
 		elif(cmd.cmd == "curCharAbs"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.setPos(cmd.args - 1, self.getPos()[1])
+			argDefaults(cmd.args, [1])
+			self.setPos(cmd.args[0] - 1, self.getPos()[1])
 		elif(cmd.cmd == "nextLine"):
 			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
 				self.scroll(1)
@@ -314,60 +401,55 @@ class Terminal:
 			else:
 				self.move(0, -1)
 		elif(cmd.cmd == "eraseOnDisplay"):
-			if(cmd.args == 1): # Above
+			argDefaults(cmd.args, [0])
+			if(cmd.args[0] == 1): # Above
 				self.erase(0, self.buffer.pos + 1)
-			elif(cmd.args == 2): # All
+			elif(cmd.args[0] == 2): # All
 				self.erase(0, self.buffer.len)
 			else: # 0 (Default) Below
 				self.erase(self.buffer.pos, self.buffer.len)
 		elif(cmd.cmd == "eraseOnLine"):
+			argDefaults(cmd.args, [0])
 			lineStart = self.getPos()[1] * self.buffer.size[0]
-			if(cmd.args == 1): # Left
+			if(cmd.args[0] == 1): # Left
 				self.erase(lineStart, self.buffer.pos + 1)
-			elif(cmd.args == 2): # All
+			elif(cmd.args[0] == 2): # All
 				self.erase(lineStart, lineStart + self.buffer.size[0])
 			else: # 0 (Default) Right
 				self.erase(self.buffer.pos, lineStart + self.buffer.size[0])
 		elif(cmd.cmd == "scrollUp"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.scroll(cmd.args)
+			argDefaults(cmd.args, [1])
+			self.scroll(cmd.args[0])
 		elif(cmd.cmd == "scrollDown"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.scroll(-cmd.args)
+			argDefaults(cmd.args, [1])
+			self.scroll(-cmd.args[0])
 		elif(cmd.cmd == "insertLines"):
 			# adds (erases) lines at curPos and pushes (scrolls) subsequent ones down
-			if(cmd.args == None):
-				cmd.args = 1
+			argDefaults(cmd.args, [1])
 			tmp = self.scrollRegion # store scroll region
 			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
-			self.scroll(-cmd.args)
+			self.scroll(-cmd.args[0])
 			self.scrollRegion = tmp # restore scroll region
 		elif(cmd.cmd == "removeLines"):
 			# removes (erases) lines at curPos and pulls (scrolls) subsequent ones up
-			if(cmd.args == None):
-				cmd.args = 1
+			argDefaults(cmd.args, [1])
 			tmp = self.scrollRegion # store scroll region
 			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
-			self.scroll(cmd.args)
+			self.scroll(cmd.args[0])
 			self.scrollRegion = tmp # restore scroll region
 		elif(cmd.cmd == "deleteChars"):
 			# delete n chars in the current line starting at curPos, pulling the rest back
-			if(cmd.args == None):
-				cmd.args = 1
-			self.shift(self.buffer.pos + cmd.args, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args)
+			argDefaults(cmd.args, [1])
+			self.shift(self.buffer.pos + cmd.args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args[0])
 		elif(cmd.cmd == "addBlanks"):
 			# insert n blanks in the current line starting at curPos, pushing the rest forward
-			if(cmd.args == None):
-				cmd.args = 1
-			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args), cmd.args)
+			argDefaults(cmd.args, [1])
+			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args[0]), cmd.args[0])
 		elif(cmd.cmd == "eraseChars"):
-			if(cmd.args == None):
-				cmd.args = 1
-			self.erase(self.buffer.pos, self.buffer.pos + cmd.args, True)
+			argDefaults(cmd.args, [1])
+			self.erase(self.buffer.pos, self.buffer.pos + cmd.args[0], True)
 		elif(cmd.cmd == "setScrollRegion"):
-			if(cmd.args[0] == None):
+			if(len(cmd.args) != 2):
 				cmd.args = [1, self.buffer.size[1]]
 			self.scrollRegion = cmd.args
 			self.buffer.pos = 0
@@ -406,10 +488,14 @@ class Terminal:
 				self.buffer.atEnd = False
 				reInit = True
 		elif(cmd.cmd == "charAttributes"):
+			if(len(cmd.args) == 0):
+				self.attrs.update(0)
 			for arg in cmd.args:
-				if(arg == None):
-					arg = 0
 				self.attrs.update(arg)
+		elif(cmd.cmd == "setG0CharSet"):
+			self.charmaps[0].setMode(cmd.args[0])
+		elif(cmd.cmd == "setG1CharSet"):
+			self.charmaps[1].setMode(cmd.args[0])
 		elif(cmd.cmd == "screenAlignment"):
 			self.erase(0, self.buffer.len, True, 'E')
 		if(reInit):
@@ -429,6 +515,7 @@ class Terminal:
 		self.bufferLock.acquire()
 		self.broadcast(self.buffer.diffMsg(self.showCursor))
 		self.lastUpdate = 0
+		self.updateEvent.clear()
 		self.bufferLock.release()
 
 class Term_Server:
@@ -521,7 +608,7 @@ class Term_Server:
 			shutdown.set()
 
 	def handleOutput(self, shutdown):
-		parser = CommandParser(self.rstream)
+		parser = Parser(self.rstream)
 		while not shutdown.is_set():
 			command = parser.getCommand()
 			if(command == None):
@@ -578,5 +665,4 @@ class Term_Server:
 				else:
 					break
 			self.terminal.sendDiff()
-			self.terminal.updateEvent.clear()
 

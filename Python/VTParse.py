@@ -1,216 +1,343 @@
+import collections
+import threading
+
 from Logger import log
 
-class ParseException(Exception):
-	# Special exception for parsing errors, so that the try doesn't 
-	# silence more important errors
-	pass
+escapeCodeStrings = { \
+	'=': 'setAppKeys', \
+	'>': 'setNormKeys', \
+	'(': 'setG0CharSet', \
+	')': 'setG1CharSet', \
+	'E': 'nextLine', \
+	'D': 'index', \
+	'M': 'reverseIndex', \
+	'H': 'tabSet', \
+	'7': 'saveCursor', \
+	'8': 'restoreCursor', \
+	'#8': 'screenAlignment', \
+}
 
-class CommandParser:
-	class command:
-		def __init__(self, cmd, args):
-			self.cmd = cmd
-			self.args = args
+paramCmdStrings = { \
+	's': 'saveCursor', \
+	'u': 'restoreCursor', \
+	'H': 'home', \
+	'f': 'home', \
+	'r': 'setScrollRegion', \
+	'm': 'charAttributes', \
+	'h': 'setMode', \
+	'l': 'resetMode', \
+	'd': 'linePosAbs', \
+	'g': 'tabClear', \
+	'G': 'curCharAbs', \
+	'J': 'eraseOnDisplay', \
+	'K': 'eraseOnLine', \
+	'S': 'scrollUp', \
+	'T': 'scrollDown', \
+	'L': 'insertLines', \
+	'M': 'removeLines', \
+	'A': 'cursorUp', \
+	'B': 'cursorDown', \
+	'C': 'cursorFwd', \
+	'D': 'cursorBack', \
+	'P': 'deleteChars', \
+	'@': 'addBlanks', \
+	'X': 'eraseChars', \
+}
 
-		def __repr__(self):
-			return "<command(%s) %r>" % (self.cmd, self.args)
+DECModeCmdStrings = { \
+	'h': 'setDECMode', \
+	'l': 'resetDECMode', \
+}
 
+termCmdStrings = { \
+	'T': 'resetTitleMode', \
+	'c': 'sendDeviceAttributes2', \
+	'm': 'setModifierSeqs', \
+	'n': 'resetModifierSeqs', \
+	'p': 'setPointerMode', \
+	't': 'setTitleModeFeatures', \
+}
+
+privateMarkers = { \
+	'':  paramCmdStrings, \
+	'?': DECModeCmdStrings, \
+	'>': termCmdStrings, \
+}
+
+class Command:
+	def __init__(self, cmd, args):
+		self.cmd = cmd
+		self.args = args
+
+	def __repr__(self):
+		return "<command(%s) %r>" % (self.cmd, self.args)
+
+class Parser:
+	# Parser class: consumes input from a stream, and queues it for consumption by a terminal thread
+	# Based on vt series parser documentation found at: http://vt100.net/emu/dec_ansi_parser
+	# Currently only implements
 	def __init__(self, stream):
 		self.stream = stream
-		self.char = str()
-		self.lastCode = str()
-		self.needChar = True
+		self.char = ''
+		self.clear()
+		self.parseState = self.ground
+		self.commandQueue = collections.deque()
+		self.commandReady = threading.Semaphore(0)
+		parseThread = threading.Thread(target=self.parseLoop, name="parseLoop", args=())
+		parseThread.daemon = True
+		parseThread.start()
 
-	def accept(self, char):
-		# in order to parse to the end of the stream without needing to fetch a
-		# terminator character, a successful accept will actually leave self.char
-		# untouched, but will flag it as old, to be removed during the next attempt
-		# to accept a character
-		if(self.needChar):
-			self.getChar()
-		if(self.char == char or (isinstance(char, list) and self.char in char)):
-			self.needChar = True
-			return True
+	def rangeTest(self, ranges):
+		# tests self.char against the supplied ranges
+		test = ord(self.char)
+		for range in ranges:
+			if(len(range) == 1 and test == range[0]):
+				return True
+			elif(len(range) == 2 and test >= range[0] and test <= range[1]):
+				return True
+			elif(len(range) > 2 or len(range) < 1):
+				raise Exception("invalid range")
 		return False
 
-	def consume(self):
-		# this function is equivalent to an accept([all possible characters]) that
-		# returns the accepted character
-		if(self.needChar):
-			self.getChar()
-		self.needChar = True
-		return self.char
+	def missingAction(self, state):
+		log(self, "state '%s' has no action for: %r (%s) in %r" % \
+			(state, self.char, hex(self.char), self.debugStr))
+		self.setState(self.ground)
+		
 
-	def getChar(self):
-		self.char = self.stream.read(1)
-		self.lastCode += self.char
-		self.needChar = False
-		#log(self, "read: %r" % self.char)
-
-	def expect(self, char):
-		if(not self.accept(char)):
-			self.error('Expected %r' % char)
-
-	def error(self, string):
-		log(self, "Error parsing: %r (%s)" % (self.lastCode, string))
-		raise ParseException
+	#### I/O Facilitation functions ####
 		
 	def getCommand(self):
+		# called by whatever thread is consuming parser output
+		self.commandReady.acquire()
+		if(len(self.commandQueue) == 0):
+			return None
+		return self.commandQueue.popleft()
+
+	def putCommand(self, command):
+		# called to send a command to the parser output queue
+		self.commandQueue.append(command)
+		self.commandReady.release()
+
+	def setState(self, state):
+		# using this function to change state
+		# allows states to have start and end event hooks
+		### end hooks
+		if(self.parseState == self.osc_string):
+			self.osc_end()
+		### start hooks
+		if(state == self.escape):
+			self.clear()
+		elif(state == self.csi_entry):
+			self.clear()
+		self.parseState = state
+
+	def parseLoop(self):
+		# the main loop, started by __init__
+		# consumes input from self.stream
 		while True:
-			self.lastCode = str()
+			# Consume the next character
 			try:
-				return self.parse()
-			except ParseException:
-				pass
+				self.char = self.stream.read(1)
+			except:
+				self.char = ''
+			if(self.char == ''):
+				self.commandReady.release()
+				return
+			#log(self, "got char: %r" % self.char)
+			self.debugStr += self.char
+			# Check the 'from anywhere' directives
+			if(self.char   == '\x1B'): # ESC
+				self.setState(self.escape)
+			elif(self.char == '\x9D'):
+				self.setState(self.osc_string)
+			elif(self.char == '\x9B'):
+				self.setState(self.csi_entry)
+			elif(self.char == '\x9C'): # ST
+				self.setState(self.ground)
+			elif(self.rangeTest([[0x18], [0x1A], [0x80, 0x8F], [0x91, 0x97], [0x99], [0x9A]])):
+				self.execute()
+				self.setState(self.ground)
+			else:
+				# Execute the current state
+				self.parseState()
 
-	def parse(self):
-		# begin parsing
-		if(self.accept('\x1b')):
-			return self.escapeCode()
-		if(self.accept('\x00')):
-			return self.command('padding', None)
-		elif(self.accept('')): #EOF
-			return None
+	#### Commands, to be executed from inside parser states ####
+
+	def clear(self):
+		self.oscStr = str()
+		self.paramStr = str()
+		self.privateMarker = str()
+		# used for parse failure log messages
+		self.debugStr = str()
+
+	def execute(self):
+		self.putCommand(Command('add', self.char))
+
+	def print_ascii(self):
+		self.putCommand(Command('add', self.char))
+
+	def print_utf8(self):
+		# consumes directly from the stream to the end of the utf-8 character
+		charLen = 0
+		while((ord(self.char) << charLen) & 0x80):
+			charLen += 1
+		for i in range(charLen - 1):
+			self.char += self.stream.read(1)
+		self.putCommand(Command('add', unicode(self.char, 'utf-8')))
+
+	def esc_dispatch(self):
+		cmd = self.privateMarker + self.char
+		if(cmd in escapeCodeStrings):
+			self.putCommand(Command(escapeCodeStrings[cmd], None))
+		elif(cmd[0] in escapeCodeStrings):
+			self.putCommand(Command(escapeCodeStrings[cmd[0]], [cmd[1]]))
 		else:
-			# this will consume one UTF-8 character
-			# in case of invalid UTF-8 input, this will modify the stream
-			char = self.consume()
-			charLen = 0
-			while((ord(char[0]) << charLen) & 0x80):
-				charLen += 1
-			if(charLen > 1 and charLen <= 4):
-				for i in range(charLen - 1):
-					char += self.consume()
-			return self.command('add', unicode(char, "utf-8", errors='replace'))
+			log(self, 'Unrecognized ESC code: %r' % self.debugStr)
 
-	def escapeCode(self):
-		if(self.accept('[')):
-			return self.paramCmd()
-		elif(self.accept(']')):
-			return self.osCmd()
-		elif(self.accept('=')):
-			return self.command('setAppKeys', None)
-		elif(self.accept('>')):
-			return self.command('setNormKeys', None)
-		elif(self.accept('(')):
-			return self.command('setG0CharSet', self.consume())
-		elif(self.accept(')')):
-			return self.command('setG1CharSet', self.consume())
-		elif(self.accept('E')):
-			return self.command('nextLine', None)
-		elif(self.accept('D')):
-			return self.command('index', None)
-		elif(self.accept('M')):
-			return self.command('reverseIndex', None)
-		elif(self.accept('#') and self.accept('8')):
-			return self.command('screenAlignment', None)
+	def csi_dispatch(self):
+		if(self.privateMarker in privateMarkers \
+		and self.char in privateMarkers[self.privateMarker]):
+			params = [int(i) for i in self.paramStr.split(';') if len(i) > 0]
+			cmdName = privateMarkers[self.privateMarker][self.char]
+			self.putCommand(Command(cmdName, params))
 		else:
-			self.error("Unknown escape code")
+			log(self, 'Unrecognized CSI code: %r' % self.debugStr)
 
-	def osCmd(self):
-		cmd = self.number()
-		self.expect(';')
-		value = self.string()
-		return self.command('OSCommand', [cmd, value])
+	def osc_end(self):
+		try:
+			(cmd, str) = self.oscStr.split(';', 1)
+			self.putCommand(Command('OSCommand', [int(cmd), unicode(str, 'utf-8')]))
+		except:
+			log(self, 'Error parsing OSC string: %r' % self.debugStr)
 
-	def paramCmd(self):
-		if(self.accept('?')):
-			return self.DECModeCmd()
-		elif(self.accept('>')):
-			return self.termCmd()
-		elif(self.accept('s')):
-			return self.command('saveCursor', None)
-		elif(self.accept('u')):
-			return self.command('restoreCursor', None)
-		values = self.numberList()
-		if(self.accept('H') or self.accept('f')):
-			return self.command('home', values)
-		elif(self.accept('r')):
-			return self.command('setScrollRegion', values)
-		elif(self.accept('m')):
-			return self.command('charAttributes', values)
-		elif(self.accept('h')):
-			return self.command('setMode', values)
-		elif(self.accept('l')):
-			return self.command('resetMode', values)
-		elif(self.accept('d')):
-			return self.command('linePosAbs', values)
-		elif(self.accept('G')):
-			return self.command('curCharAbs', values[0])
-		elif(self.accept('J')):
-			return self.command('eraseOnDisplay', values[0])
-		elif(self.accept('K')):
-			return self.command('eraseOnLine', values[0])
-		elif(self.accept('S')):
-			return self.command('scrollUp', values[0])
-		elif(self.accept('T')):
-			return self.command('scrollDown', values[0])
-		elif(self.accept('L')):
-			return self.command('insertLines', values[0])
-		elif(self.accept('M')):
-			return self.command('removeLines', values[0])
-		#ABCD - up, down, forward, back
-		elif(self.accept('A')):
-			return self.command('cursorUp', values[0])
-		elif(self.accept('B')):
-			return self.command('cursorDown', values[0])
-		elif(self.accept('C')):
-			return self.command('cursorFwd', values[0])
-		elif(self.accept('D')):
-			return self.command('cursorBack', values[0])
-		elif(self.accept('P')):
-			return self.command('deleteChars', values[0])
-		elif(self.accept('@')):
-			return self.command('addBlanks', values[0])
-		elif(self.accept('X')):
-			return self.command('eraseChars', values[0])
+	def osc_put(self):
+		self.oscStr += self.char
+
+	def param(self):
+		self.paramStr += self.char
+
+	def collect(self):
+		self.privateMarker += self.char
+
+	#### States, executed by parseLoop ####
+
+	def ground(self):
+		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
+		elif(self.rangeTest([[0x20, 0x7F]])):
+			self.print_ascii()
+		elif(self.rangeTest([[0xC0, 0xDF], [0xE0, 0xEF], [0xF0, 0xF7]])):
+			self.print_utf8()
 		else:
-			self.error("Unknown paramCmd code")
-	
-	def DECModeCmd(self):
-		values = self.numberList()
-		if(self.accept('h')):
-			return self.command('setDECMode', values)
-		elif(self.accept('l')):
-			return self.command('resetDECMode', values)
-		else:
-			self.error("Unknown DEC mode command")
+			self.missingAction('ground')
 
-	def termCmd(self):
-		values = self.numberList()
-		if(self.accept('T')):
-			return self.command('resetTitleMode', values)
-		elif(self.accept('c')):
-			return self.command('sendDeviceAttributes2', values[0])
-		elif(self.accept('m')):
-			return self.command('setModifierSeqs', values)
-		elif(self.accept('n')):
-			return self.command('resetModifierSeqs', values)
-		elif(self.accept('p')):
-			return self.command('setPointerMode', values[0])
-		elif(self.accept('t')):
-			return self.command('setTitleModeFeatures', values[0])
+	def escape(self):
+		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
+		elif(self.char == '\x7F'):
+			pass
+		elif(self.rangeTest([[0x20, 0x2F]])):
+			self.collect()
+			self.setState(self.escape_intermediate)
+		elif(self.rangeTest([[0x30, 0x4F], [0x51, 0x57], [0x59], [0x5A], [0x5C], [0x60, 0x7E]])):
+			self.esc_dispatch()
+			self.setState(self.ground)
+		elif(self.char == '\x5B'): # [
+			self.setState(self.csi_entry)
+		elif(self.char == '\x5D'): # ]
+			self.setState(self.osc_string)
 		else:
-			self.error("Unknown termCmd")
-		
-	def numberList(self):
-		# accepts 0 or more numbers
-		values = [self.number()]
-		while(self.accept(';')):
-			values.append(self.number())
-		return values
+			self.missingAction('escape')
 
-	def number(self):
-		value = str()
-		while(self.accept(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])):
-			value += self.char
-		if(len(value)):
-			return int(value)
+	def escape_intermediate(self):
+		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
+		elif(self.rangeTest([[0x20, 0x2F]])):
+			self.collect()
+		elif(self.char == '\x7F'):
+			pass
+		elif(self.rangeTest([[0x30, 0x7E]])):
+			self.esc_dispatch()
+			self.setState(self.ground)
 		else:
-			return None
+			self.missingAction('escape_intermediate')
 
-	def string(self):
-		value = str()
-		while(not self.accept(['\x9c', '\x07'])):
-			value += self.char
-			self.consume()
-		return value
+	def osc_string(self):
+		if(self.char == '\x07'):
+			# for some reason, the diagram I made this from does
+			# not show osc_string ending with a BEL character
+			self.osc_end()
+			self.setState(self.ground)
+		elif(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			pass
+		elif(self.rangeTest([[0x20, 0x7F]])):
+			self.osc_put()
+		else:
+			self.missingAction('osc_string')
+
+	def csi_entry(self):
+		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
+		elif(self.char == '\x7F'):
+			pass
+		elif(self.rangeTest([[0x40, 0x7E]])):
+			self.csi_dispatch()
+			self.setState(self.ground)
+		elif(self.rangeTest([[0x30, 0x39], [0x3B]])):
+			self.param()
+			self.setState(self.csi_param)
+		elif(self.rangeTest([[0x3C, 0x3F]])):
+			self.collect()
+			self.setState(self.csi_param)
+		elif(self.char == '\x3A'):
+			self.setState(self.csi_ignore)
+		elif(self.rangeTest([[0x20, 0x2F]])):
+			self.collect()
+			self.setState(self.csi_intermediate)
+		else:
+			self.missingAction('csi_entry')
+
+	def csi_intermediate(self):
+		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
+		elif(self.rangeTest([[0x20, 0x2F]])):
+			self.collect()
+		elif(self.char == '\x7F'):
+			pass
+		elif(self.rangeTest([[0x30, 0x3F]])):
+			self.setState(self.csi_ignore)
+		elif(self.rangeTest([[0x40, 0x7E]])):
+			self.csi_dispatch()
+			self.setState(self.ground)
+		else:
+			self.missingAction('csi_intermediate')
+
+	def csi_param(self):
+		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
+		elif(self.rangeTest([[0x30, 0x39], [0x3B]])):
+			self.param()
+		elif(self.char == '\x7F'):
+			pass
+		elif(self.rangeTest([[0x3A], [0x3C, 0x3F]])):
+			self.setState(self.csi_ignore)
+		elif(self.rangeTest([[0x20, 0x2F]])):
+			self.collect()
+			self.setState(self.csi_intermediate)
+		elif(self.rangeTest([[0x40, 0x7E]])):
+			self.csi_dispatch()
+			self.setState(self.ground)
+		else:
+			self.missingAction('csi_param')
+
+	def csi_ignore(self):
+		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
+		elif(self.rangeTest([[0x20, 0x3F], [0x7F]])):
+			pass
+		elif(self.rangeTest([[0x40, 0x7E]])):
+			self.setState(self.ground)
+		else:
+			self.missingAction('csi_ignore')
+
