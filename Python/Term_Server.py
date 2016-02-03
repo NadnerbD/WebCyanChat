@@ -247,8 +247,7 @@ class Terminal:
 		for sock in self.parent.connections:
 			try:
 				sock.send(msg)
-			except Exception as error:
-				log(self, "Send error to %r, %s", (sock, error))
+			except:
 				lost.append(sock)
 		for sock in lost:
 			self.parent.connections.remove(sock)
@@ -545,7 +544,7 @@ class Term_Server:
 				char = chr(int(sock.recvFrame()))
 			except Exception as error:
 				# if we hit an error reading from the socket, remove it and end the thread
-				log(self, "Error reading from socket %s: %s" % (sock, error))
+				log(self, "Error reading from %s: %s" % (addr, error))
 				self.connections.remove(sock)
 				return
 			if(char == '\r'):
