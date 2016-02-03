@@ -194,7 +194,7 @@ class Terminal:
 		self.bufferIndex = 0
 		# stuff which is not duplicated with buffers
 		self.scrollRegion = [1, height]
-		self.horizontalTabs = set()
+		self.horizontalTabs = set(range(8, width, 8))
 		self.echo = True
 		self.edit = True
 		self.attrs = Style()
