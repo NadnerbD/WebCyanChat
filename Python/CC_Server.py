@@ -237,8 +237,8 @@ class CC_Server:
 				try:
 					log(self, "sending: %s to %s" % (repr(message), self), 2)
 					self.sock.send(message + "\r\n")
-				except:
-					log(self, "send error to: %s" % self, 2)
+				except Exception as error:
+					log(self, "send error to %s: %s" % (self, error), 2)
 			self.comLock.release()
 	
 	def __init__(self):
@@ -271,9 +271,11 @@ class CC_Server:
 		self.prefs = { \
 			"server_version": "CyanChat (Py CC Server 2.1)", \
 			"enable_http": 1, \
+			"enable_https": 0, \
 			"enable_cc": 1, \
 			"cc_port": 1812, \
 			"http_port": 81, \
+			"https_port": 443, \
 			"welcome_file": "CCWelcome.conf", \
 			"word_file": "BadWords.conf", \
 			"enable_bans": 0, \
@@ -332,8 +334,6 @@ class CC_Server:
 			if(pref == "log_level"):
 				logging = int(newPrefs[pref])
 		self.prefs.update(newPrefs)
-		self.readWelcome()
-		self.readWordList()
 	
 	def readWelcome(self, filename=None):
 		if(not filename):
@@ -384,16 +384,40 @@ class CC_Server:
 	
 	def start(self):
 		self.parseAuth()
+		self.readWelcome()
+		self.readWordList()
 		if(self.prefs["enable_cc"]):
 			acceptThread = threading.Thread(None, self.acceptLoop, "acceptLoop", (self.prefs["cc_port"],))
 			acceptThread.setDaemon(1)
 			acceptThread.start()
 		if(self.prefs["enable_http"]):
-			acceptThread = threading.Thread(None, self.acceptHTTP, "acceptHttpLoop", (self.prefs["http_port"],))
+			# start the http server's thread
+			HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (self.prefs["http_port"],))
+			HTTPServThread.setDaemon(1)
+			HTTPServThread.start()
+			HTTPWatchdogThread = threading.Thread(None, self.watchThread, "HTTPWatchdogThread", (HTTPServThread,))
+			HTTPWatchdogThread.setDaemon(1)
+			HTTPWatchdogThread.start()
+		if(self.prefs["enable_https"]):
+			# start the http server's https thread
+			HTTPSServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPSServThread", (self.prefs["https_port"], True))
+			HTTPSServThread.setDaemon(1)
+			HTTPSServThread.start()
+			HTTPSWatchdogThread = threading.Thread(None, self.watchThread, "HTTPSWatchdogThread", (HTTPSServThread,))
+			HTTPSWatchdogThread.setDaemon(1)
+			HTTPSWatchdogThread.start()
+		if(self.prefs["enable_http"] or self.prefs["enable_https"]):
+			# accept websockets from the http server
+			acceptThread = threading.Thread(None, self.acceptHTTP, "acceptHttpLoop", ())
 			acceptThread.setDaemon(1)
 			acceptThread.start()
 		self.run()
 	
+	def watchThread(self, servThread):
+		servThread.join()
+		log(self, "%s terminated" % servThread.getName())
+		self.quit.set() #Terminate the server if a server thread dies
+
 	def run(self):
 		while(not self.quit.isSet()):
 			time.sleep(10)
@@ -429,19 +453,8 @@ class CC_Server:
 			(sock, addr) = listener.accept()
 			self.addConnection(sock, addr)
 	
-	def watchHTTP(self, HTTPServThread):
-		HTTPServThread.join()
-		log(self, "HTTP server thread terminated")
-		self.quit.set() #Terminate the server if the HTTP server dies
-
-	def acceptHTTP(self, port=81): #Threaded per-server
+	def acceptHTTP(self): #Threaded per-server
 		acceptQueue = self.HTTPServ.registerProtocol("cyanchat")
-		HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (port,))
-		HTTPServThread.setDaemon(1)
-		HTTPServThread.start()
-		HTTPWatchdogThread = threading.Thread(None, self.watchHTTP, "HTTPWatchdogThread", (HTTPServThread,))
-		HTTPWatchdogThread.setDaemon(1)
-		HTTPWatchdogThread.start()
 		while 1:
 			(sock, addr) = acceptQueue.acceptHTTPSession()
 			self.addConnection(sock, addr)
@@ -455,8 +468,8 @@ class CC_Server:
 		while 1:
 			try:
 				line = readTo(connection.sock, '\n', ['\r'])
-			except:
-				log(self, "error reading from socket on %s" % connection, 2)
+			except Exception as error:
+				log(self, "error reading from socket on %s: %s" % (connection, error), 2)
 				line = None
 			if(not line or connection.status == 0):
 				if(connection.bounceEnable and connection.named and connection.status != 0):
@@ -472,7 +485,7 @@ class CC_Server:
 					return
 			#line = line.rstrip("\r\n")
 			line = line.strip()
-			log(self, "received: %s from %s" % (line, connection), 2) 
+			log(self, "received: %r from %s" % (line, connection), 2) 
 			line = self.censor(line)
 			if(type(line) == int):
 				if(line == 1): # warn
@@ -573,6 +586,9 @@ class CC_Server:
 		elif(cmd == 90): # reload config
 			if(connection.authLevel > 1):
 				self.readPrefs()
+				self.parseAuth()
+				self.readWelcome()
+				self.readWordList()
 	
 	def handleBounce(self, connection, cmd, msg):
 		if(cmd == 100): # bounce key request
@@ -610,14 +626,43 @@ class CC_Server:
 			self.showTime(connection)
 		elif(msg == "stats"):
 			self.showStats(connection)
-		elif(msg == "reload"):
-			self.readPrefs()
+		# extended chat commands for server administration
+		elif(connection.authLevel > 1 and self.prefs["enable_admin_extensions"]):
+			if(msg == "reload"):
+				self.readPrefs()
+			elif(msg.startswith("set ")):
+				args = msg[4:].split(" ", 1)
+				if(len(args) == 2):
+					self.prefs[args[0]] = int(args[1]) if args[1].isdigit() else args[1]
+				self.connections.sendPM(self.chatServer(2), connection, "%s=%r" % (args[0], self.prefs[args[0]]), 1)
+			elif(msg.startswith("get ")):
+				args = msg[4:].split(" ")
+				for arg in args:
+					if(self.prefs.has_key(arg)):
+						self.connections.sendPM(self.chatServer(2), connection, "%s=%r" % (arg, self.prefs[arg]), 1)
+			else:
+				return 0
+			# do these in case a relevant pref was changed
+			self.parseAuth()
+			self.readWelcome()
+			self.readWordList()
 		else:
 			return 0
 		return 1
 	
 	def showHelp(self, connection):
-		commandsmessage = ['!\\time	 (displays server current time)', '!\\stats	(displays server stats)', 'Server commands:']
+		commandsmessage = [
+			'Server commands:', \
+			'!\\stats	(displays server stats)', \
+			'!\\time	(displays server current time)' \
+		]
+		if(connection.authLevel > 1 and self.prefs["enable_admin_extensions"]):
+			commandsmessage += [ \
+				'!\\reload	(reloads server config file)', \
+				'!\\set <pref> <value>	(sets a pref value)', \
+				'!\\get <pref>	(displays a pref value)' \
+			]
+		commandsmessage.reverse()
 		for line in commandsmessage:
 			self.connections.sendPM(self.chatServer(2), connection, line, 1)
 		

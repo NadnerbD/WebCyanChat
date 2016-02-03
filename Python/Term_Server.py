@@ -520,14 +520,14 @@ class Terminal:
 
 class Term_Server:
 	def __init__(self):
-		self.server = HTTP_Server(useSSL=True)
+		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
 		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
 		self.sessionQueue = self.server.registerProtocol("term")
 		self.connections = list()
 		self.master = None
 		self.prefs = { \
-			"http_port": 8080, \
+			"https_port": 8080, \
 			"term_proc": "/bin/bash", \
 			"term_args": "", \
 			"term_height": 24, \
@@ -571,26 +571,29 @@ class Term_Server:
 		self.resize(self.prefs["term_width"], self.prefs["term_height"])
 
 		# open the psuedo terminal master file (this is what we read/write to)
-		wstream = os.fdopen(self.master, "w")
-		rstream = os.fdopen(self.master, "r")
+		self.wstream = os.fdopen(self.master, "w")
+		self.rstream = os.fdopen(self.master, "r")
+
+		# this is passed locally so we can shut down only threads that were started by this invocation
+		shutdown = threading.Event()
 
 		# start a loop to accept incoming http sessions
-		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(wstream,))
+		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(shutdown,))
 		a.daemon = True
 		a.start()
 
 		# start a thread to read output from the shell
-		o = threading.Thread(target=self.handleOutput, name="oThread", args=(rstream,))
+		o = threading.Thread(target=self.handleOutput, name="oThread", args=(shutdown,))
 		o.daemon = True
 		o.start()
 
 		# start the http server (using ssl)
-		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"],))
+		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["https_port"], True))
 		s.daemon = True
 		s.start()
 
-		# start a thrad to push diff updates to the clients
-		u = threading.Thread(target=self.updateLoop, name="updateThread", args=())
+		# start a thread to push diff updates to the clients
+		u = threading.Thread(target=self.updateLoop, name="updateThread", args=(shutdown,))
 		u.daemon = True
 		u.start()
 
@@ -600,17 +603,20 @@ class Term_Server:
 		except KeyboardInterrupt:
 			os.kill(pid, signal.SIGKILL)
 			os.waitpid(pid, 0) # wait on the process so we don't create a zombie
+		finally:
+			#signal the worker threads to shut down
+			shutdown.set()
 
-	def handleOutput(self, stream):
-		parser = Parser(stream)
-		while True:
+	def handleOutput(self, shutdown):
+		parser = Parser(self.rstream)
+		while not shutdown.is_set():
 			command = parser.getCommand()
 			if(command == None):
 				return
 			log(self, "cmd: %r" % command, 4)
 			self.terminal.handleCmd(command)
 			
-	def handleInput(self, sock, stream, addr):
+	def handleInput(self, sock, addr):
 		# the first frame sent over the socket must be the password
 		passwd = sock.recvFrame()
 		if(passwd != self.prefs["term_pass"]):
@@ -621,25 +627,35 @@ class Term_Server:
 		log(self, "Accepted password from (%s, %s)" % addr)
 		self.terminal.sendInit(sock)
 		while True:
-			char = chr(int(sock.recvFrame()))
+			try:
+				char = chr(int(sock.recvFrame()))
+			except Exception as error:
+				# if we hit an error reading from the socket, remove it and end the thread
+				log(self, "Error reading from %s: %s" % (addr, error))
+				self.connections.remove(sock)
+				return
 			if(char == '\r'):
 				char = '\n'
 			log(self, "recvd: %r" % char, 4)
-			stream.write(char)
-			stream.flush()
+			self.wstream.write(char)
+			self.wstream.flush()
 
-	def sessionLoop(self, stream):
-		while True:
+	def sessionLoop(self, shutdown):
+		while not shutdown.is_set():
 			(sock, addr) = self.sessionQueue.acceptHTTPSession()
+			if(shutdown.is_set()):
+				# if our primary thread has terminated, put the session back and exit
+				self.sessionQueue.insert((sock, addr))
+				return
 			self.connections.append(sock)
 			# start a thread to send input to the shell
-			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, stream, addr))
+			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, addr))
 			i.daemon = True
 			i.start()
 
-	def updateLoop(self):
+	def updateLoop(self, shutdown):
 		# condenses rapid updates into a single message
-		while True:
+		while not shutdown.is_set():
 			self.terminal.updateEvent.wait()
 			prev = self.terminal.lastUpdate
 			while True:

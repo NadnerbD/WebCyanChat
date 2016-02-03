@@ -77,6 +77,9 @@ function connect() {
 			send_cc("102|" + bounceKey);
 		}else{
 			send_cc("40|1");
+			// we push our font now
+			send_cc("201|" + localStorage.getItem("font_image") || "");
+			send_cc("202|" + localStorage.getItem("avatar_image") || "");
 		}
 	};
 	connection.onclose = function () {
@@ -108,7 +111,7 @@ function send_cc(data) {
 function pingCount() {
 	// if the server reports us missing, this will cause a reconnect
 	if(name_reg) {
-		send_cc("20||^1ping");
+		//send_cc("20||^1ping");
 	}else if(lastAttemptedName != '') {
 		// we might be waiting for a name to free up
 		setname(lastAttemptedName);
@@ -122,13 +125,15 @@ function recv_cc(line) {
 		switch(command) {
 			case "31":
 				if(!isUserIgnored(pipelist[1])) {
-					user = pipelist[1].split(",")[0]
+					userdata = pipelist[1].split(",")
+					user = userdata[0]
+					userid = userdata.length == 3 ? userdata[2] : "0";
 					nickflag = user.substring(0, 1);
 					nick = user.substring(1, user.length);
 					message = line.substring(pipelist[0].length + pipelist[1].length + 2, line.length);
 					messageflag = message.substring(1, 2);
 					message = message.substring(2, message.length);
-					addTextOut(nick, nickflag, message, messageflag);
+					addTextOut(nick, nickflag, message, messageflag, userid);
 				}
 			break;
 			case "21":
@@ -178,7 +183,8 @@ function recv_cc(line) {
 			case "11":
 				// name accepted message
 				name_reg = 1;
-				linkbutton.value = 'Link Out';
+				linkbutton.value = 'Leave';
+				document.getElementById("join_floater").style.display = "none";
 				currentName = lastAttemptedName;
 				// in case the user gets disconnected this session
 				lastSessionName = currentName;
@@ -237,12 +243,31 @@ function recv_cc(line) {
 				namein.value = currentName;
 				namein.disabled = true;
 				name_reg = true;
-				linkbutton.value = 'Link Out';
+				linkbutton.value = 'Leave';
+				document.getElementById("join_floater").style.display = "none";
 				textin.focus();
 			break;
 			case "104":
 				// bounce burst end
 				bounceBursting = 0;
+			break;
+			case "200":
+				// fonts for all users
+				var sheet = document.getElementById("cursive-data-style").sheet;
+				while(pipelist.length > 3) {
+					var av = pipelist.pop();
+					var ft = pipelist.pop();
+					var id = pipelist.pop();
+					sheet.insertRule(".l-uid-" + id + " .l { background-image: url(" + ft + "); }", 0);
+					sheet.insertRule(".l-uid-" + id + " .avatar { background-image: url(" + av + "); }", 0);
+				}
+			case "201":
+				// set a font for a user
+				changeRule(".l-uid-" + pipelist[1] + " .l", "background-image", "url(" + pipelist[2] + ")");
+			break;
+			case "202":
+				// set avatar for a user
+				changeRule(".l-uid-" + pipelist[1] + " .avatar", "background-image", "url(" + pipelist[2] + ")");
 			break;
 			default:
 				addTextOut("ChatServer", 2, line, "1");
@@ -265,76 +290,90 @@ function changeRule(name, property, value) {
 		for(rule = 0; rule < rules.length; rule++) {
 			if(rules[rule].selectorText == name) {
 				rules[rule].style.setProperty(property, value, null);
+				return;
 			}
 		}
 	}
+	// if we get here, we failed to find a rule to change, so we need to add a rule
+	document.getElementById("cursive-data-style").sheet.insertRule(name + " {" + property + ": " + value + "; }", 0);
 }
 
 function escHTML(string) {
 	return string.split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");
 }
 
-function addElement(parent, childtype, childtext, childclass, href) {
-	child = document.createElement(childtype);
-	if(href) {
-		child.href = href;
-		child.target = "_blank"; // this makes the link open in a new window
+function createTree(node) {
+	var tag;
+	if(node.tag) {
+		tag = document.createElement(node.tag);
+	}else if(node.node) {
+		// this method of adding existing nodes allows us to add extra attrs
+		tag = node.node;
 	}
-	if(childtype != "br") {
-		child.appendChild(document.createTextNode(childtext.replace(/ /g, '\u00a0')));
-	}
-	child.className = childclass;
-	if(parent) {
-		parent.appendChild(child);
-		return parent;
-	}else{
-		return child;
-	}
-}
-
-function addTextOut(nick, nickflag, message, messageflag) {
-	// int for list access
-	nickflag = parseInt(nickflag);
-	now = new Date();
-	// start from the beginning
-	newline = document.createElement("p");
-	newline = addElement(newline, "span", "[" + intPlaces(now.getHours(), 2) + ":" + intPlaces(now.getMinutes(), 2) + "] ", "timestamp", 0);
-	if(messageflag == "0") {
-		newline = addElement(newline, "span", "Private message from ", "magenta", 0);
-	}else if(messageflag == "2") {
-		newline = addElement(newline, "span", "\\\\\\\\\\", "server", 0);
-	}else if(messageflag == "3") {
-		newline = addElement(newline, "span", "/////", "server", 0);
-	}
-	newline = addElement(newline, "span", "[" + nick + "] ", styles[nickflag], 0);
-	if((message.substring(0, 1) == "*")&&(message.substring(message.length - 1, message.length) == "*")) {
-		msgclass = 'action';
-	}else{
-		msgclass = 'msg';
-	}
-	var wordlist = message.split(' ');
-	var wordline = "";
-	for(var i = 0; i < wordlist.length; i++) {
-		if((wordlist[i].substring(0, 7) == "http://")
-		||(wordlist[i].substring(0, 8) == "https://")
-		||(wordlist[i].substring(0, 6) == "ftp://")) {
-			if(wordline != "") {
-				newline = addElement(newline, "span", wordline, msgclass, 0);
-				wordline = "";
-			}
-			newline = addElement(newline, "a", wordlist[i], msgclass, wordlist[i]);
-			wordline += " ";
+	for(var attr in node.attrs) {
+		if(attr in tag) {
+			tag[attr] = node.attrs[attr];
 		}else{
-			wordline += wordlist[i] + " ";
+			tag.setAttribute(attr, node.attrs[attr]);
 		}
 	}
-	newline = addElement(newline, "span", wordline.substring(0, wordline.length - 1), msgclass, 0);
-	if(messageflag == "2") {
-		newline = addElement(newline, "span", "/////", "server", 0);
-	}else if(messageflag == "3") {
-		newline = addElement(newline, "span", "\\\\\\\\\\", "server", 0);
+	if(node.children) {
+		for(var i = 0; i < node.children.length; i++) {
+			if(typeof node.children[i] == "string") {
+				tag.appendChild(createString(node.children[i]));
+			}else{
+				tag.appendChild(createTree(node.children[i]));
+			}
+		}
 	}
-	textout.insertBefore(newline, textout.childNodes[0]);
+	return tag;
+}
+
+function parseLinks(str) {
+	var outList = [];
+	var words = str.split(" ");
+	var isUrl = /[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/;
+	for(var i in words) {
+		var word = words[i];
+		var l = i == words.length - 1;
+		if(isUrl.test(word)) {
+			outList.push({tag: "a", attrs: {target: "_blank", href: word}, children: [word]});
+			if(!l) outList.push(" ");
+		}else if(typeof outList[outList.length - 1] == "string") {
+			outList[outList.length - 1] += word + (l?"":" ");
+		}else{
+			outList.push(word + (l?"":" "));
+		}
+	}
+	return outList;
+}
+
+function addTextOut(nick, nickflag, message, messageflag, userid) {
+	// we can hide nickflag 2, 3 and 5, (green, red, and client (also red)) they're only for system messages
+	if(nickflag == "2" || nickflag == "3" || nickflag == "5") {
+		return;
+	}
+	
+	// messageflag 0: private, 1: normal, 2: join, 3: leave
+	if(messageflag == "2") {
+		var structure = {tag: "p", attrs: {className: "l-uid-0 join"}, children: ["[" + nick + "] has joined the chat"]};
+	}else if(messageflag == "3") {
+		var structure = {tag: "p", attrs: {className: "l-uid-0 leave"}, children: ["[" + nick + "] has left the chat"]};
+	}else{
+		var structure = {tag: "p", attrs: {className: (userid ? "l-uid-" + userid : "l-uid-0") + (messageflag == "0" ? " private" : "")}, children: [
+			{tag: "span", attrs: {className: "avatar"}},
+			{tag: "span", attrs: {className: "username " + styles[parseInt(nickflag)]}, children: [nick]},
+			{tag: "span", attrs: {className: "msg"}, children: parseLinks(message)}
+		]};
+	}
+	var newline = createTree(structure);
+	
+	// check if we'll need to autoscroll
+	var autoscroll = textout.scrollTop == textout.scrollTopMax;
+	textout.appendChild(newline);
+	if(autoscroll) {
+		textout.scrollTop = textout.scrollTopMax;
+	}
 	startFlash();
 }
 
@@ -409,12 +448,16 @@ function refreshGUIUserList(userstring) {
 	for(var i = 0; i < userstring.length; i++) {
 		if(!isUserIgnored(userstring[i])) {
 			user = userstring[i].split(",")[0];
+			userid = userstring[i].split(",")[2];
 			nickflag = parseInt(user.substring(0, 1));
 			// we got our data, now we create an element
 			var newoption = document.createElement("option");
-			newoption.text = escHTML(user.substring(1));
 			newoption.value = user;
-			newoption.className = styles[nickflag];
+			newoption.className = styles[nickflag] + " l-uid-" + userid;
+			var avatar = document.createElement("span");
+			avatar.className = "avatar";
+			newoption.appendChild(avatar);
+			newoption.appendChild(document.createTextNode(user.substring(1)));
 			try {
 				// standards compliant
 				wholist.add(newoption, null);
@@ -523,7 +566,7 @@ function versionReply(target) {
 function disconnect() {
 	send_cc("15");
 	name_reg = 0;
-	linkbutton.value = 'Link In';
+	linkbutton.value = 'Join';
 	namein.disabled = false;
 	// this will prevent the client from logging us back in
 	lastAttemptedName = '';

@@ -1,7 +1,7 @@
 // user and parentWindow will be defined by the main client
 // we need an on-close method that will notify the main client if the window is closed
 // (as well as an inverse to close pm windows when the client is removed
-styles = ['', 'cyane', 'server', 'client', 'guest', 'client'];
+styles = ['normal', 'cyan', 'server', 'client', 'guest', 'client'];
 flashstate = 0;
 enableflash = 0;
 shutdown = 0;
@@ -76,7 +76,7 @@ function addTextOut(nick, nickflag, message, messageflag) {
 	nickflag = parseInt(nickflag);
 	now = new Date();
 	// start from the beginning
-	newline = addElement(0, "span", "", "", 0);
+	newline = document.createElement("p");
 	newline = addElement(newline, "span", "[" + intPlaces(now.getHours(), 2) + ":" + intPlaces(now.getMinutes(), 2) + "] ", "timestamp", 0);
 	if(messageflag == "0") {
 		newline = addElement(newline, "span", "Private message from ", "pretext", 0);
@@ -113,7 +113,6 @@ function addTextOut(nick, nickflag, message, messageflag) {
 	}else if(messageflag == "3") {
 		newline = addElement(newline, "span", "\\\\\\\\\\", "server", 0);
 	}
-	newline = addElement(newline, "br", "", "", 0);
 	textout.insertBefore(newline, textout.childNodes[0]);
 	startFlash();
 }

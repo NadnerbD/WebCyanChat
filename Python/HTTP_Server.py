@@ -16,6 +16,18 @@ except:
 	md5 = md5.md5
 	sha1 = sha.sha
 
+def recvall(sock, size):
+	data = ''
+	while(len(data) < size):
+		data += sock.recv(size - len(data))
+	return data
+
+def lowerKeys(in_dict):
+	out_dict = {}
+	for i in in_dict:
+		out_dict[i.lower()] = in_dict[i]
+	return out_dict
+
 class HTTP_Server:
 	statusCodes = { \
 		100: "Continue", \
@@ -23,7 +35,8 @@ class HTTP_Server:
 		101: "Switching Protocols", \
 		200: "OK", \
 		201: "Created", \
-		301: "Moved Permanently", \
+		#301: "Moved Permanently", \
+		302: "Found", \
 		400: "Bad Request", \
 		403: "Forbidden", \
 		404: "Not Found", \
@@ -226,7 +239,7 @@ class HTTP_Server:
 				self.sock.send(struct.pack(">H", len(data)))
 			else:
 				self.sock.send(struct.pack("B", len(data)))
-			self.sock.send(data)
+			self.sock.sendall(data)
 
 		def decode(data, key):
 			out = ''
@@ -234,28 +247,39 @@ class HTTP_Server:
 				out += chr(ord(data[i]) ^ ord(key[i % len(key)]))
 			return out
 		decode = staticmethod(decode)
+		
+		def recvPayload(self):
+			payLen = struct.unpack("B", self.sock.recv(1))[0] & 0x7F
+			if(payLen == 126):
+				payLen = struct.unpack(">H", self.sock.recv(2))[0]
+			elif(payLen == 127):
+				payLen = struct.unpack(">Q", self.sock.recv(8))[0]
+			key = self.sock.recv(4)
+			return self.decode(recvall(self.sock, payLen), key)
 
 		def recvFrame(self):
+			data = ''
 			while(True):
-				opcode = struct.unpack("B", self.sock.recv(1))[0] & 0x0F
-				payLen = struct.unpack("B", self.sock.recv(1))[0] & 0x7F
-				if(payLen == 126):
-					payLen = struct.unpack(">H", self.sock.recv(2))[0]
-				elif(payLen == 127):
-					payLen = struct.unpack(">Q", self.sock.recv(8))[0]
-				key = self.sock.recv(4)
-				data = self.decode(self.sock.recv(payLen), key)
-				if(opcode == 8): # close opcode
-					log(self, "recieved close frame: %r" % data)
+				start = struct.unpack("B", self.sock.recv(1))[0]
+				final_fragment = ((start & 0x80) != 0)
+				opcode = start & 0x0F
+				if(opcode in [0, 1, 2]):
+					# fragment, text data, binary data 
+					data += self.recvPayload()
+					if(final_fragment):
+						log(self, "recieved data frame: %r" % data, 4)
+						return data
+				elif(opcode == 8): # close opcode
+					log(self, "recieved close frame: %r" % self.recvPayload())
 					self.closed = True
 					return ''
 				elif(opcode == 9): # ping opcode
-					self.send(data, 0x0A) # pong
-					log(self, "recieved ping frame: %r" % data, 4)
-				elif(opcode == 1 or opcode == 2):
-					# opcodes 1 and 2 are text and binary data
-					log(self, "recieved data frame: %r" % data, 4)
-					return data
+					pingdata = self.recvPayload()
+					self.send(pingdata, 0x0A) # pong
+					log(self, "recieved ping frame: %r" % pingdata, 4)
+				elif(opcode == 10): # pong opcode
+					pongdata = self.recvPayload()
+					log(self, "received pong frame: %r" % pongdata, 4)
 
 		def recv(self, count):
 			data = ''
@@ -285,12 +309,11 @@ class HTTP_Server:
 			self.queueLen.acquire()
 			return self.queue.pop()
 	
-	def __init__(self, webRoot="../HTML", useSSL=False):
+	def __init__(self, webRoot="../HTML"):
 		self.sessionList = self.sessionList()
 		self.sessionQueues = dict()
 		self.redirects = dict()
 		self.webRoot = webRoot
-		self.useSSL = useSSL
 	
 	def readHTTP(self, sock):
 		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
@@ -302,18 +325,17 @@ class HTTP_Server:
 		if('?' in resource):
 			(resource, getOptions) = resource.split("?", 1)
 			getOptions = parseToDict(getOptions, '=', '&')
-		headers = parseToDict(data, ": ", "\r\n")
-		body = str()
-		if(headers.has_key("Expect") and headers["Expect"] == "100-continue"):
+		headers = lowerKeys(parseToDict(data, ": ", "\r\n"))
+		body = False
+		if(headers.has_key("expect") and headers["expect"] == "100-continue"):
 			sock.send("HTTP/1.1 100 Continue\r\n\r\n")
-		if(headers.has_key("Content-Length")):
-			while(len(body) < int(headers["Content-Length"])):
-				body += sock.recv(int(headers["Content-Length"]) - len(body))
-		if(headers.has_key("Content-Type") and headers["Content-Type"].startswith("multipart/form-data")):
-			formHeaders = parseToDict(headers["Content-Type"], '=', "; ")
+		if(headers.has_key("content-length")):
+			body = recvall(sock, int(headers["content-length"]))
+		if(headers.has_key("content-type") and headers["content-type"].startswith("multipart/form-data")):
+			formHeaders = parseToDict(headers["content-type"], '=', "; ")
 			log(self, "multipart/form-data boundary: %s" % formHeaders["boundary"], 3)
 			if(body):
-				log(self, "Nice client gave us a Content-Length: %s" % headers["Content-Length"], 3)
+				log(self, "Nice client gave us a Content-Length: %s" % headers["content-length"], 3)
 			else:# didn't send us a goddamn Content-Length
 				body = readTo(sock, "--%s--" % formHeaders["boundary"], [])
 				log(self, "No Content-Length, read multipart from sock using boundary, length: %d" % len(formData), 3)
@@ -321,9 +343,9 @@ class HTTP_Server:
 			output = list()
 			for data in body:
 				(dataHeaders, data) = data.split("\r\n\r\n", 1)
-				dataHeaders = parseToDict(dataHeaders, ": ", "\r\n")
-				if(dataHeaders.has_key("Content-Disposition")):
-					dataHeaders["Content-Disposition"] = parseToDict(dataHeaders["Content-Disposition"], '=', "; ")
+				dataHeaders = lowerKeys(parseToDict(dataHeaders, ": ", "\r\n"))
+				if(dataHeaders.has_key("content-disposition")):
+					dataHeaders["content-disposition"] = parseToDict(dataHeaders["content-disposition"], '=', "; ")
 				output.append({"headers": dataHeaders, "data": data})
 			body = output
 		return (method, resource, protocol, headers, body, getOptions)
@@ -350,12 +372,12 @@ class HTTP_Server:
 		resource = resource.replace("%20", ' ')
 		if(self.redirects.has_key(resource)):
 			redirect = self.redirects[resource]
-			if(type(redirect) == type(str())):
-				self.writeHTTP(sock, 301, {"Location": redirect}, "301 Redirect")
+			if(type(redirect) is str):
+				self.writeHTTP(sock, 302, {"Location": redirect}, "302 Redirect")
 				log(self, "redirected %s from %s to %s" % (addr, resource, self.redirects[resource]), 3)
 				return
 			elif(headers.has_key(redirect["header"]) and headers[redirect["header"]].find(redirect["value"]) != -1):
-				self.writeHTTP(sock, 301, {"Location": redirect["location"]}, "301 Redirect")
+				self.writeHTTP(sock, 302, {"Location": redirect["location"]}, "302 Redirect")
 				log(self, "redirected request for %s to %s due to %s value containing %s" % ( \
 					resource, \
 					redirect["location"], \
@@ -375,32 +397,32 @@ class HTTP_Server:
 		else:
 			mimeType = "application/octet-stream"
 		if(method == "GET" and resource == "/web-socket"):
-			if(headers.has_key("WebSocket-Protocol") and self.sessionQueues.has_key(headers["WebSocket-Protocol"])): # protocol draft 75
+			if(headers.has_key("websocket-protocol") and self.sessionQueues.has_key(headers["websocket-protocol"])): # protocol draft 75
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
-					("WebSocket-Origin", headers["Origin"]), \
-					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["Host"])), \
-					("WebSocket-Protocol", headers["WebSocket-Protocol"]), \
+					("WebSocket-Origin", headers["origin"]), \
+					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
+					("WebSocket-Protocol", headers["websocket-protocol"]), \
 				]
 				log(self, "got WebSocket from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n")
-				self.sessionQueues[headers["WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[headers["websocket-protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("Sec-WebSocket-Protocol") and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"]) and not headers.has_key("Sec-WebSocket-Version")): # protocol draft 76
+			elif(headers.has_key("sec-websocket-protocol") and self.sessionQueues.has_key(headers["sec-websocket-protocol"]) and not headers.has_key("sec-websocket-version")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
-					("Sec-WebSocket-Origin", headers["Origin"]), \
-					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][self.useSSL], headers["Host"])), \
-					("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+					("Sec-WebSocket-Origin", headers["origin"]), \
+					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
+					("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				# now we have to figure out the key
 				Value1 = 0
 				Spaces1 = 0
-				for char in headers["Sec-WebSocket-Key1"]:
+				for char in headers["sec-websocket-key1"]:
 					if(char.isdigit()):
 						Value1 *= 10
 						Value1 += int(char)
@@ -409,7 +431,7 @@ class HTTP_Server:
 				Value1 /= Spaces1
 				Value2 = 0
 				Spaces2 = 0
-				for char in headers["Sec-WebSocket-Key2"]:
+				for char in headers["sec-websocket-key2"]:
 					if(char.isdigit()):
 						Value2 *= 10
 						Value2 += int(char)
@@ -421,24 +443,24 @@ class HTTP_Server:
 				log(self, "got Sec-WebSocket from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n" + md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
-				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
-			elif(headers.has_key("Sec-WebSocket-Version") and headers["Sec-WebSocket-Version"] in ["8", "13"] and self.sessionQueues.has_key(headers["Sec-WebSocket-Protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+			elif(headers.has_key("sec-websocket-version") and headers["sec-websocket-version"] in ["8", "13"] and self.sessionQueues.has_key(headers["sec-websocket-protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
-					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["Sec-WebSocket-Key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
-			        	("Sec-WebSocket-Protocol", headers["Sec-WebSocket-Protocol"]), \
+					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
+			        	("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				log(self, "got Sec-WebSocket Version 8 from (%s, %s)" % addr, 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n")
-				self.sessionQueues[headers["Sec-WebSocket-Protocol"]].insert((self.WebSocket2(sock), addr))
+				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket2(sock), addr))
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
-				log(self, "bad websocket request from (%s, %s)" % addr, 3);
+				log(self, "bad websocket request from %r headers: %r" % (addr, headers), 3);
 				return
 		elif(method == "GET"):
 			try:
@@ -496,7 +518,7 @@ class HTTP_Server:
 			self.writeHTTP(sock, 501)
 			log(self, "couldn't handle %s request" % method, 3)
 	
-	def acceptLoop(self, port=80): #Threaded per-server
+	def acceptLoop(self, port=80, useSSL=False): #Threaded per-server port
 		listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		try:
@@ -508,7 +530,7 @@ class HTTP_Server:
 		while 1:
 			listener.listen(1)
 			(sock, addr) = listener.accept()
-			if(self.useSSL):
+			if(useSSL):
 				try:
 					sock = ssl.wrap_socket(sock, server_side=True, certfile="server.crt", keyfile="server.key", suppress_ragged_eofs=True)
 				except Exception as error:
