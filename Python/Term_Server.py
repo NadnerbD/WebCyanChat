@@ -485,18 +485,19 @@ class Term_Server:
 		self.resize(self.prefs["term_width"], self.prefs["term_height"])
 
 		# open the psuedo terminal master file (this is what we read/write to)
-		wstream = os.fdopen(self.master, "w")
-		rstream = os.fdopen(self.master, "r")
+		self.wstream = os.fdopen(self.master, "w")
+		self.rstream = os.fdopen(self.master, "r")
 
+		# this is passed locally so we can shut down only threads that were started by this invocation
 		shutdown = threading.Event()
 
 		# start a loop to accept incoming http sessions
-		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(wstream, shutdown))
+		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(shutdown,))
 		a.daemon = True
 		a.start()
 
 		# start a thread to read output from the shell
-		o = threading.Thread(target=self.handleOutput, name="oThread", args=(rstream, shutdown))
+		o = threading.Thread(target=self.handleOutput, name="oThread", args=(shutdown,))
 		o.daemon = True
 		o.start()
 
@@ -516,11 +517,12 @@ class Term_Server:
 		except KeyboardInterrupt:
 			os.kill(pid, signal.SIGKILL)
 			os.waitpid(pid, 0) # wait on the process so we don't create a zombie
-		#signal the worker threads to shut down
-		shutdown.set()
+		finally:
+			#signal the worker threads to shut down
+			shutdown.set()
 
-	def handleOutput(self, stream, shutdown):
-		parser = CommandParser(stream)
+	def handleOutput(self, shutdown):
+		parser = CommandParser(self.rstream)
 		while not shutdown.is_set():
 			command = parser.getCommand()
 			if(command == None):
@@ -528,7 +530,7 @@ class Term_Server:
 			log(self, "cmd: %r" % command, 4)
 			self.terminal.handleCmd(command)
 			
-	def handleInput(self, sock, stream, addr):
+	def handleInput(self, sock, addr):
 		# the first frame sent over the socket must be the password
 		passwd = sock.recvFrame()
 		if(passwd != self.prefs["term_pass"]):
@@ -549,10 +551,10 @@ class Term_Server:
 			if(char == '\r'):
 				char = '\n'
 			log(self, "recvd: %r" % char, 4)
-			stream.write(char)
-			stream.flush()
+			self.wstream.write(char)
+			self.wstream.flush()
 
-	def sessionLoop(self, stream, shutdown):
+	def sessionLoop(self, shutdown):
 		while not shutdown.is_set():
 			(sock, addr) = self.sessionQueue.acceptHTTPSession()
 			if(shutdown.is_set()):
@@ -561,7 +563,7 @@ class Term_Server:
 				return
 			self.connections.append(sock)
 			# start a thread to send input to the shell
-			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, stream, addr))
+			i = threading.Thread(target=self.handleInput, name="iThread", args=(sock, addr))
 			i.daemon = True
 			i.start()
 
