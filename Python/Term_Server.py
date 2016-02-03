@@ -289,7 +289,7 @@ class Terminal:
 		elif(char == '\t'):
 			hpos = self.buffer.pos % self.buffer.size[0]
 			# move to the first available tab stop
-			for tab in self.horizontalTabs:
+			for tab in sorted(self.horizontalTabs):
 				if(tab > hpos):
 					self.move(tab - hpos, 0)
 					return
