@@ -452,7 +452,7 @@ class Terminal:
 			if(len(cmd.args) != 2):
 				cmd.args = [1, self.buffer.size[1]]
 			self.scrollRegion = cmd.args
-			self.buffer.pos = 0
+			self.setPos(0, 0)
 		elif(cmd.cmd == "resetDECMode"):
 			if(3 in cmd.args):
 				# switch to 80 column mode
