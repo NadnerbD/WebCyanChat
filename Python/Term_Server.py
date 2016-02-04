@@ -10,7 +10,9 @@ import time
 import sys
 import os
 
-from Logger import log
+import Logger
+log = Logger.log
+
 from Utils import parseToDict
 from HTTP_Server import HTTP_Server
 from VTParse import Parser
@@ -527,7 +529,10 @@ class Term_Server:
 		self.connections = list()
 		self.master = None
 		self.prefs = { \
-			"https_port": 8080, \
+			"enable_http": 0, \
+			"http_port": 8080, \
+			"enable_https": 1, \
+			"https_port": 443, \
 			"term_proc": "/bin/bash", \
 			"term_args": "", \
 			"term_height": 24, \
@@ -536,7 +541,6 @@ class Term_Server:
 		}
 
 	def readPrefs(self, filename="TermServer.conf"):
-		global logging
 		log(self, "reading %s" % filename)
 		prefsFile = file(filename, 'r')
 		prefsData = prefsFile.read()
@@ -547,7 +551,7 @@ class Term_Server:
 			if(newPrefs[pref].isdigit()):
 				newPrefs[pref] = int(newPrefs[pref])
 			if(pref == "log_level"):
-				logging = int(newPrefs[pref])
+				Logger.logging = int(newPrefs[pref])
 		self.prefs.update(newPrefs)
 
 	def resize(self, width, height):
@@ -587,10 +591,17 @@ class Term_Server:
 		o.daemon = True
 		o.start()
 
-		# start the http server (using ssl)
-		s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["https_port"], True))
-		s.daemon = True
-		s.start()
+		if(self.prefs["enable_http"]):
+			# start the http listener
+			s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"], False))
+			s.daemon = True
+			s.start()
+
+		if(self.prefs["enable_https"]):
+			# start the https listener
+			s = threading.Thread(target=self.server.acceptLoop, name="httpsThread", args=(self.prefs["https_port"], True))
+			s.daemon = True
+			s.start()
 
 		# start a thread to push diff updates to the clients
 		u = threading.Thread(target=self.updateLoop, name="updateThread", args=(shutdown,))
