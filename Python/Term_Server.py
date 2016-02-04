@@ -10,7 +10,9 @@ import time
 import sys
 import os
 
-from Logger import log
+import Logger
+log = Logger.log
+
 from Utils import parseToDict
 from HTTP_Server import HTTP_Server
 from VTParse import CommandParser
@@ -449,7 +451,6 @@ class Term_Server:
 		}
 
 	def readPrefs(self, filename="TermServer.conf"):
-		global logging
 		log(self, "reading %s" % filename)
 		prefsFile = file(filename, 'r')
 		prefsData = prefsFile.read()
@@ -460,7 +461,7 @@ class Term_Server:
 			if(newPrefs[pref].isdigit()):
 				newPrefs[pref] = int(newPrefs[pref])
 			if(pref == "log_level"):
-				logging = int(newPrefs[pref])
+				Logger.logging = int(newPrefs[pref])
 		self.prefs.update(newPrefs)
 
 	def resize(self, width, height):
