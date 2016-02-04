@@ -334,172 +334,202 @@ class Terminal:
 			self.parent.connections.remove(sock)
 			log(self, "Removed connection: %r" % sock)
 
+	def home(self, args):
+		argDefaults(args, [0, 0])
+		self.setPos(args[1] - 1, args[0] - 1)
+
+	def tabSet(self, args):
+		self.horizontalTabs.add(self.buffer.pos % self.buffer.size[0])
+
+	def tabClear(self, args):
+		argDefaults(args, [0])
+		hpos = self.buffer.pos % self.buffer.size[0]
+		if(args[0] == 0 and hpos in self.horizontalTabs):
+			self.horizontalTabs.remove(hpos)
+		elif(args[0] == 3):
+			self.horizontalTabs = set()
+
+	def saveCursor(self, args):
+		self.savedPos = self.buffer.pos
+		self.savedStyle = Style(self.attrs)
+		self.savedShift = self.shift_out
+		self.savedCharsets[0] = self.charmaps[0].mode
+		self.savedCharsets[1] = self.charmaps[1].mode
+
+	def restoreCursor(self, args):
+		self.buffer.pos = self.savedPos
+		self.attrs = self.savedStyle
+		self.shift_out = self.savedShift
+		self.charmaps[0].setMode(self.savedCharsets[0])
+		self.charmaps[1].setMode(self.savedCharsets[1])
+
+	def cursorFwd(self, args):
+		argDefaults(args, [1])
+		self.move(args[0], 0)
+
+	def cursorBack(self, args):
+		argDefaults(args, [1])
+		self.move(-args[0], 0)
+
+	def cursorUp(self, args):
+		argDefaults(args, [1])
+		self.move(0, -args[0])
+
+	def cursorDown(self, args):
+		argDefaults(args, [1])
+		self.move(0, args[0])
+
+	def linePosAbs(self, args):
+		if(len(args) == 2):
+			self.setPos(args[1] - 1, args[0] - 1)
+		elif(len(args) == 1):
+			self.setPos(self.getPos()[0], args[0] - 1)
+		else:
+			self.setPos(self.getPos()[0], 0)
+
+	def curCharAbs(self, args):
+		argDefaults(args, [1])
+		self.setPos(args[0] - 1, self.getPos()[1])
+
+	def nextLine(self, args):
+		if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+			self.scroll(1)
+		else:
+			self.move(0, 1)
+		self.buffer.pos -= self.buffer.pos % self.buffer.size[0]
+
+	def index(self, args):
+		if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+			self.scroll(1)
+		else:
+			self.move(0, 1)
+
+	def reverseIndex(self, args):
+		if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[0] - 1):
+			self.scroll(-1)
+		else:
+			self.move(0, -1)
+
+	def eraseOnDisplay(self, args):
+		argDefaults(args, [0])
+		if(args[0] == 1): # Above
+			self.erase(0, self.buffer.pos + 1)
+		elif(args[0] == 2): # All
+			self.erase(0, self.buffer.len)
+		else: # 0 (Default) Below
+			self.erase(self.buffer.pos, self.buffer.len)
+
+	def eraseOnLine(self, args):
+		argDefaults(args, [0])
+		lineStart = self.getPos()[1] * self.buffer.size[0]
+		if(args[0] == 1): # Left
+			self.erase(lineStart, self.buffer.pos + 1)
+		elif(args[0] == 2): # All
+			self.erase(lineStart, lineStart + self.buffer.size[0])
+		else: # 0 (Default) Right
+			self.erase(self.buffer.pos, lineStart + self.buffer.size[0])
+
+	def scrollUp(self, args):
+		argDefaults(args, [1])
+		self.scroll(args[0])
+
+	def scrollDown(self, args):
+		argDefaults(args, [1])
+		self.scroll(-args[0])
+
+	def insertLines(self, args):
+		# adds (erases) lines at curPos and pushes (scrolls) subsequent ones down
+		argDefaults(args, [1])
+		tmp = self.scrollRegion # store scroll region
+		self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
+		self.scroll(-args[0])
+		self.scrollRegion = tmp # restore scroll region
+
+	def removeLines(self, args):
+		# removes (erases) lines at curPos and pulls (scrolls) subsequent ones up
+		argDefaults(args, [1])
+		tmp = self.scrollRegion # store scroll region
+		self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
+		self.scroll(args[0])
+		self.scrollRegion = tmp # restore scroll region
+
+	def deleteChars(self, args):
+		# delete n chars in the current line starting at curPos, pulling the rest back
+		argDefaults(args, [1])
+		self.shift(self.buffer.pos + args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -args[0])
+
+	def addBlanks(self, args):
+		# insert n blanks in the current line starting at curPos, pushing the rest forward
+		argDefaults(args, [1])
+		self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - args[0]), args[0])
+
+	def eraseChars(self, args):
+		argDefaults(args, [1])
+		self.erase(self.buffer.pos, self.buffer.pos + args[0], True)
+
+	def setScrollRegion(self, args):
+		if(len(args) != 2):
+			args = [1, self.buffer.size[1]]
+		self.scrollRegion = args
+		self.setPos(0, 0)
+
+	def resetDECMode(self, args):
+		if(3 in args):
+			# switch to 80 column mode
+			self.resize(80, 24, False)
+			return True
+		if(6 in args):
+			self.originMode = False
+			self.setPos(0, 0)
+		if(7 in args):
+			self.autoWrap = False
+		if(25 in args):
+			self.showCursor = False
+		if(1049 in args and self.bufferIndex == 1):
+			self.swapBuffers()
+			return True
+
+	def setDECMode(self, args):
+		if(3 in args):
+			# switch to 132 column mode
+			self.resize(132, 24, False)
+			return True
+		if(6 in args):
+			self.originMode = True
+			self.setPos(0, 0)
+		if(7 in args):
+			self.autoWrap = True
+		if(25 in args):
+			self.showCursor = True
+		if(1049 in args and self.bufferIndex == 0):
+			self.swapBuffers()
+			# clear the alt buffer when switching to it
+			self.erase(0, self.buffer.len - 1)
+			self.buffer.pos = 0
+			self.buffer.atEnd = False
+			return True
+
+	def charAttributes(self, args):
+		if(len(args) == 0):
+			self.attrs.update(0)
+		for arg in args:
+			self.attrs.update(arg)
+
+	def setG0CharSet(self, args):
+		self.charmaps[0].setMode(args[0])
+
+	def setG1CharSet(self, args):
+		self.charmaps[1].setMode(args[0])
+
+	def screenAlignment(self, args):
+		self.erase(0, self.buffer.len, True, 'E')
+
 	def handleCmd(self, cmd):
 		self.bufferLock.acquire()
 		reInit = False
 		# do stuff
-		if(cmd.cmd == "add"):
-			self.add(cmd.args[0])
-		elif(cmd.cmd == "home"):
-			argDefaults(cmd.args, [0, 0])
-			self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
-		elif(cmd.cmd == "tabSet"):
-			self.horizontalTabs.add(self.buffer.pos % self.buffer.size[0])
-		elif(cmd.cmd == "tabClear"):
-			argDefaults(cmd.args, [0])
-			hpos = self.buffer.pos % self.buffer.size[0]
-			if(cmd.args[0] == 0 and hpos in self.horizontalTabs):
-				self.horizontalTabs.remove(hpos)
-			elif(cmd.args[0] == 3):
-				self.horizontalTabs = set()
-		elif(cmd.cmd == "saveCursor"):
-			self.savedPos = self.buffer.pos
-			self.savedStyle = Style(self.attrs)
-			self.savedShift = self.shift_out
-			self.savedCharsets[0] = self.charmaps[0].mode
-			self.savedCharsets[1] = self.charmaps[1].mode
-		elif(cmd.cmd == "restoreCursor"):
-			self.buffer.pos = self.savedPos
-			self.attrs = self.savedStyle
-			self.shift_out = self.savedShift
-			self.charmaps[0].setMode(self.savedCharsets[0])
-			self.charmaps[1].setMode(self.savedCharsets[1])
-		elif(cmd.cmd == "cursorFwd"):
-			argDefaults(cmd.args, [1])
-			self.move(cmd.args[0], 0)
-		elif(cmd.cmd == "cursorBack"):
-			argDefaults(cmd.args, [1])
-			self.move(-cmd.args[0], 0)
-		elif(cmd.cmd == "cursorUp"):
-			argDefaults(cmd.args, [1])
-			self.move(0, -cmd.args[0])
-		elif(cmd.cmd == "cursorDown"):
-			argDefaults(cmd.args, [1])
-			self.move(0, cmd.args[0])
-		elif(cmd.cmd == "linePosAbs"):
-			if(len(cmd.args) == 2):
-				self.setPos(cmd.args[1] - 1, cmd.args[0] - 1)
-			elif(len(cmd.args) == 1):
-				self.setPos(self.getPos()[0], cmd.args[0] - 1)
-			else:
-				self.setPos(self.getPos()[0], 0)
-		elif(cmd.cmd == "curCharAbs"):
-			argDefaults(cmd.args, [1])
-			self.setPos(cmd.args[0] - 1, self.getPos()[1])
-		elif(cmd.cmd == "nextLine"):
-			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
-				self.scroll(1)
-			else:
-				self.move(0, 1)
-			self.buffer.pos -= self.buffer.pos % self.buffer.size[0]
-		elif(cmd.cmd == "index"):
-			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
-				self.scroll(1)
-			else:
-				self.move(0, 1)
-		elif(cmd.cmd == "reverseIndex"):
-			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[0] - 1):
-				self.scroll(-1)
-			else:
-				self.move(0, -1)
-		elif(cmd.cmd == "eraseOnDisplay"):
-			argDefaults(cmd.args, [0])
-			if(cmd.args[0] == 1): # Above
-				self.erase(0, self.buffer.pos + 1)
-			elif(cmd.args[0] == 2): # All
-				self.erase(0, self.buffer.len)
-			else: # 0 (Default) Below
-				self.erase(self.buffer.pos, self.buffer.len)
-		elif(cmd.cmd == "eraseOnLine"):
-			argDefaults(cmd.args, [0])
-			lineStart = self.getPos()[1] * self.buffer.size[0]
-			if(cmd.args[0] == 1): # Left
-				self.erase(lineStart, self.buffer.pos + 1)
-			elif(cmd.args[0] == 2): # All
-				self.erase(lineStart, lineStart + self.buffer.size[0])
-			else: # 0 (Default) Right
-				self.erase(self.buffer.pos, lineStart + self.buffer.size[0])
-		elif(cmd.cmd == "scrollUp"):
-			argDefaults(cmd.args, [1])
-			self.scroll(cmd.args[0])
-		elif(cmd.cmd == "scrollDown"):
-			argDefaults(cmd.args, [1])
-			self.scroll(-cmd.args[0])
-		elif(cmd.cmd == "insertLines"):
-			# adds (erases) lines at curPos and pushes (scrolls) subsequent ones down
-			argDefaults(cmd.args, [1])
-			tmp = self.scrollRegion # store scroll region
-			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
-			self.scroll(-cmd.args[0])
-			self.scrollRegion = tmp # restore scroll region
-		elif(cmd.cmd == "removeLines"):
-			# removes (erases) lines at curPos and pulls (scrolls) subsequent ones up
-			argDefaults(cmd.args, [1])
-			tmp = self.scrollRegion # store scroll region
-			self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
-			self.scroll(cmd.args[0])
-			self.scrollRegion = tmp # restore scroll region
-		elif(cmd.cmd == "deleteChars"):
-			# delete n chars in the current line starting at curPos, pulling the rest back
-			argDefaults(cmd.args, [1])
-			self.shift(self.buffer.pos + cmd.args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -cmd.args[0])
-		elif(cmd.cmd == "addBlanks"):
-			# insert n blanks in the current line starting at curPos, pushing the rest forward
-			argDefaults(cmd.args, [1])
-			self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - cmd.args[0]), cmd.args[0])
-		elif(cmd.cmd == "eraseChars"):
-			argDefaults(cmd.args, [1])
-			self.erase(self.buffer.pos, self.buffer.pos + cmd.args[0], True)
-		elif(cmd.cmd == "setScrollRegion"):
-			if(len(cmd.args) != 2):
-				cmd.args = [1, self.buffer.size[1]]
-			self.scrollRegion = cmd.args
-			self.setPos(0, 0)
-		elif(cmd.cmd == "resetDECMode"):
-			if(3 in cmd.args):
-				# switch to 80 column mode
-				self.resize(80, 24, False)
-				reInit = True
-			if(6 in cmd.args):
-				self.originMode = False
-				self.setPos(0, 0)
-			if(7 in cmd.args):
-				self.autoWrap = False
-			if(25 in cmd.args):
-				self.showCursor = False
-			if(1049 in cmd.args and self.bufferIndex == 1):
-				self.swapBuffers()
-				reInit = True
-		elif(cmd.cmd == "setDECMode"):
-			if(3 in cmd.args):
-				# switch to 132 column mode
-				self.resize(132, 24, False)
-				reInit = True
-			if(6 in cmd.args):
-				self.originMode = True
-				self.setPos(0, 0)
-			if(7 in cmd.args):
-				self.autoWrap = True
-			if(25 in cmd.args):
-				self.showCursor = True
-			if(1049 in cmd.args and self.bufferIndex == 0):
-				self.swapBuffers()
-				# clear the alt buffer when switching to it
-				self.erase(0, self.buffer.len - 1)
-				self.buffer.pos = 0
-				self.buffer.atEnd = False
-				reInit = True
-		elif(cmd.cmd == "charAttributes"):
-			if(len(cmd.args) == 0):
-				self.attrs.update(0)
-			for arg in cmd.args:
-				self.attrs.update(arg)
-		elif(cmd.cmd == "setG0CharSet"):
-			self.charmaps[0].setMode(cmd.args[0])
-		elif(cmd.cmd == "setG1CharSet"):
-			self.charmaps[1].setMode(cmd.args[0])
-		elif(cmd.cmd == "screenAlignment"):
-			self.erase(0, self.buffer.len, True, 'E')
+		if(hasattr(self, cmd.cmd)):
+			reInit = getattr(self, cmd.cmd)(cmd.args)
 		if(reInit):
 			# reInit is set if we've switched buffers
 			self.broadcast(self.buffer.initMsg(self.showCursor))
