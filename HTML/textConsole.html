@@ -38,7 +38,7 @@
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("keyup", keyup, false);
 
-				sock = new WebSocket("wss://" + window.location.host + "/web-socket", "term");
+				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.onmessage = function (msgEvent) {
 					//console.log(msgEvent.data);
 					var msg = JSON.parse(msgEvent.data);
