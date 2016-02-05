@@ -530,6 +530,8 @@ class Terminal:
 		# do stuff
 		if(hasattr(self, cmd.cmd)):
 			reInit = getattr(self, cmd.cmd)(cmd.args)
+		else:
+			log(self, "Unimplemented command: %s" % cmd)
 		if(reInit):
 			# reInit is set if we've switched buffers
 			self.broadcast(self.buffer.initMsg(self.showCursor))
