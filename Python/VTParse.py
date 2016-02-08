@@ -223,10 +223,10 @@ class Parser:
 	#### States, executed by parseLoop ####
 
 	def ground(self):
-		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
-			self.execute()
-		elif(self.rangeTest([[0x20, 0x7F]])):
+		if(self.rangeTest([[0x20, 0x7F]])):
 			self.print_ascii()
+		elif(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
+			self.execute()
 		elif(self.rangeTest([[0xC0, 0xDF], [0xE0, 0xEF], [0xF0, 0xF7]])):
 			self.print_utf8()
 		else:
