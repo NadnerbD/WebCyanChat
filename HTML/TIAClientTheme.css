@@ -19,7 +19,8 @@ div#nav {
 div#output {
 	width: 85%;
 	height: 100%;
-	overflow: scroll;
+	overflow: auto;
+	white-space: pre-wrap;
 	float: left;
 	font-family: monospace;
 }

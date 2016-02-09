@@ -20,6 +20,7 @@ div#output {
 	width: 85%;
 	height: 100%;
 	overflow: auto;
+	white-space: pre-wrap;
 	float: left;
 	font-family: monospace;
 }

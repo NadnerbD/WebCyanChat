@@ -281,7 +281,7 @@ function addElement(parent, childtype, childtext, childclass, href) {
 		child.target = "_blank"; // this makes the link open in a new window
 	}
 	if(childtype != "br") {
-		child.appendChild(document.createTextNode(childtext.replace(/ /g, '\u00a0')));
+		child.appendChild(document.createTextNode(childtext));
 	}
 	child.className = childclass;
 	if(parent) {
