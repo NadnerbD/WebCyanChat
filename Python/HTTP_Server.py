@@ -374,7 +374,7 @@ class HTTP_Server:
 			redirect = self.redirects[resource]
 			if(type(redirect) is str):
 				self.writeHTTP(sock, 302, {"Location": redirect}, "302 Redirect")
-				log(self, "redirected %s from %s to %s" % (addr, resource, self.redirects[resource]), 3)
+				log(self, "redirected %r from %s to %s" % (addr, resource, self.redirects[resource]), 3)
 				return
 			elif(headers.has_key(redirect["header"]) and headers[redirect["header"]].find(redirect["value"]) != -1):
 				self.writeHTTP(sock, 302, {"Location": redirect["location"]}, "302 Redirect")
@@ -405,7 +405,7 @@ class HTTP_Server:
 					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
 					("WebSocket-Protocol", headers["websocket-protocol"]), \
 				]
-				log(self, "got WebSocket from (%s, %s)" % addr, 3)
+				log(self, "got WebSocket from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n")
 				self.sessionQueues[headers["websocket-protocol"]].insert((self.WebSocket(sock), addr))
@@ -440,7 +440,7 @@ class HTTP_Server:
 				Value2 /= Spaces2
 				Value3 = sock.recv(8)
 				# finish the handshake
-				log(self, "got Sec-WebSocket from (%s, %s)" % addr, 3)
+				log(self, "got Sec-WebSocket from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n" + md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
 				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket(sock), addr))
@@ -453,7 +453,7 @@ class HTTP_Server:
 					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
 			        	("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
-				log(self, "got Sec-WebSocket Version 8 from (%s, %s)" % addr, 3)
+				log(self, "got Sec-WebSocket Version 8 from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send("\r\n")
 				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket2(sock), addr))
@@ -475,7 +475,7 @@ class HTTP_Server:
 			log(self, "served %s" % resource, 3)
 		elif(method == "POST" and resource == "/file-upload"):
 			if(getOptions.has_key("authkey") and self.isAuthorized(getOptions["authkey"]) > 1):
-				log(self, "authorized file upload from (%s, %s), looking for file" % addr, 3)
+				log(self, "authorized file upload from %r, looking for file" % (addr,), 3)
 				for part in body:
 					if(part["headers"]["Content-Disposition"].has_key("filename")):
 						filename = part["headers"]["Content-Disposition"]["filename"][1:-1] # filename is quoted
@@ -494,7 +494,7 @@ class HTTP_Server:
 				log(self, "no file found", 3)
 				self.writeHTTP(sock, 400, {}, "no file in post")
 			else:
-				log(self, "unauthorized upload attempt from (%s, %s)" % addr, 3)
+				log(self, "unauthorized upload attempt from %r" % (addr,), 3)
 				self.writeHTTP(sock, 403)
 		elif(method == "POST" and resource == "/chat-data"):
 			if(getOptions.has_key("sid") and getOptions.has_key("action") and getOptions.has_key("protocol") and self.sessionQueues.has_key(getOptions["protocol"])):
@@ -545,9 +545,9 @@ class HTTP_Server:
 			try:
 				(method, resource, protocol, headers, body, getOptions) = self.readHTTP(sock)
 			except IOError:
-				log(self, "socket closed (%s, %s)" % addr, 3)
+				log(self, "socket closed %r" % (addr,), 3)
 				return
-			log(self, "%s %s from (%s, %s)" % (method, resource, addr[0], addr[1]), 3)
+			log(self, "%s %s from %r" % (method, resource, addr), 3)
 			if(self.handleReq(sock, addr, method, resource, protocol, headers, body, getOptions) == "WebSocket"):
 				log(self, "WebSocket passed as session", 3)
 				return

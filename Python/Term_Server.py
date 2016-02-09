@@ -548,14 +548,14 @@ class Term_Server:
 			sock.send("{\"cmd\": \"badpass\"}")
 			sock.close()
 			return
-		log(self, "Accepted password from (%s, %s)" % addr)
+		log(self, "Accepted password from %r" % (addr,))
 		self.terminal.sendInit(sock)
 		while True:
 			try:
 				char = chr(int(sock.recvFrame()))
 			except Exception as error:
 				# if we hit an error reading from the socket, remove it and end the thread
-				log(self, "Error reading from %s: %s" % (addr, error))
+				log(self, "Error reading from %r: %s" % (addr, error))
 				self.connections.remove(sock)
 				return
 			if(char == '\r'):

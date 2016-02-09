@@ -217,7 +217,7 @@ class CC_Server:
 			self.bounceBuffer = []
 		
 		def __repr__(self):
-			return "[%s] (%s, %s)" % (self.name, self.addr[0], self.addr[1])
+			return "[%s] %r" % (self.name, self.addr)
 		
 		def msg(self):
 			if(self.ipHash):
@@ -463,7 +463,7 @@ class CC_Server:
 	def cleanSock(self, connection, sockThread):
 		sockThread.join()
 		self.connections.remove(connection)
-		log(self, "connection socket removed: (%s, %s)" % connection.addr, 2)
+		log(self, "connection socket removed: %r" % (connection.addr,), 2)
 	
 	def sockLoop(self, connection): #Threaded per-socket
 		while 1:
