@@ -4,6 +4,7 @@ from Utils import *
 import socket
 import struct
 import base64
+import urllib
 import time
 import ssl
 try:
@@ -368,8 +369,7 @@ class HTTP_Server:
 	writeHTTP = staticmethod(writeHTTP)
 
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions):
-		#lazy parsing of escape sequences :P
-		resource = resource.replace("%20", ' ')
+		resource = urllib.unquote(resource)
 		if(self.redirects.has_key(resource)):
 			redirect = self.redirects[resource]
 			if(type(redirect) is str):
