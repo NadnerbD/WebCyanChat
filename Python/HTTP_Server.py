@@ -310,11 +310,12 @@ class HTTP_Server:
 			self.queueLen.acquire()
 			return self.queue.pop()
 	
-	def __init__(self, webRoot="../HTML"):
+	def __init__(self, webRoot="../HTML", SSLRedirect=False):
 		self.sessionList = self.sessionList()
 		self.sessionQueues = dict()
 		self.redirects = dict()
 		self.webRoot = webRoot
+		self.SSLRedirect = SSLRedirect
 	
 	def readHTTP(self, sock):
 		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
@@ -369,6 +370,10 @@ class HTTP_Server:
 	writeHTTP = staticmethod(writeHTTP)
 
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions):
+		if(self.SSLRedirect and type(sock) is not ssl.SSLSocket):
+			self.writeHTTP(sock, 302, {"Location": "https://%s:%d/%s" % (headers["host"], self.SSLRedirect, resource)}, "302 Redirect")
+			log(self, "redirected request from %r for %r to port %d as https" % (addr, urllib.unquote(resource), self.SSLRedirect), 3)
+			return
 		resource = urllib.unquote(resource)
 		if(self.redirects.has_key(resource)):
 			redirect = self.redirects[resource]
