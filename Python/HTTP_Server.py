@@ -7,6 +7,7 @@ import base64
 import urllib
 import time
 import ssl
+import re
 try:
 	import hashlib
 	md5 = hashlib.md5
@@ -350,6 +351,12 @@ class HTTP_Server:
 					dataHeaders["content-disposition"] = parseToDict(dataHeaders["content-disposition"], '=', "; ")
 				output.append({"headers": dataHeaders, "data": data})
 			body = output
+		# it's valid for the resource to be a full url and the host header omitted
+		ur = re.compile(r"^.+\://(.+?)(?:/(.+))?$")
+		match = ur.match(resource)
+		if(match):
+			headers["host"], resource = match.groups()
+			resource = "/" + (resource if resource is not None else "")
 		return (method, resource, protocol, headers, body, getOptions)
 		
 	def writeHTTP(sock, code, headers={}, body=None, orderedHeaders=[]):
@@ -371,8 +378,12 @@ class HTTP_Server:
 
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions):
 		if(self.SSLRedirect and type(sock) is not ssl.SSLSocket):
-			self.writeHTTP(sock, 302, {"Location": "https://%s:%d/%s" % (headers["host"], self.SSLRedirect, resource)}, "302 Redirect")
-			log(self, "redirected request from %r for %r to port %d as https" % (addr, urllib.unquote(resource), self.SSLRedirect), 3)
+			# bloody hax, because the host header apparently contains the port, and IPv6 can use colons in addresses
+			ur = re.compile(r"^(\[[^\]]+\]|[^\[\]]+)(?::([0-9]+))$")
+			host_noport = ur.match(headers["host"]).groups()[0]
+			new_url = "https://%s:%d%s" % (host_noport, self.SSLRedirect, resource)
+			self.writeHTTP(sock, 302, {"Location": new_url}, "302 Redirect")
+			log(self, "redirected request from %r for %r to %r" % (addr, urllib.unquote(resource), new_url), 3)
 			return
 		resource = urllib.unquote(resource)
 		if(self.redirects.has_key(resource)):
