@@ -78,6 +78,7 @@
 				document.addEventListener("keypress", keypress, false);
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("keyup", keyup, false);
+				document.addEventListener("paste", handlePaste, false);
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.onmessage = function (msgEvent) {
@@ -147,6 +148,7 @@
 			function keypress(event) {
 				// most keypresses will be handled here
 				// capitalization and such is handled by the browser
+				if(modCtrl && String.fromCharCode(event.which) == "v") return;
 				if(modCtrl) {
 					sock.send(event.which - 96);
 					modCtrl = false;
@@ -205,6 +207,18 @@
 				if(event.which == 17) {
 					modCtrl = false;
 					event.preventDefault();
+				}
+			}
+
+			function handlePaste(event) {
+				event.stopPropagation();
+				event.preventDefault();
+
+				var cData = event.clipboardData || window.clipboardData;
+				var data = cData.getData("Text");
+
+				for(var i = 0; i < data.length; i++) {
+					sock.send(data.charCodeAt(i));
 				}
 			}
 		</script>
