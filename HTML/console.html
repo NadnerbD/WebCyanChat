@@ -78,7 +78,7 @@
 				document.addEventListener("keypress", keypress, false);
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("keyup", keyup, false);
-				document.body.addEventListener("paste", handlePaste);
+				document.addEventListener("paste", handlePaste, false);
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.onmessage = function (msgEvent) {
