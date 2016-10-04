@@ -78,6 +78,7 @@
 				document.addEventListener("keypress", keypress, false);
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("keyup", keyup, false);
+				document.body.addEventListener("paste", handlePaste);
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.onmessage = function (msgEvent) {
@@ -207,6 +208,18 @@
 					event.preventDefault();
 				}
 			}
+
+			function handlePaste(event) {
+				event.stopPropagation();
+				event.preventDefault();
+
+				var cData = event.clipboardData || window.clipboardData;
+				var data = cData.getData("Text");
+
+				for(var i = 0; i < data.length; i++) {
+					sock.send(data.charCodeAt(i));
+				}
+			}
 		</script>
 		<style>
 			textarea {
@@ -225,7 +238,7 @@
 			}
 		</style>
 	</head>
-	<body onload="init()">
+	<body onload="init()" contenteditable="true">
 		<div id="grid"></div>
 		<input type="button" value="Ctrl" onclick="modCtrl=true;"/>
 	</body>
