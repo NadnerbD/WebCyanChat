@@ -148,6 +148,7 @@
 			function keypress(event) {
 				// most keypresses will be handled here
 				// capitalization and such is handled by the browser
+				if(modCtrl && String.fromCharCode(event.which) == "v") return;
 				if(modCtrl) {
 					sock.send(event.which - 96);
 					modCtrl = false;
@@ -238,7 +239,7 @@
 			}
 		</style>
 	</head>
-	<body onload="init()" contenteditable="true">
+	<body onload="init()">
 		<div id="grid"></div>
 		<input type="button" value="Ctrl" onclick="modCtrl=true;"/>
 	</body>
