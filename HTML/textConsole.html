@@ -101,7 +101,7 @@
 				// most keypresses will be handled here
 				// capitalization and such is handled by the browser
 				if(modCtrl) {
-					sock.send(event.which - 96);
+					sock.send(event.which & 0037);
 					modCtrl = false;
 				}else{
 					sock.send(event.which);
