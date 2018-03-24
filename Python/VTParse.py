@@ -28,6 +28,7 @@ paramCmdStrings = { \
 	'l': 'resetMode', \
 	'd': 'linePosAbs', \
 	'g': 'tabClear', \
+	'c': 'sendDeviceAttributes', \
 	'G': 'curCharAbs', \
 	'J': 'eraseOnDisplay', \
 	'K': 'eraseOnLine', \
@@ -101,7 +102,7 @@ class Parser:
 
 	def missingAction(self, state):
 		log(self, "state '%s' has no action for: %r (%s) in %r" % \
-			(state, self.char, hex(self.char), self.debugStr))
+			(state, self.char, hex(ord(self.char)), self.debugStr))
 		self.setState(self.ground)
 		
 
