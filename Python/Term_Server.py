@@ -509,6 +509,12 @@ class Terminal:
 			self.buffer.atEnd = False
 			return True
 
+	def sendDeviceAttributes(self, args):
+		log(self, "Device attribute request: %r" % args)
+		# Identifying as "VT100 with Advanced Video Option" as described on 
+		# http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Functions-using-CSI-_-ordered-by-the-final-character_s_
+		return "\033[?1;2c"
+
 	def charAttributes(self, args):
 		if(len(args) == 0):
 			self.attrs.update(0)
@@ -532,13 +538,16 @@ class Terminal:
 			reInit = getattr(self, cmd.cmd)(cmd.args)
 		else:
 			log(self, "Unimplemented command: %s" % cmd)
-		if(reInit):
+		if(reInit == True):
 			# reInit is set if we've switched buffers
 			self.broadcast(self.buffer.initMsg(self.showCursor))
 		else:
 			self.lastUpdate += 1
 			self.updateEvent.set()
 		self.bufferLock.release()
+		# reInit is alternatively set to a string if we want to talk back to the host program
+		if(type(reInit) == str):
+			return reInit
 
 	def sendInit(self, sock):	
 		self.bufferLock.acquire()
@@ -657,7 +666,10 @@ class Term_Server:
 			if(command == None):
 				return
 			log(self, "cmd: %r" % command, 4)
-			self.terminal.handleCmd(command)
+			resp = self.terminal.handleCmd(command)
+			if(resp):
+				self.wstream.write(resp)
+				self.wstream.flush()
 			
 	def handleInput(self, sock, addr):
 		# the first frame sent over the socket must be the password
