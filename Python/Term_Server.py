@@ -212,6 +212,7 @@ class Terminal:
 		self.parent = parent
 		self.updateEvent = threading.Event()
 		self.lastUpdate = 0
+		self.appKeyMode = False
 		# this is mainly to prevent message mixing during the initial state burst
 		self.bufferLock = threading.Lock()
 
@@ -509,11 +510,38 @@ class Terminal:
 			self.buffer.atEnd = False
 			return True
 
+	def setAppKeys(self, args):
+		log(self, "Set Application Cursor Keys", 2)
+		self.appKeyMode = True
+		self.broadcast(self.keyModeMsg())
+
+	def setNormKeys(self, args):
+		log(self, "Set Normal Cursor Keys", 2)
+		self.appKeyMode = False
+		self.broadcast(self.keyModeMsg())
+
+	def keyModeMsg(self):
+		return json.dumps({
+			"cmd": "setkeymode",
+			"keymode": "application" if self.appKeyMode else "normal"
+		})
+
 	def sendDeviceAttributes(self, args):
-		log(self, "Device attribute request: %r" % args)
+		log(self, "Device attribute request: %r" % args, 2)
 		# Identifying as "VT100 with Advanced Video Option" as described on 
 		# http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Functions-using-CSI-_-ordered-by-the-final-character_s_
 		return "\033[?1;2c"
+
+	def deviceStatusReport(self, args):
+		log(self, "Device status request: %r" % args, 2)
+		# see https://vt100.net/docs/vt100-ug/chapter3.html
+		if(args[0] == 5): # report status
+			return "\033[0n" # ready
+		elif(args[0] == 6): # report cursor position
+			pos = self.getPos()
+			rep = (pos[1] + 1, pos[0] + 1)
+			log(self, "Cursor position report: %r" % (rep,), 2)
+			return "\033[%d;%dR" % rep
 
 	def charAttributes(self, args):
 		if(len(args) == 0):
@@ -551,6 +579,7 @@ class Terminal:
 
 	def sendInit(self, sock):	
 		self.bufferLock.acquire()
+		sock.send(self.keyModeMsg())
 		sock.send(self.buffer.initMsg(self.showCursor))
 		self.bufferLock.release()
 

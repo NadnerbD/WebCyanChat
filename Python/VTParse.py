@@ -26,6 +26,7 @@ paramCmdStrings = { \
 	'm': 'charAttributes', \
 	'h': 'setMode', \
 	'l': 'resetMode', \
+	'n': 'deviceStatusReport', \
 	'd': 'linePosAbs', \
 	'g': 'tabClear', \
 	'c': 'sendDeviceAttributes', \

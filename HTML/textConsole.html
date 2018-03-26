@@ -9,6 +9,7 @@
 			var width = 0;
 			var height = 0;
 			var modCtrl = false;
+			var appkeymode = false;
 
 			function setContent(content) {
 				// terrible hack: create full screen string, place in textArea
@@ -45,6 +46,10 @@
 					if(msg.cmd == "badpass") {
 						alert("Server rejected password");
 						deleteCookie("term_pass");
+						return;
+					}
+					if(msg.cmd == "setkeymode") {
+						appkeymode = msg.keymode == "application";
 						return;
 					}
 					if(msg.cmd == "init") {
@@ -122,8 +127,11 @@
 					case 39: // right
 					case 40: // down
 						sock.send(27); // Esc
-						//sock.send(91); // [ (normal mode)
-						sock.send(79); // O (application mode)
+						if(appkeymode) {
+							sock.send(79); // O (application mode)
+						}else{
+							sock.send(91); // [ (normal mode)
+						}
 						sock.send(cursorCodes[event.which]);
 						break;
 					// editing keys
