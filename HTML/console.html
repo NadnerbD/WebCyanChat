@@ -190,7 +190,7 @@
 					case 27: // esc
 					case 9: // Tab
 					case 8: // Backspace
-						sock.send(event.which);
+						sock.send(127); // 0x7F (ASCII DEL)
 						break;
 					case 17: // Ctrl
 						modCtrl = true;
