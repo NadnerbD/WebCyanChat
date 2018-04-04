@@ -17,6 +17,13 @@ from Utils import parseToDict
 from HTTP_Server import HTTP_Server
 from VTParse import Parser
 
+MSG_BADPASS = 0
+MSG_KEYMODE = 1
+MSG_INIT = 2
+MSG_DIFF = 3
+DIFF_CHAR = 0
+DIFF_SHIFT = 1
+
 class Style:
 	# this object represents the font style of a single character
 	# it bit-packs 4 attributes (fgColor, bgColor, bold, underline) into a one byte
@@ -38,14 +45,14 @@ class Style:
 	def pack(self):
 		# bbbfffub
 		if(not self.inverted):
-			return unichr( \
+			return struct.pack('B', \
 				(self.bold      & 0x01)      | \
 				(self.underline & 0x01) << 1 | \
 				(self.fgColor   & 0x07) << 2 | \
 				(self.bgColor   & 0x07) << 5   \
 			)
 		else:
-			return unichr( \
+			return struct.pack('B', \
 				(self.bold      & 0x01)      | \
 				(self.underline & 0x01) << 1 | \
 				(self.bgColor   & 0x07) << 2 | \
@@ -91,8 +98,6 @@ class Buffer:
 		self.atEnd = False
 		self.chars = [' ' for i in range(self.len)]
 		self.attrs = [Style() for i in range(self.len)]
-		self.cdiff = dict()
-		self.sdiff = dict()
 		self.changeStream = []
 
 	def __len__(self):
@@ -101,7 +106,9 @@ class Buffer:
 	def __setitem__(self, i, d):
 		self.chars[i] = d[0]
 		self.attrs[i] = d[1]
-		self.changeStream.append({'t': 'c', 'd': [i, d[0], d[1].pack()]})
+		# byte type, int pos, short data, byte style
+		# log(self, repr((d[0], d[1].pack())))
+		self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
 
 	def __getitem__(self, i):
 		return zip(self.chars[i], self.attrs[i])
@@ -119,26 +126,28 @@ class Buffer:
 				self.chars[index] = n[0]
 				self.attrs[index] = n[1]
 			index += 1
-		self.changeStream.append({'t': 's', 'd': [start, end, offset]})
+		# byte type, int start, int end, int offset
+		# log(self, repr([start, end, offset]))
+		self.changeStream.append(struct.pack('!Biii', DIFF_SHIFT, start, end, offset))
 
 	def initMsg(self, showCursor):
-		return json.dumps({ \
-			"cmd": "init", \
-			"data": ''.join(self.chars), \
-			"styles": ''.join([x.pack() for x in self.attrs]), \
-			"cur": (showCursor * self.pos) + (-1 * (not showCursor)), \
-			"size": self.size \
-		})
+		# byte type, short width, short height, int pos, [byte data, byte style]
+		# network stream (big endian)
+		return struct.pack('!Bhhi',
+			MSG_INIT,
+			self.size[0],
+			self.size[1],
+			(showCursor * self.pos) + (-1 * (not showCursor))
+		) + ''.join([x + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
 
 	def diffMsg(self, showCursor):
-		if(len(self.changeStream) > self.len / 2):
-			msg = self.initMsg(showCursor)
-		else:
-			msg = json.dumps({ \
-				"cmd": "changeStream", \
-				"data": self.changeStream, \
-				"cur": (showCursor * self.pos) + (-1 * (not showCursor)) \
-			})
+		# byte type, int pos, int len, [items]
+		# log(self, repr(self.changeStream))
+		msg = struct.pack('!Bii', 
+			MSG_DIFF, 
+			(showCursor * self.pos) + (-1 * (not showCursor)), 
+			len(self.changeStream)
+		) + ''.join(self.changeStream)
 		self.changeStream = []
 		return msg
 
@@ -330,7 +339,7 @@ class Terminal:
 		lost = []
 		for sock in self.parent.connections:
 			try:
-				sock.send(msg)
+				sock.send(msg, 2) # opcode 2 indicates binary data
 			except:
 				lost.append(sock)
 		for sock in lost:
@@ -523,10 +532,8 @@ class Terminal:
 		self.broadcast(self.keyModeMsg())
 
 	def keyModeMsg(self):
-		return json.dumps({
-			"cmd": "setkeymode",
-			"keymode": "application" if self.appKeyMode else "normal"
-		})
+		# 0 is normal, 1 is application mode
+		return struct.pack('B?', MSG_KEYMODE, self.appKeyMode)
 
 	def sendDeviceAttributes(self, args):
 		log(self, "Device attribute request: %r" % args, 2)
@@ -581,8 +588,8 @@ class Terminal:
 
 	def sendInit(self, sock):	
 		self.bufferLock.acquire()
-		sock.send(self.keyModeMsg())
-		sock.send(self.buffer.initMsg(self.showCursor))
+		sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
+		sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
 		self.bufferLock.release()
 
 	def sendDiff(self):
@@ -707,7 +714,7 @@ class Term_Server:
 		passwd = sock.recvFrame()
 		if(passwd != self.prefs["term_pass"]):
 			log(self, "Incorrect password attempt from %s: %r" % (addr, passwd))
-			sock.send("{\"cmd\": \"badpass\"}")
+			sock.send(struct.pack('B', MSG_BADPASS), 2) # opcode 2 indicates binary data
 			sock.close()
 			return
 		log(self, "Accepted password from %r" % (addr,))

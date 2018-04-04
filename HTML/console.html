@@ -82,64 +82,87 @@
 				document.addEventListener("paste", handlePaste, false);
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
+				sock.binaryType = "arraybuffer";
+				MSG_BADPASS = 0;
+				MSG_KEYMODE = 1;
+				MSG_INIT = 2;
+				MSG_DIFF = 3;
+				DIFF_CHAR = 0;
+				DIFF_SHIFT = 1;
 				sock.onmessage = function (msgEvent) {
-					//console.log(msgEvent.data);
-					var msg = JSON.parse(msgEvent.data);
-					if(msg.cmd == "badpass") {
+					var dv = new DataView(msgEvent.data);
+					var cmd = dv.getUint8(0);
+					if(cmd == MSG_BADPASS) {
 						alert("Server rejected password");
 						deleteCookie("term_pass");
 						return;
 					}
-					if(msg.cmd == "setkeymode") {
-						appkeymode = msg.keymode == "application";
+					if(cmd == MSG_KEYMODE) {
+						appkeymode = dv.getUint8(1);
 						return;
 					}
-					if(msg.cmd == "init" && (width != msg.size[0] || height != msg.size[1])) {
-						var container = document.getElementById("grid");
-						while(container.childNodes.length)
-							container.removeChild(container.firstChild);
-						width = msg.size[0];
-						height = msg.size[1];
-						grid = createGrid(container);
-						cursor = grid[msg.cur];
-					}
-					if(msg.cmd == "init" || msg.cmd == "change") {
-						for(var i in msg.data) {
-							grid[i].firstChild.data = msg.data[i];
-							var style = unpackStyle(msg.styles[i].charCodeAt(0));
+					if(cmd == MSG_INIT) {
+						var mWidth = dv.getInt16(1);
+						var mHeight = dv.getInt16(3);
+						var mCursor = dv.getInt32(5);
+						if(width != mWidth || height != mHeight) {
+							var container = document.getElementById("grid");
+							while(container.childNodes.length)
+								container.removeChild(container.firstChild);
+							width = mWidth;
+							height = mHeight;
+							grid = createGrid(container);
+							cursor = grid[mCursor];
+						}
+						for(var i = 0; i < width * height; i++) {
+							grid[i].firstChild.data = String.fromCharCode(dv.getUint8(9 + 2 * i));
+							var style = unpackStyle(dv.getUint8(10 + 2 * i));
 							for(var s in style) {
 								grid[i].style[s] = style[s];
 							}
 						}
+						setCursor(mCursor);
 					}
-					if(msg.cmd == "changeStream") {
-						for(var ch of msg.data) {
-							if(ch.t == "c") {
-								grid[ch.d[0]].firstChild.data = ch.d[1];
-								var style = unpackStyle(ch.d[2].charCodeAt(0));
-								for (var s in style) grid[ch.d[0]].style[s] = style[s];
-							}else if(ch.t == "s") {
-								var start = ch.d[0];
-								var end = ch.d[1];
-								var offset = ch.d[2];
-								console.log("shift: " + JSON.stringify(ch));
+					if(cmd == MSG_DIFF) {
+						var mCursor = dv.getInt32(1);
+						var mLen = dv.getInt32(5);
+						var mOffset = 9;
+						// var LOGMSG = [];
+						for(var i = 0; i < mLen; i++) {
+							var chType = dv.getUint8(mOffset);
+							if(chType == DIFF_CHAR) {
+								var chPos = dv.getInt32(mOffset + 1);
+								var chChar = String.fromCharCode(dv.getUint16(mOffset + 5));
+								var chStyle = dv.getUint8(mOffset + 7);
+								mOffset += 8;
+								// LOGMSG.push("char: " + JSON.stringify([chChar, String.fromCharCode(chStyle)]));
+								grid[chPos].firstChild.data = chChar;
+								var style = unpackStyle(chStyle);
+								for (var s in style) grid[chPos].style[s] = style[s];
+							}else if(chType == DIFF_SHIFT) {
+								var start = dv.getInt32(mOffset + 1);
+								var end = dv.getInt32(mOffset + 5);
+								var offset = dv.getInt32(mOffset + 9);
+								mOffset += 13;
+								// LOGMSG.push("shift: " + JSON.stringify([start, end, offset]));
 								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.style.cssText]);
-								var i = Math.min(start + offset, start);
-								while(i < Math.max(end + offset, end) && i < grid.length) {
-									if(i < start + offset || i >= end + offset) {
-										grid[i].firstChild.data = " ";
-										grid[i].style = "";
+								var index = Math.min(start + offset, start);
+								while(index < Math.max(end + offset, end) && index < grid.length) {
+									if(index < start + offset || index >= end + offset) {
+										grid[index].firstChild.data = " ";
+										grid[index].style = "";
 									}else{
-										var src = srcgrid[i - start - offset];
-										grid[i].firstChild.data = src[0];
-										grid[i].style = src[1];
+										var src = srcgrid[index - start - offset];
+										grid[index].firstChild.data = src[0];
+										grid[index].style = src[1];
 									}
-									i++;
+									index++;
 								}
 							}
 						}
+						setCursor(mCursor);
+						// console.log(LOGMSG);
 					}
-					setCursor(msg.cur);
 				}
 				sock.onopen = function () {
 					var passwd = getCookie("term_pass");
