@@ -186,7 +186,10 @@ class Parser:
 			charLen += 1
 		for i in range(charLen - 1):
 			self.char += self.stream.read(1)
-		self.putCommand(Command('add', unicode(self.char, 'utf-8')))
+		try:
+			self.putCommand(Command('add', unicode(self.char, 'utf-8')))
+		except UnicodeDecodeError:
+			self.putCommand(Command('add', u'\ufffd'))
 
 	def esc_dispatch(self):
 		cmd = self.privateMarker + self.char

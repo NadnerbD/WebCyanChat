@@ -541,6 +541,11 @@ class Terminal:
 		# http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Functions-using-CSI-_-ordered-by-the-final-character_s_
 		return "\033[?1;2c"
 
+	def sendDeviceAttributes2(self, args):
+		log(self, "Secondary attribute request: %r" % args, 2)
+		# copying the response I observed PuTTY generate
+		return "\033[>0;136;0c"
+
 	def deviceStatusReport(self, args):
 		log(self, "Device status request: %r" % args, 2)
 		# see https://vt100.net/docs/vt100-ug/chapter3.html
