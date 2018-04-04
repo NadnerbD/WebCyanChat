@@ -68,7 +68,7 @@
 
 			function setCursor(index) {
 				if(cursor)
-					cursor.className = undefined;
+					cursor.classList.remove("cursor");
 				if(index != -1) {
 					cursor = grid[index];
 					cursor.className = "cursor";
