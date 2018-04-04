@@ -740,15 +740,7 @@ class Term_Server:
 			i.start()
 
 	def updateLoop(self, shutdown):
-		# condenses rapid updates into a single message
 		while not shutdown.is_set():
 			self.terminal.updateEvent.wait()
-			prev = self.terminal.lastUpdate
-			while True:
-				time.sleep(0.001)
-				if(prev != self.terminal.lastUpdate):
-					prev = self.terminal.lastUpdate
-				else:
-					break
 			self.terminal.sendDiff()
 
