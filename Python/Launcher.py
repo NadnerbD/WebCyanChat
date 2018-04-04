@@ -2,6 +2,14 @@
 import sys
 import os
 
+profiling = False
+if("--profile" in sys.argv):
+	import yappi
+	yappi.start()
+	sys.argv.remove("--profile")
+	profiling = True
+	
+
 if(os.path.dirname(sys.argv[0])):
 	os.chdir(os.path.dirname(sys.argv[0]))
 
@@ -33,3 +41,7 @@ try:
 	Server.start()
 except Exception:
 	print "usage: python %s (%s) [--pref_name=VALUE ...]" % (sys.argv[0], '|'.join(serverClasses.keys()))
+
+if(profiling):
+	yappi.get_func_stats().print_all()
+	yappi.get_thread_stats().print_all()
