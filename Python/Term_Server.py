@@ -17,6 +17,13 @@ from Utils import parseToDict
 from HTTP_Server import HTTP_Server
 from VTParse import Parser
 
+MSG_BADPASS = 0
+MSG_KEYMODE = 1
+MSG_INIT = 2
+MSG_DIFF = 3
+DIFF_CHAR = 0
+DIFF_SHIFT = 1
+
 class Style:
 	# this object represents the font style of a single character
 	# it bit-packs 4 attributes (fgColor, bgColor, bold, underline) into a one byte
@@ -38,14 +45,14 @@ class Style:
 	def pack(self):
 		# bbbfffub
 		if(not self.inverted):
-			return unichr( \
+			return struct.pack('B', \
 				(self.bold      & 0x01)      | \
 				(self.underline & 0x01) << 1 | \
 				(self.fgColor   & 0x07) << 2 | \
 				(self.bgColor   & 0x07) << 5   \
 			)
 		else:
-			return unichr( \
+			return struct.pack('B', \
 				(self.bold      & 0x01)      | \
 				(self.underline & 0x01) << 1 | \
 				(self.bgColor   & 0x07) << 2 | \
@@ -91,8 +98,7 @@ class Buffer:
 		self.atEnd = False
 		self.chars = [' ' for i in range(self.len)]
 		self.attrs = [Style() for i in range(self.len)]
-		self.cdiff = dict()
-		self.sdiff = dict()
+		self.changeStream = []
 
 	def __len__(self):
 		return self.len
@@ -100,33 +106,49 @@ class Buffer:
 	def __setitem__(self, i, d):
 		self.chars[i] = d[0]
 		self.attrs[i] = d[1]
-		self.cdiff[i] = d[0]
-		self.sdiff[i] = d[1]
+		# byte type, int pos, short data, byte style
+		# log(self, repr((d[0], d[1].pack())))
+		self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
 
 	def __getitem__(self, i):
 		return zip(self.chars[i], self.attrs[i])
 
+	def shift(self, start, end, offset):
+		# shift the contents of the specified area by offset
+		buffer = self[start:end]
+		index = min(start + offset, start)
+		while index < max(end + offset, end) and index < len(self):
+			if(index < start + offset or index >= end + offset):
+				self.chars[index] = ' '
+				self.attrs[index] =  Style()
+			else:
+				n = buffer[index - start - offset]
+				self.chars[index] = n[0]
+				self.attrs[index] = n[1]
+			index += 1
+		# byte type, int start, int end, int offset
+		# log(self, repr([start, end, offset]))
+		self.changeStream.append(struct.pack('!Biii', DIFF_SHIFT, start, end, offset))
+
 	def initMsg(self, showCursor):
-		return json.dumps({ \
-			"cmd": "init", \
-			"data": ''.join(self.chars), \
-			"styles": ''.join([x.pack() for x in self.attrs]), \
-			"cur": (showCursor * self.pos) + (-1 * (not showCursor)), \
-			"size": self.size \
-		})
+		# byte type, short width, short height, int pos, [short data, byte style]
+		# network stream (big endian)
+		return struct.pack('!Bhhi',
+			MSG_INIT,
+			self.size[0],
+			self.size[1],
+			(showCursor * self.pos) + (-1 * (not showCursor))
+		) + ''.join([struct.pack('!H', ord(x)) + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
 
 	def diffMsg(self, showCursor):
-		if(len(self.cdiff) > self.len / 2):
-			msg = self.initMsg(showCursor)
-		else:
-			msg = json.dumps({ \
-				"cmd": "change", \
-				"data": self.cdiff, \
-				"styles": dict([(x, y.pack()) for x, y in self.sdiff.items()]), \
-				"cur": (showCursor * self.pos) + (-1 * (not showCursor)) \
-			})
-		self.cdiff = dict()
-		self.sdiff = dict()
+		# byte type, int pos, int len, [items]
+		# log(self, repr(self.changeStream))
+		msg = struct.pack('!Bii', 
+			MSG_DIFF, 
+			(showCursor * self.pos) + (-1 * (not showCursor)), 
+			len(self.changeStream)
+		) + ''.join(self.changeStream)
+		self.changeStream = []
 		return msg
 
 class Charmap:
@@ -212,6 +234,7 @@ class Terminal:
 		self.parent = parent
 		self.updateEvent = threading.Event()
 		self.lastUpdate = 0
+		self.appKeyMode = False
 		# this is mainly to prevent message mixing during the initial state burst
 		self.bufferLock = threading.Lock()
 
@@ -265,18 +288,7 @@ class Terminal:
 		end = self.scrollRegion[1] * self.buffer.size[0]
 		offset = -value * self.buffer.size[0]
 		# shift within the scroll window area only
-		self.shift(max(start, start - offset), min(end, end - offset), offset)
-
-	def shift(self, start, end, offset):
-		# shift the contents of the specified area by offset
-		buffer = self.buffer[start:end]
-		index = min(start + offset, start)
-		while index < max(end + offset, end) and index < self.buffer.len:
-			if(index < start + offset or index >= end + offset):
-				self.buffer[index] = (' ', Style())
-			else:
-				self.buffer[index] = buffer[index - start - offset]
-			index += 1
+		self.buffer.shift(max(start, start - offset), min(end, end - offset), offset)
 
 	def add(self, char):
 		if(char == '\r'):
@@ -327,7 +339,7 @@ class Terminal:
 		lost = []
 		for sock in self.parent.connections:
 			try:
-				sock.send(msg)
+				sock.send(msg, 2) # opcode 2 indicates binary data
 			except:
 				lost.append(sock)
 		for sock in lost:
@@ -456,12 +468,12 @@ class Terminal:
 	def deleteChars(self, args):
 		# delete n chars in the current line starting at curPos, pulling the rest back
 		argDefaults(args, [1])
-		self.shift(self.buffer.pos + args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -args[0])
+		self.buffer.shift(self.buffer.pos + args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -args[0])
 
 	def addBlanks(self, args):
 		# insert n blanks in the current line starting at curPos, pushing the rest forward
 		argDefaults(args, [1])
-		self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - args[0]), args[0])
+		self.buffer.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - args[0]), args[0])
 
 	def eraseChars(self, args):
 		argDefaults(args, [1])
@@ -509,11 +521,36 @@ class Terminal:
 			self.buffer.atEnd = False
 			return True
 
+	def setAppKeys(self, args):
+		log(self, "Set Application Cursor Keys", 2)
+		self.appKeyMode = True
+		self.broadcast(self.keyModeMsg())
+
+	def setNormKeys(self, args):
+		log(self, "Set Normal Cursor Keys", 2)
+		self.appKeyMode = False
+		self.broadcast(self.keyModeMsg())
+
+	def keyModeMsg(self):
+		# 0 is normal, 1 is application mode
+		return struct.pack('B?', MSG_KEYMODE, self.appKeyMode)
+
 	def sendDeviceAttributes(self, args):
-		log(self, "Device attribute request: %r" % args)
+		log(self, "Device attribute request: %r" % args, 2)
 		# Identifying as "VT100 with Advanced Video Option" as described on 
 		# http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Functions-using-CSI-_-ordered-by-the-final-character_s_
 		return "\033[?1;2c"
+
+	def deviceStatusReport(self, args):
+		log(self, "Device status request: %r" % args, 2)
+		# see https://vt100.net/docs/vt100-ug/chapter3.html
+		if(args[0] == 5): # report status
+			return "\033[0n" # ready
+		elif(args[0] == 6): # report cursor position
+			pos = self.getPos()
+			rep = (pos[1] + 1, pos[0] + 1)
+			log(self, "Cursor position report: %r" % (rep,), 2)
+			return "\033[%d;%dR" % rep
 
 	def charAttributes(self, args):
 		if(len(args) == 0):
@@ -551,7 +588,8 @@ class Terminal:
 
 	def sendInit(self, sock):	
 		self.bufferLock.acquire()
-		sock.send(self.buffer.initMsg(self.showCursor))
+		sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
+		sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
 		self.bufferLock.release()
 
 	def sendDiff(self):
@@ -676,7 +714,7 @@ class Term_Server:
 		passwd = sock.recvFrame()
 		if(passwd != self.prefs["term_pass"]):
 			log(self, "Incorrect password attempt from %s: %r" % (addr, passwd))
-			sock.send("{\"cmd\": \"badpass\"}")
+			sock.send(struct.pack('B', MSG_BADPASS), 2) # opcode 2 indicates binary data
 			sock.close()
 			return
 		log(self, "Accepted password from %r" % (addr,))
@@ -709,15 +747,7 @@ class Term_Server:
 			i.start()
 
 	def updateLoop(self, shutdown):
-		# condenses rapid updates into a single message
 		while not shutdown.is_set():
 			self.terminal.updateEvent.wait()
-			prev = self.terminal.lastUpdate
-			while True:
-				time.sleep(0.001)
-				if(prev != self.terminal.lastUpdate):
-					prev = self.terminal.lastUpdate
-				else:
-					break
 			self.terminal.sendDiff()
 

@@ -7,6 +7,7 @@
 			var height = 0;
 			var modCtrl = false;
 			var grid = new Array();
+			var appkeymode = false;
 			var cursor;
 
 			var colors = [
@@ -81,33 +82,87 @@
 				document.addEventListener("paste", handlePaste, false);
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
+				sock.binaryType = "arraybuffer";
+				MSG_BADPASS = 0;
+				MSG_KEYMODE = 1;
+				MSG_INIT = 2;
+				MSG_DIFF = 3;
+				DIFF_CHAR = 0;
+				DIFF_SHIFT = 1;
 				sock.onmessage = function (msgEvent) {
-					//console.log(msgEvent.data);
-					var msg = JSON.parse(msgEvent.data);
-					if(msg.cmd == "badpass") {
+					var dv = new DataView(msgEvent.data);
+					var cmd = dv.getUint8(0);
+					if(cmd == MSG_BADPASS) {
 						alert("Server rejected password");
 						deleteCookie("term_pass");
 						return;
 					}
-					if(msg.cmd == "init" && (width != msg.size[0] || height != msg.size[1])) {
-						var container = document.getElementById("grid");
-						while(container.childNodes.length)
-							container.removeChild(container.firstChild);
-						width = msg.size[0];
-						height = msg.size[1];
-						grid = createGrid(container);
-						cursor = grid[msg.cur];
+					if(cmd == MSG_KEYMODE) {
+						appkeymode = dv.getUint8(1);
+						return;
 					}
-					if(msg.cmd == "init" || msg.cmd == "change") {
-						for(var i in msg.data) {
-							grid[i].firstChild.data = msg.data[i];
-							var style = unpackStyle(msg.styles[i].charCodeAt(0));
+					if(cmd == MSG_INIT) {
+						var mWidth = dv.getInt16(1);
+						var mHeight = dv.getInt16(3);
+						var mCursor = dv.getInt32(5);
+						if(width != mWidth || height != mHeight) {
+							var container = document.getElementById("grid");
+							while(container.childNodes.length)
+								container.removeChild(container.firstChild);
+							width = mWidth;
+							height = mHeight;
+							grid = createGrid(container);
+							cursor = grid[mCursor];
+						}
+						for(var i = 0; i < width * height; i++) {
+							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 3 * i));
+							var style = unpackStyle(dv.getUint8(11 + 3 * i));
 							for(var s in style) {
 								grid[i].style[s] = style[s];
 							}
 						}
+						setCursor(mCursor);
 					}
-					setCursor(msg.cur);
+					if(cmd == MSG_DIFF) {
+						var mCursor = dv.getInt32(1);
+						var mLen = dv.getInt32(5);
+						var mOffset = 9;
+						// var LOGMSG = [];
+						for(var i = 0; i < mLen; i++) {
+							var chType = dv.getUint8(mOffset);
+							if(chType == DIFF_CHAR) {
+								var chPos = dv.getInt32(mOffset + 1);
+								var chChar = String.fromCharCode(dv.getUint16(mOffset + 5));
+								var chStyle = dv.getUint8(mOffset + 7);
+								mOffset += 8;
+								// LOGMSG.push("char: " + JSON.stringify([chChar, String.fromCharCode(chStyle)]));
+								grid[chPos].firstChild.data = chChar;
+								var style = unpackStyle(chStyle);
+								for (var s in style) grid[chPos].style[s] = style[s];
+							}else if(chType == DIFF_SHIFT) {
+								var start = dv.getInt32(mOffset + 1);
+								var end = dv.getInt32(mOffset + 5);
+								var offset = dv.getInt32(mOffset + 9);
+								mOffset += 13;
+								// LOGMSG.push("shift: " + JSON.stringify([start, end, offset]));
+								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.style.cssText]);
+								var index = Math.min(start + offset, start);
+								while(index < Math.max(end + offset, end) && index < grid.length) {
+									if(index < start + offset || index >= end + offset) {
+										grid[index].firstChild.data = " ";
+										grid[index].style = "";
+									}else{
+										var src = srcgrid[index - start - offset];
+										grid[index].firstChild.data = src[0];
+										grid[index].style = src[1];
+									}
+									index++;
+								}
+							}
+						}
+						setCursor(mCursor);
+						// console.log(LOGMSG);
+					}
 				}
 				sock.onopen = function () {
 					var passwd = getCookie("term_pass");
@@ -171,8 +226,11 @@
 					case 39: // right
 					case 40: // down
 						sock.send(27); // Esc
-						//sock.send(91); // [ (normal mode)
-						sock.send(79); // O (application mode)
+						if(appkeymode) {
+							sock.send(79); // O (application mode)
+						}else{
+							sock.send(91); // [ (normal mode)
+						}
 						sock.send(cursorCodes[event.which]);
 						break;
 					// editing keys
@@ -190,7 +248,7 @@
 					case 27: // esc
 					case 9: // Tab
 					case 8: // Backspace
-						sock.send(event.which);
+						sock.send(127); // 0x7F (ASCII DEL)
 						break;
 					case 17: // Ctrl
 						modCtrl = true;
@@ -241,6 +299,6 @@
 	</head>
 	<body onload="init()">
 		<div id="grid"></div>
-		<input type="button" value="Ctrl" onclick="modCtrl=true;"/>
+		<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
 	</body>
 </html>
