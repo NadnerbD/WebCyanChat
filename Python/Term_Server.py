@@ -93,6 +93,7 @@ class Buffer:
 		self.attrs = [Style() for i in range(self.len)]
 		self.cdiff = dict()
 		self.sdiff = dict()
+		self.changeStream = []
 
 	def __len__(self):
 		return self.len
@@ -100,11 +101,25 @@ class Buffer:
 	def __setitem__(self, i, d):
 		self.chars[i] = d[0]
 		self.attrs[i] = d[1]
-		self.cdiff[i] = d[0]
-		self.sdiff[i] = d[1]
+		self.changeStream.append({'t': 'c', 'd': [i, d[0], d[1].pack()]})
 
 	def __getitem__(self, i):
 		return zip(self.chars[i], self.attrs[i])
+
+	def shift(self, start, end, offset):
+		# shift the contents of the specified area by offset
+		buffer = self[start:end]
+		index = min(start + offset, start)
+		while index < max(end + offset, end) and index < len(self):
+			if(index < start + offset or index >= end + offset):
+				self.chars[index] = ' '
+				self.attrs[index] =  Style()
+			else:
+				n = buffer[index - start - offset]
+				self.chars[index] = n[0]
+				self.attrs[index] = n[1]
+			index += 1
+		self.changeStream.append({'t': 's', 'd': [start, end, offset]})
 
 	def initMsg(self, showCursor):
 		return json.dumps({ \
@@ -116,17 +131,15 @@ class Buffer:
 		})
 
 	def diffMsg(self, showCursor):
-		if(len(self.cdiff) > self.len / 2):
+		if(len(self.changeStream) > self.len / 2):
 			msg = self.initMsg(showCursor)
 		else:
 			msg = json.dumps({ \
-				"cmd": "change", \
-				"data": self.cdiff, \
-				"styles": dict([(x, y.pack()) for x, y in self.sdiff.items()]), \
+				"cmd": "changeStream", \
+				"data": self.changeStream, \
 				"cur": (showCursor * self.pos) + (-1 * (not showCursor)) \
 			})
-		self.cdiff = dict()
-		self.sdiff = dict()
+		self.changeStream = []
 		return msg
 
 class Charmap:
@@ -266,18 +279,7 @@ class Terminal:
 		end = self.scrollRegion[1] * self.buffer.size[0]
 		offset = -value * self.buffer.size[0]
 		# shift within the scroll window area only
-		self.shift(max(start, start - offset), min(end, end - offset), offset)
-
-	def shift(self, start, end, offset):
-		# shift the contents of the specified area by offset
-		buffer = self.buffer[start:end]
-		index = min(start + offset, start)
-		while index < max(end + offset, end) and index < self.buffer.len:
-			if(index < start + offset or index >= end + offset):
-				self.buffer[index] = (' ', Style())
-			else:
-				self.buffer[index] = buffer[index - start - offset]
-			index += 1
+		self.buffer.shift(max(start, start - offset), min(end, end - offset), offset)
 
 	def add(self, char):
 		if(char == '\r'):
@@ -457,12 +459,12 @@ class Terminal:
 	def deleteChars(self, args):
 		# delete n chars in the current line starting at curPos, pulling the rest back
 		argDefaults(args, [1])
-		self.shift(self.buffer.pos + args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -args[0])
+		self.buffer.shift(self.buffer.pos + args[0], self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0]), -args[0])
 
 	def addBlanks(self, args):
 		# insert n blanks in the current line starting at curPos, pushing the rest forward
 		argDefaults(args, [1])
-		self.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - args[0]), args[0])
+		self.buffer.shift(self.buffer.pos, self.buffer.pos + (self.buffer.size[0] - self.buffer.pos % self.buffer.size[0] - args[0]), args[0])
 
 	def eraseChars(self, args):
 		argDefaults(args, [1])

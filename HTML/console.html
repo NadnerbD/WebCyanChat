@@ -112,6 +112,33 @@
 							}
 						}
 					}
+					if(msg.cmd == "changeStream") {
+						for(var ch of msg.data) {
+							if(ch.t == "c") {
+								grid[ch.d[0]].firstChild.data = ch.d[1];
+								var style = unpackStyle(ch.d[2].charCodeAt(0));
+								for (var s in style) grid[ch.d[0]].style[s] = style[s];
+							}else if(ch.t == "s") {
+								var start = ch.d[0];
+								var end = ch.d[1];
+								var offset = ch.d[2];
+								console.log("shift: " + JSON.stringify(ch));
+								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.style.cssText]);
+								var i = Math.min(start + offset, start);
+								while(i < Math.max(end + offset, end) && i < grid.length) {
+									if(i < start + offset || i >= end + offset) {
+										grid[i].firstChild.data = " ";
+										grid[i].style = "";
+									}else{
+										var src = srcgrid[i - start - offset];
+										grid[i].firstChild.data = src[0];
+										grid[i].style = src[1];
+									}
+									i++;
+								}
+							}
+						}
+					}
 					setCursor(msg.cur);
 				}
 				sock.onopen = function () {
