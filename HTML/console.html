@@ -115,8 +115,8 @@
 							cursor = grid[mCursor];
 						}
 						for(var i = 0; i < width * height; i++) {
-							grid[i].firstChild.data = String.fromCharCode(dv.getUint8(9 + 2 * i));
-							var style = unpackStyle(dv.getUint8(10 + 2 * i));
+							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 3 * i));
+							var style = unpackStyle(dv.getUint8(11 + 3 * i));
 							for(var s in style) {
 								grid[i].style[s] = style[s];
 							}

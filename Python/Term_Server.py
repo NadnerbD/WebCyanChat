@@ -131,14 +131,14 @@ class Buffer:
 		self.changeStream.append(struct.pack('!Biii', DIFF_SHIFT, start, end, offset))
 
 	def initMsg(self, showCursor):
-		# byte type, short width, short height, int pos, [byte data, byte style]
+		# byte type, short width, short height, int pos, [short data, byte style]
 		# network stream (big endian)
 		return struct.pack('!Bhhi',
 			MSG_INIT,
 			self.size[0],
 			self.size[1],
 			(showCursor * self.pos) + (-1 * (not showCursor))
-		) + ''.join([x + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
+		) + ''.join([struct.pack('!H', ord(x)) + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
 
 	def diffMsg(self, showCursor):
 		# byte type, int pos, int len, [items]
