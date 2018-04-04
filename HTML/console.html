@@ -247,6 +247,8 @@
 						break;
 					case 27: // esc
 					case 9: // Tab
+						sock.send(event.which);
+						break;
 					case 8: // Backspace
 						sock.send(127); // 0x7F (ASCII DEL)
 						break;
