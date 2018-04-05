@@ -1,4 +1,4 @@
-import os, sys, threading, signal, tty, termios
+import os, sys, threading, signal, tty, termios, fcntl, signal, errno
 
 pid, master = os.forkpty()
 if pid == 0:
@@ -9,6 +9,14 @@ wstream = os.fdopen(master, 'w')
 rstream = os.fdopen(master, 'r')
 
 log = open('pty_log', 'a')
+
+orig_attrs = termios.tcgetattr(sys.stdin)
+
+def handler(sig, frame):
+	sz = fcntl.ioctl(sys.stdin, termios.TIOCGWINSZ, '\0\0\0\0\0\0\0\0')
+	fcntl.ioctl(master, termios.TIOCSWINSZ, sz)
+signal.signal(signal.SIGWINCH, handler)
+handler(0, 0)
 
 tty.setraw(sys.stdin.fileno()) # tell python to receive all keypresses without buffering
 
@@ -42,15 +50,18 @@ t = threading.Thread(target=readUI, name='readUI', args=())
 t.daemon = True
 t.start()
 
-try:
-	os.waitpid(pid, 0)
-except KeyboardInterrupt:
-	os.kill(pid, signal.SIGKILL)
-	os.waitpid(pid, 0)
-finally:
-	log.close()
+running = True
+while running:
 	try:
-		wstream.close()
-		rstream.close()
-	except:
-		pass
+		os.waitpid(pid, 0)
+		running = False
+	except OSError, e:
+		if e.errno != errno.EINTR:
+			raise
+log.close()
+try:
+	wstream.close()
+	rstream.close()
+except:
+	pass
+termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_attrs)
