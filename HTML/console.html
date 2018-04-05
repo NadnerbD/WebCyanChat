@@ -297,13 +297,13 @@
 			}
 			#grid ul {
 				list-style-type: none;
-				padding: 0px;
-				margin: 0px;
+				padding: 0;
+				margin: 0;
 			}
 			#grid li {
 				display: block;
-				height: 15px;
 				white-space: nowrap;
+				line-height: 1em;
 			}
 			#grid span {
 				font-family: monospace;
@@ -313,8 +313,7 @@
 				/* prevent weird characters from mis-sizing our grid */
 				display: inline-block;
 				vertical-align: top;
-				height: 15px;
-				width: 8px;
+				width: 1ch;
 			}
 			#grid span.cursor {
 				color: black;
