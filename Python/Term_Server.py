@@ -738,8 +738,6 @@ class Term_Server:
 				log(self, "Error reading from %r: %s" % (addr, error))
 				self.connections.remove(sock)
 				return
-			if(char == '\r'):
-				char = '\n'
 			log(self, "recvd: %r" % char, 4)
 			self.wstream.write(char)
 			self.wstream.flush()
