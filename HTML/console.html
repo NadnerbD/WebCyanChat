@@ -105,10 +105,8 @@
 						return;
 					}
 					if(cmd == MSG_TITLE) {
-						var len = dv.getUint32(1);
-						var tstr = "";
-						for(var i = 0; i < len; i++) tstr += String.fromCharCode(dv.getUint8(5 + i));
-						document.title = tstr;
+						var dc = new TextDecoder("utf-8");
+						document.title = dc.decode(new Uint8Array(msgEvent.data, 1, msgEvent.data.byteLength - 1));
 						return;
 					}
 					if(cmd == MSG_INIT) {

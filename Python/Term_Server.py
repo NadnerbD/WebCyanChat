@@ -565,7 +565,7 @@ class Terminal:
 			log(self, "Unknown OSCommand: %r" % args)
 
 	def titleMsg(self, string):
-		return struct.pack('Bi', MSG_TITLE, len(string)) + string
+		return struct.pack('B', MSG_TITLE) + string
 
 	def charAttributes(self, args):
 		if(len(args) == 0):
