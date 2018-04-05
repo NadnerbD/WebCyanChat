@@ -21,6 +21,7 @@ MSG_BADPASS = 0
 MSG_KEYMODE = 1
 MSG_INIT = 2
 MSG_DIFF = 3
+MSG_TITLE = 4
 DIFF_CHAR = 0
 DIFF_SHIFT = 1
 
@@ -556,6 +557,15 @@ class Terminal:
 			rep = (pos[1] + 1, pos[0] + 1)
 			log(self, "Cursor position report: %r" % (rep,), 2)
 			return "\033[%d;%dR" % rep
+
+	def OSCommand(self, args):
+		if(len(args) > 1 and args[0] == 0):
+			self.broadcast(self.titleMsg(args[1].encode('utf-8', 'replace')))
+		else:
+			log(self, "Unknown OSCommand: %r" % args)
+
+	def titleMsg(self, string):
+		return struct.pack('Bi', MSG_TITLE, len(string)) + string
 
 	def charAttributes(self, args):
 		if(len(args) == 0):

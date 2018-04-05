@@ -87,6 +87,7 @@
 				MSG_KEYMODE = 1;
 				MSG_INIT = 2;
 				MSG_DIFF = 3;
+				MSG_TITLE = 4;
 				DIFF_CHAR = 0;
 				DIFF_SHIFT = 1;
 				sock.onmessage = function (msgEvent) {
@@ -99,6 +100,13 @@
 					}
 					if(cmd == MSG_KEYMODE) {
 						appkeymode = dv.getUint8(1);
+						return;
+					}
+					if(cmd == MSG_TITLE) {
+						var len = dv.getUint32(1);
+						var tstr = "";
+						for(var i = 0; i < len; i++) tstr += String.fromCharCode(dv.getUint8(5 + i));
+						document.title = tstr;
 						return;
 					}
 					if(cmd == MSG_INIT) {
