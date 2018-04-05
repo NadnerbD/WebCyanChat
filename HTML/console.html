@@ -43,10 +43,10 @@
 
 			function unpackStyle(value) {
 				return {
-					fontWeight: weights[value & 0x01],
-					textDecoration: decorations[(value & (0x01 << 1)) >> 1],
-					color: colors[(value & (0x07 << 2)) >> 2],
-					backgroundColor: bgcolors[(value & (0x07 << 5)) >> 5]
+					fontWeight:      weights    [ value       & 0x01],
+					textDecoration:  decorations[(value >> 1) & 0x01],
+					color:           colors     [(value >> 2) & 0x07],
+					backgroundColor: bgcolors   [(value >> 5) & 0x07]
 				};
 			}
 

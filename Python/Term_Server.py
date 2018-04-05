@@ -234,7 +234,6 @@ class Terminal:
 		self.savedCharsets = ['B', '0']
 		self.parent = parent
 		self.updateEvent = threading.Event()
-		self.lastUpdate = 0
 		self.appKeyMode = False
 		# this is mainly to prevent message mixing during the initial state burst
 		self.bufferLock = threading.Lock()
@@ -594,7 +593,6 @@ class Terminal:
 			# reInit is set if we've switched buffers
 			self.broadcast(self.buffer.initMsg(self.showCursor))
 		else:
-			self.lastUpdate += 1
 			self.updateEvent.set()
 		self.bufferLock.release()
 		# reInit is alternatively set to a string if we want to talk back to the host program
@@ -610,7 +608,6 @@ class Terminal:
 	def sendDiff(self):
 		self.bufferLock.acquire()
 		self.broadcast(self.buffer.diffMsg(self.showCursor))
-		self.lastUpdate = 0
 		self.updateEvent.clear()
 		self.bufferLock.release()
 
@@ -618,7 +615,6 @@ class Term_Server:
 	def __init__(self):
 		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
-		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
 		self.sessionQueue = self.server.registerProtocol("term")
 		self.connections = list()
 		self.master = None
