@@ -310,7 +310,8 @@ class Terminal:
 			# if we don't encounter a tab stop, move to the right margin
 			self.move(self.buffer.size[0] - 1 - hpos, 0)
 		elif(char == '\x08'): # backspace
-			self.buffer.pos -= 1
+			if not self.buffer.atEnd: # if we're off the end don't move the cursor
+				self.buffer.pos -= 1
 			self.buffer.atEnd = False
 		elif(char == '\x07'):
 			pass # bell
