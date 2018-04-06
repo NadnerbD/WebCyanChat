@@ -112,7 +112,28 @@ class Buffer:
 		self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
 
 	def __getitem__(self, i):
-		return zip(self.chars[i], self.attrs[i])
+		if type(i) == slice:
+			return zip(self.chars[i], self.attrs[i])
+		else:
+			return (self.chars[i], self.attrs[i])
+
+	def copy(self, src):
+		oWidth, oHeight = src.size
+		nWidth, nHeight = self.size
+		for y in range(min(oHeight, nHeight)):
+			for x in range(min(oWidth, nWidth)):
+				self.chars[x + y * nWidth] = src.chars[x + y * oWidth]
+				self.attrs[x + y * nWidth] = src.attrs[x + y * oWidth]
+		oX = src.pos % oWidth
+		oY = src.pos / oWidth
+		self.pos = min(oX, nWidth - 1) + min(oY, nHeight - 1) * nWidth
+		if nWidth > oWidth and src.atEnd:
+			self.atEnd = False
+			self.pos += 1
+		elif nWidth <= oX:
+			self.atEnd = True
+		else:
+			self.atEnd = src.atEnd
 
 	def shift(self, start, end, offset):
 		# shift the contents of the specified area by offset
@@ -244,12 +265,20 @@ class Terminal:
 
 	def resize(self, nWidth, nHeight, copyData=True):
 		newBuffers = [Buffer(nWidth, nHeight), Buffer(nWidth, nHeight)]
-		(oWidth, oHeight) = self.buffers[0].size
+		oWidth, oHeight = self.buffers[0].size
+		# keep saved pos in bounds
+		oX = self.savedPos % oWidth
+		oY = self.savedPos / oWidth
+		self.savedPos = min(oX, nWidth - 1) + min(oY, nHeight - 1) * nWidth
+		# extend scroll region if it's at the bottom, and contract it if it's too large
+		if nHeight > oHeight and self.scrollRegion[1] == oHeight:
+			self.scrollRegion[1] = nHeight
+		elif nHeight < oHeight:
+			self.scrollRegion[1] = min(self.scrollRegion[1], nHeight)
+		# copy data if requested
 		if(copyData):
 			for i in range(2):
-				for y in range(min(oHeight, nHeight)):
-					for x in range(min(oWidth, nWidth)):
-						newBuffers[i][x + y * nWidth] = self.buffers[i][x + y * oWidth]
+				newBuffers[i].copy(self.buffers[i])
 		self.buffer = newBuffers[self.bufferIndex]
 		self.buffers = newBuffers
 		self.parent.resize(nWidth, nHeight)
@@ -341,11 +370,11 @@ class Terminal:
 		for sock in self.parent.connections:
 			try:
 				sock.send(msg, 2) # opcode 2 indicates binary data
-			except:
-				lost.append(sock)
-		for sock in lost:
-			self.parent.connections.remove(sock)
-			log(self, "Removed connection: %r" % sock)
+			except IOError as e:
+				lost.append((sock, e))
+		for err in lost:
+			self.parent.connections.remove(err[0])
+			log(self, "Removed connection: %r (%s)" % err)
 
 	def home(self, args):
 		argDefaults(args, [0, 0])
@@ -733,15 +762,28 @@ class Term_Server:
 		self.terminal.sendInit(sock)
 		while True:
 			try:
-				char = chr(int(sock.recvFrame()))
-			except Exception as error:
+				frame = sock.recvFrame()
+			except IOError as error:
 				# if we hit an error reading from the socket, remove it and end the thread
 				log(self, "Error reading from %r: %s" % (addr, error))
 				self.connections.remove(sock)
 				return
-			log(self, "recvd: %r" % char, 4)
-			self.wstream.write(char)
-			self.wstream.flush()
+			if len(frame) == 0:
+				log(self, "End of stream from %r" % (addr,))
+				self.connections.remove(sock)
+				return
+			if frame[0] == 'k': # keypress
+				log(self, "recvd keypress: %r" % frame[1], 4)
+				self.wstream.write(frame[1])
+				self.wstream.flush()
+			elif frame[0] == 'r': #resize
+				if len(frame) != 5:
+					log(self, "Malformed resize request: %r" % frame)
+				sreq = struct.unpack('!HH', frame[1:5])
+				log(self, "recvd resize req: %r" % (sreq,))
+				with self.terminal.bufferLock:
+					self.terminal.resize(sreq[0], sreq[1]) # this will call self.resize
+					self.terminal.broadcast(self.terminal.buffer.initMsg(self.terminal.showCursor))
 
 	def sessionLoop(self, shutdown):
 		while not shutdown.is_set():

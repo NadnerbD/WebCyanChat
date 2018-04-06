@@ -112,6 +112,7 @@
 					if(cmd == MSG_INIT) {
 						var mWidth = dv.getInt16(1);
 						var mHeight = dv.getInt16(3);
+						// console.log("INIT " + mWidth + " " + mHeight);
 						var mCursor = dv.getInt32(5);
 						if(width != mWidth || height != mHeight) {
 							var container = document.getElementById("grid");
@@ -208,15 +209,28 @@
 				document.cookie = name + "=;path=/;expires=" + expire_string
 			}
 
+			function sendKey(keyCode) {
+				var msg = new Uint8Array([107, keyCode]); // 'k'
+				sock.send(msg);
+			}
+
+			function reqResize(x, y) {
+				var msg = new Uint8Array([114, 0, 0, 0, 0]); // 'r'
+				var dv = new DataView(msg.buffer);
+				dv.setUint16(1, x);
+				dv.setUint16(3, y);
+				sock.send(msg);
+			}
+
 			function keypress(event) {
 				// most keypresses will be handled here
 				// capitalization and such is handled by the browser
 				if(modCtrl && String.fromCharCode(event.which) == "v") return;
 				if(modCtrl) {
-					sock.send(event.which & 0037);
+					sendKey(event.which & 0037);
 					modCtrl = false;
 				}else{
-					sock.send(event.which);
+					sendKey(event.which);
 				}
 				event.preventDefault();
 			}
@@ -233,13 +247,13 @@
 					case 38: // up
 					case 39: // right
 					case 40: // down
-						sock.send(27); // Esc
+						sendKey(27); // Esc
 						if(appkeymode) {
-							sock.send(79); // O (application mode)
+							sendKey(79); // O (application mode)
 						}else{
-							sock.send(91); // [ (normal mode)
+							sendKey(91); // [ (normal mode)
 						}
-						sock.send(cursorCodes[event.which]);
+						sendKey(cursorCodes[event.which]);
 						break;
 					// editing keys
 					case 33: // pg up
@@ -248,17 +262,17 @@
 					case 36: // home
 					case 45: // insert
 					case 46: // del
-						sock.send(27); // Esc
-						sock.send(91); // [
-						sock.send(cursorCodes[event.which]);
-						sock.send(126); // ~
+						sendKey(27); // Esc
+						sendKey(91); // [
+						sendKey(cursorCodes[event.which]);
+						sendKey(126); // ~
 						break;
 					case 27: // esc
 					case 9: // Tab
-						sock.send(event.which);
+						sendKey(event.which);
 						break;
 					case 8: // Backspace
-						sock.send(127); // 0x7F (ASCII DEL)
+						sendKey(127); // 0x7F (ASCII DEL)
 						break;
 					case 17: // Ctrl
 						modCtrl = true;
@@ -286,11 +300,14 @@
 				var data = cData.getData("Text");
 
 				for(var i = 0; i < data.length; i++) {
-					sock.send(data.charCodeAt(i));
+					sendKey(data.charCodeAt(i));
 				}
 			}
 		</script>
 		<style>
+			body {
+				margin: 0;
+			}
 			textarea {
 				font-family: monospace;
 				font-weight: bold;
@@ -318,6 +335,12 @@
 			#grid span.cursor {
 				color: black;
 				background-color: white;
+			}
+			input[value="Ctrl"] {
+				position: fixed;
+				top: 0.5em;
+				right: 0.5em;
+				opacity: 0.5;
 			}
 		</style>
 	</head>
