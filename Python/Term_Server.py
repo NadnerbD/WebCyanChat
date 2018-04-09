@@ -24,6 +24,7 @@ MSG_DIFF = 3
 MSG_TITLE = 4
 DIFF_CHAR = 0
 DIFF_SHIFT = 1
+DIFF_NEXT_CHAR = 2
 
 class Style:
 	# this object represents the font style of a single character
@@ -100,6 +101,7 @@ class Buffer:
 		self.chars = [' ' for i in range(self.len)]
 		self.attrs = [Style() for i in range(self.len)]
 		self.changeStream = []
+		self.lastChangePos = -1
 
 	def __len__(self):
 		return self.len
@@ -109,7 +111,11 @@ class Buffer:
 		self.attrs[i] = d[1]
 		# byte type, int pos, short data, byte style
 		# log(self, repr((d[0], d[1].pack())))
-		self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
+		if i == self.lastChangePos + 1:
+			self.changeStream.append(struct.pack('!BHc', DIFF_NEXT_CHAR, ord(d[0]), d[1].pack()))
+		else:
+			self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
+		self.lastChangePos = i
 
 	def __getitem__(self, i):
 		if type(i) == slice:
@@ -151,6 +157,7 @@ class Buffer:
 		# byte type, int start, int end, int offset
 		# log(self, repr([start, end, offset]))
 		self.changeStream.append(struct.pack('!Biii', DIFF_SHIFT, start, end, offset))
+		self.lastChangePos = -1
 
 	def initMsg(self, showCursor):
 		# byte type, short width, short height, int pos, [short data, byte style]
@@ -171,6 +178,7 @@ class Buffer:
 			len(self.changeStream)
 		) + ''.join(self.changeStream)
 		self.changeStream = []
+		self.lastChangePos = -1
 		return msg
 
 class Charmap:
@@ -763,7 +771,7 @@ class Term_Server:
 		while True:
 			try:
 				frame = sock.recvFrame()
-			except IOError as error:
+			except Exception as error:
 				# if we hit an error reading from the socket, remove it and end the thread
 				log(self, "Error reading from %r: %s" % (addr, error))
 				self.connections.remove(sock)
