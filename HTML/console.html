@@ -82,6 +82,7 @@
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("keyup", keyup, false);
 				document.addEventListener("paste", handlePaste, false);
+				window.addEventListener("resize", handleResize, false);
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.binaryType = "arraybuffer";
@@ -303,10 +304,25 @@
 					sendKey(data.charCodeAt(i));
 				}
 			}
+
+			function sizeToWindow() {
+				var charRect = document.querySelector("#grid span").getBoundingClientRect();
+				reqResize(
+					Math.floor(window.innerWidth / charRect.width),
+					Math.floor(window.innerHeight / charRect.height)
+				);
+			}
+
+			var resizeTimeout;
+			function handleResize(event) {
+				clearTimeout(resizeTimeout);
+				resizeTimeout = setTimeout(sizeToWindow, 200);
+			}
 		</script>
 		<style>
 			body {
 				margin: 0;
+				background-color: black;
 			}
 			textarea {
 				font-family: monospace;
