@@ -25,6 +25,7 @@ MSG_TITLE = 4
 DIFF_CHAR = 0
 DIFF_SHIFT = 1
 DIFF_NEXT_CHAR = 2
+DIFF_NEXT_CHAR_NOSTYLE = 3
 
 class Style:
 	# this object represents the font style of a single character
@@ -102,6 +103,7 @@ class Buffer:
 		self.attrs = [Style() for i in range(self.len)]
 		self.changeStream = []
 		self.lastChangePos = -1
+		self.lastChangeStyle = 0
 
 	def __len__(self):
 		return self.len
@@ -111,11 +113,14 @@ class Buffer:
 		self.attrs[i] = d[1]
 		# byte type, int pos, short data, byte style
 		# log(self, repr((d[0], d[1].pack())))
-		if i == self.lastChangePos + 1:
+		if i == self.lastChangePos + 1 and d[1].pack() == self.lastChangeStyle:
+			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR_NOSTYLE, ord(d[0])))
+		elif i == self.lastChangePos + 1:
 			self.changeStream.append(struct.pack('!BHc', DIFF_NEXT_CHAR, ord(d[0]), d[1].pack()))
 		else:
 			self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
 		self.lastChangePos = i
+		self.lastChangeStyle = d[1].pack()
 
 	def __getitem__(self, i):
 		if type(i) == slice:
@@ -177,6 +182,7 @@ class Buffer:
 		) + ''.join(self.changeStream)
 		self.changeStream = []
 		self.lastChangePos = -1
+		self.lastChangeStyle = 0
 		return msg
 
 class Charmap:

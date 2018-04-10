@@ -94,6 +94,7 @@
 				DIFF_CHAR = 0;
 				DIFF_SHIFT = 1;
 				DIFF_NEXT_CHAR = 2;
+				DIFF_NEXT_CHAR_NOSTYLE = 3;
 				sock.onmessage = function (msgEvent) {
 					var dv = new DataView(msgEvent.data);
 					var cmd = dv.getUint8(0);
@@ -139,6 +140,7 @@
 						var mOffset = 5;
 						// var LOGMSG = [];
 						var lastChangePos = -1;
+						var lastChangeStyle = unpackStyle(0);
 						while(mOffset < msgEvent.data.byteLength) {
 							var chType = dv.getUint8(mOffset);
 							if(chType == DIFF_CHAR) {
@@ -151,6 +153,7 @@
 								var style = unpackStyle(chStyle);
 								for (var s in style) grid[chPos].style[s] = style[s];
 								lastChangePos = chPos;
+								lastChangeStyle = style;
 							}else if(chType == DIFF_NEXT_CHAR) {
 								lastChangePos++;
 								var chChar = String.fromCharCode(dv.getUint16(mOffset + 1));
@@ -159,6 +162,15 @@
 								// LOGMSG.push("next_char: " + JSON.stringify([chChar, String.fromCharCode(chStyle)]));
 								grid[lastChangePos].firstChild.data = chChar;
 								var style = unpackStyle(chStyle);
+								for (var s in style) grid[lastChangePos].style[s] = style[s];
+								lastChangeStyle = style;
+							}else if(chType == DIFF_NEXT_CHAR_NOSTYLE) {
+								lastChangePos++;
+								var chChar = String.fromCharCode(dv.getUint16(mOffset + 1));
+								mOffset += 3;
+								// LOGMSG.push("next_char_nostyle: " + JSON.stringify([chChar]));
+								grid[lastChangePos].firstChild.data = chChar;
+								var style = lastChangeStyle;
 								for (var s in style) grid[lastChangePos].style[s] = style[s];
 							}else if(chType == DIFF_SHIFT) {
 								var start = dv.getInt32(mOffset + 1);
