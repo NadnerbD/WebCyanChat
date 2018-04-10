@@ -670,6 +670,9 @@ class Term_Server:
 			"term_height": 24, \
 			"term_width": 80, \
 			"term_pass": "pass", \
+			"https_redirect": 0, \
+			"https_cert": "server.crt", \
+			"https_key": "server.key", \
 		}
 
 	def readPrefs(self, filename="TermServer.conf"):
@@ -725,13 +728,22 @@ class Term_Server:
 
 		if(self.prefs["enable_http"]):
 			# start the http listener
-			s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"], False))
+			s = threading.Thread(target=self.server.acceptLoop, name="httpThread", kwargs={
+				'port': self.prefs["http_port"],
+				'useSSL': False,
+				'SSLRedirect': self.prefs["https_port"] if self.prefs["https_redirect"] else False,
+			})
 			s.daemon = True
 			s.start()
 
 		if(self.prefs["enable_https"]):
 			# start the https listener
-			s = threading.Thread(target=self.server.acceptLoop, name="httpsThread", args=(self.prefs["https_port"], True))
+			s = threading.Thread(target=self.server.acceptLoop, name="httpsThread", kwargs={
+				'port': self.prefs["https_port"],
+				'useSSL': True,
+				'SSLCert': self.prefs["https_cert"],
+				'SSLKey': self.prefs["https_key"],
+			})
 			s.daemon = True
 			s.start()
 
