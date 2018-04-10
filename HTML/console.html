@@ -80,7 +80,6 @@
 			function init() {
 				document.addEventListener("keypress", keypress, false);
 				document.addEventListener("keydown", keydown, false);
-				document.addEventListener("keyup", keyup, false);
 				document.addEventListener("paste", handlePaste, false);
 				window.addEventListener("resize", handleResize, false);
 
@@ -98,21 +97,19 @@
 				sock.onmessage = function (msgEvent) {
 					var dv = new DataView(msgEvent.data);
 					var cmd = dv.getUint8(0);
-					if(cmd == MSG_BADPASS) {
+					switch(cmd) {
+					case MSG_BADPASS:
 						alert("Server rejected password");
 						deleteCookie("term_pass");
-						return;
-					}
-					if(cmd == MSG_KEYMODE) {
+						break;
+					case MSG_KEYMODE:
 						appkeymode = dv.getUint8(1);
-						return;
-					}
-					if(cmd == MSG_TITLE) {
+						break;
+					case MSG_TITLE:
 						var dc = new TextDecoder("utf-8");
 						document.title = dc.decode(new Uint8Array(msgEvent.data, 1, msgEvent.data.byteLength - 1));
-						return;
-					}
-					if(cmd == MSG_INIT) {
+						break;
+					case MSG_INIT:
 						var mWidth = dv.getInt16(1);
 						var mHeight = dv.getInt16(3);
 						// console.log("INIT " + mWidth + " " + mHeight);
@@ -134,8 +131,8 @@
 							}
 						}
 						setCursor(mCursor);
-					}
-					if(cmd == MSG_DIFF) {
+						break;
+					case MSG_DIFF:
 						var mCursor = dv.getInt32(1);
 						var mOffset = 5;
 						// var LOGMSG = [];
@@ -183,6 +180,7 @@
 						}
 						setCursor(mCursor);
 						// console.log(LOGMSG);
+						break;
 					}
 				}
 				sock.onopen = function () {
@@ -237,14 +235,15 @@
 			function keypress(event) {
 				// most keypresses will be handled here
 				// capitalization and such is handled by the browser
-				if(modCtrl && String.fromCharCode(event.which) == "v") return;
-				if(modCtrl) {
+				if(event.ctrlKey && event.which == 118) return; // ctrl-v
+				if(modCtrl || event.ctrlKey) {
 					sendKey(event.which & 0037);
 					modCtrl = false;
 				}else{
 					sendKey(event.which);
 				}
 				event.preventDefault();
+				event.stopPropagation();
 			}
 
 			var cursorCodes = {35: 52, 36: 49, 37: 68, 38: 65, 39: 67, 40: 66, 33: 53, 34: 54, 45: 50, 46: 51}; // 41DACB5623
@@ -286,21 +285,13 @@
 					case 8: // Backspace
 						sendKey(127); // 0x7F (ASCII DEL)
 						break;
-					case 17: // Ctrl
-						modCtrl = true;
-						break;
 					default:
 						handled = false;
 						break;
 				}
-				if(handled)
+				if(handled) {
 					event.preventDefault();
-			}
-
-			function keyup(event) {
-				if(event.which == 17) {
-					modCtrl = false;
-					event.preventDefault();
+					event.stopPropagation();
 				}
 			}
 
