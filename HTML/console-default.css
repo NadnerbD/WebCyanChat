@@ -1,0 +1,23 @@
+.weight-normal { font-weight: normal; }
+.weight-bold   { font-weight: bold; }
+
+.decor-none      { text-decoration: none; }
+.decor-underline { text-decoration: underline; }
+
+.color-black   { color: gray; }
+.color-red     { color: red; }
+.color-green   { color: green; }
+.color-yellow  { color: yellow; }
+.color-blue    { color: blue; }
+.color-magenta { color: magenta; }
+.color-cyan    { color: cyan; }
+.color-white   { color: white; }
+
+.backg-black   { background-color: black; }
+.backg-red     { background-color: red; }
+.backg-green   { background-color: green; }
+.backg-yellow  { background-color: yellow; }
+.backg-blue    { background-color: blue; }
+.backg-magenta { background-color: magenta; }
+.backg-cyan    { background-color: cyan; }
+.backg-white   { background-color: white; }

@@ -13,17 +13,7 @@
 			var cursor;
 
 			var colors = [
-				"gray",
-				"red",
-				"green",
-				"yellow",
-				"blue",
-				"magenta",
-				"cyan",
-				""
-			];
-			var bgcolors = [
-				"",
+				"black",
 				"red",
 				"green",
 				"yellow",
@@ -43,11 +33,19 @@
 
 			function unpackStyle(value) {
 				return {
-					fontWeight:      weights    [ value       & 0x01],
-					textDecoration:  decorations[(value >> 1) & 0x01],
-					color:           colors     [(value >> 2) & 0x07],
-					backgroundColor: bgcolors   [(value >> 5) & 0x07]
+					weight:  weights    [ value       & 0x01],
+					decor:   decorations[(value >> 1) & 0x01],
+					color:   colors     [(value >> 2) & 0x07],
+					backg:   colors     [(value >> 5) & 0x07]
 				};
+			}
+
+			function applyStyle(elem, value) {
+				var style = unpackStyle(value);
+				for(var s in style) {
+					for(var c of elem.classList) if(c.startsWith(s)) elem.classList.remove(c);
+					elem.classList.add(s + "-" + style[s]);
+				}
 			}
 
 			function createGrid(container) {
@@ -73,7 +71,7 @@
 					cursor.classList.remove("cursor");
 				if(index != -1) {
 					cursor = grid[index];
-					cursor.className = "cursor";
+					cursor.classList.add("cursor");
 				}
 			}
 
@@ -125,10 +123,7 @@
 						}
 						for(var i = 0; i < width * height; i++) {
 							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 3 * i));
-							var style = unpackStyle(dv.getUint8(11 + 3 * i));
-							for(var s in style) {
-								grid[i].style[s] = style[s];
-							}
+							applyStyle(grid[i], dv.getUint8(11 + 3 * i));
 						}
 						setCursor(mCursor);
 						break;
@@ -152,8 +147,7 @@
 								mOffset += 2;
 								// LOGMSG.push("char: " + JSON.stringify([chPos, chStyle, chChar]));
 								grid[chPos].firstChild.data = chChar;
-								var style = unpackStyle(chStyle);
-								for (var s in style) grid[chPos].style[s] = style[s];
+								applyStyle(grid[chPos], chStyle);
 								chPos++;
 								break;
 							case DIFF_SHIFT:
@@ -162,16 +156,17 @@
 								var offset = dv.getInt32(mOffset + 8);
 								mOffset += 12;
 								// LOGMSG.push("shift: " + JSON.stringify([start, end, offset]));
-								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.style.cssText]);
+								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.className]);
 								var index = Math.min(start + offset, start);
 								while(index < Math.max(end + offset, end) && index < grid.length) {
 									if(index < start + offset || index >= end + offset) {
 										grid[index].firstChild.data = " ";
-										grid[index].style = "";
+										grid[index].className = "";
 									}else{
 										var src = srcgrid[index - start - offset];
 										grid[index].firstChild.data = src[0];
-										grid[index].style = src[1];
+										grid[index].className = src[1];
+										grid[index].classList.remove("cursor");
 									}
 									index++;
 								}
@@ -324,7 +319,6 @@
 		<style>
 			body {
 				margin: 0;
-				background-color: black;
 			}
 			textarea {
 				font-family: monospace;
@@ -342,9 +336,7 @@
 			}
 			#grid span {
 				font-family: monospace;
-				background-color: black;
 				white-space: pre;
-				color: white;
 				/* prevent weird characters from mis-sizing our grid */
 				display: inline-block;
 				vertical-align: top;
@@ -361,8 +353,9 @@
 				opacity: 0.5;
 			}
 		</style>
+		<link rel="stylesheet" href="console-default.css">
 	</head>
-	<body onload="init()">
+	<body onload="init()" class="backg-black">
 		<div id="grid"></div>
 		<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
 	</body>
