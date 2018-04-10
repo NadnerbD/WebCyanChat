@@ -814,4 +814,5 @@ class Term_Server:
 		while not shutdown.is_set():
 			self.terminal.updateEvent.wait()
 			self.terminal.sendDiff()
+			time.sleep(0.001)
 
