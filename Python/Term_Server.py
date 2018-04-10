@@ -116,9 +116,9 @@ class Buffer:
 		if i == self.lastChangePos + 1 and d[1].pack() == self.lastChangeStyle:
 			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR_NOSTYLE, ord(d[0])))
 		elif i == self.lastChangePos + 1:
-			self.changeStream.append(struct.pack('!BHc', DIFF_NEXT_CHAR, ord(d[0]), d[1].pack()))
+			self.changeStream.append(struct.pack('!BcH', DIFF_NEXT_CHAR, d[1].pack(), ord(d[0])))
 		else:
-			self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
+			self.changeStream.append(struct.pack('!BicH', DIFF_CHAR, i, d[1].pack(), ord(d[0])))
 		self.lastChangePos = i
 		self.lastChangeStyle = d[1].pack()
 

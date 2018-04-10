@@ -139,44 +139,31 @@
 						var mCursor = dv.getInt32(1);
 						var mOffset = 5;
 						// var LOGMSG = [];
-						var lastChangePos = -1;
-						var lastChangeStyle = unpackStyle(0);
+						var chPos = 0;
+						var chStyle = 0;
 						while(mOffset < msgEvent.data.byteLength) {
-							var chType = dv.getUint8(mOffset);
-							if(chType == DIFF_CHAR) {
-								var chPos = dv.getInt32(mOffset + 1);
-								var chChar = String.fromCharCode(dv.getUint16(mOffset + 5));
-								var chStyle = dv.getUint8(mOffset + 7);
-								mOffset += 8;
-								// LOGMSG.push("char: " + JSON.stringify([chPos, chChar, String.fromCharCode(chStyle)]));
+							var chType = dv.getUint8(mOffset++);
+							switch(chType) {
+							case DIFF_CHAR:
+								var chPos = dv.getInt32(mOffset);
+								mOffset += 4;
+							case DIFF_NEXT_CHAR:
+								var chStyle = dv.getUint8(mOffset);
+								mOffset += 1;
+							case DIFF_NEXT_CHAR_NOSTYLE:
+								var chChar = String.fromCharCode(dv.getUint16(mOffset));
+								mOffset += 2;
+								// LOGMSG.push("char: " + JSON.stringify([chPos, chStyle, chChar]));
 								grid[chPos].firstChild.data = chChar;
 								var style = unpackStyle(chStyle);
 								for (var s in style) grid[chPos].style[s] = style[s];
-								lastChangePos = chPos;
-								lastChangeStyle = style;
-							}else if(chType == DIFF_NEXT_CHAR) {
-								lastChangePos++;
-								var chChar = String.fromCharCode(dv.getUint16(mOffset + 1));
-								var chStyle = dv.getUint8(mOffset + 3);
-								mOffset += 4;
-								// LOGMSG.push("next_char: " + JSON.stringify([chChar, String.fromCharCode(chStyle)]));
-								grid[lastChangePos].firstChild.data = chChar;
-								var style = unpackStyle(chStyle);
-								for (var s in style) grid[lastChangePos].style[s] = style[s];
-								lastChangeStyle = style;
-							}else if(chType == DIFF_NEXT_CHAR_NOSTYLE) {
-								lastChangePos++;
-								var chChar = String.fromCharCode(dv.getUint16(mOffset + 1));
-								mOffset += 3;
-								// LOGMSG.push("next_char_nostyle: " + JSON.stringify([chChar]));
-								grid[lastChangePos].firstChild.data = chChar;
-								var style = lastChangeStyle;
-								for (var s in style) grid[lastChangePos].style[s] = style[s];
-							}else if(chType == DIFF_SHIFT) {
-								var start = dv.getInt32(mOffset + 1);
-								var end = dv.getInt32(mOffset + 5);
-								var offset = dv.getInt32(mOffset + 9);
-								mOffset += 13;
+								chPos++;
+								break;
+							case DIFF_SHIFT:
+								var start = dv.getInt32(mOffset);
+								var end = dv.getInt32(mOffset + 4);
+								var offset = dv.getInt32(mOffset + 8);
+								mOffset += 12;
 								// LOGMSG.push("shift: " + JSON.stringify([start, end, offset]));
 								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.style.cssText]);
 								var index = Math.min(start + offset, start);
@@ -191,6 +178,7 @@
 									}
 									index++;
 								}
+								break;
 							}
 						}
 						setCursor(mCursor);
