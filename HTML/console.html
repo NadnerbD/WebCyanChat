@@ -136,11 +136,10 @@
 					}
 					if(cmd == MSG_DIFF) {
 						var mCursor = dv.getInt32(1);
-						var mLen = dv.getInt32(5);
-						var mOffset = 9;
+						var mOffset = 5;
 						// var LOGMSG = [];
 						var lastChangePos = -1;
-						for(var i = 0; i < mLen; i++) {
+						while(mOffset < msgEvent.data.byteLength) {
 							var chType = dv.getUint8(mOffset);
 							if(chType == DIFF_CHAR) {
 								var chPos = dv.getInt32(mOffset + 1);

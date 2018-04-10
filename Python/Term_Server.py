@@ -157,7 +157,6 @@ class Buffer:
 		# byte type, int start, int end, int offset
 		# log(self, repr([start, end, offset]))
 		self.changeStream.append(struct.pack('!Biii', DIFF_SHIFT, start, end, offset))
-		self.lastChangePos = -1
 
 	def initMsg(self, showCursor):
 		# byte type, short width, short height, int pos, [short data, byte style]
@@ -170,12 +169,11 @@ class Buffer:
 		) + ''.join([struct.pack('!H', ord(x)) + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
 
 	def diffMsg(self, showCursor):
-		# byte type, int pos, int len, [items]
+		# byte type, int pos, [items]
 		# log(self, repr(self.changeStream))
-		msg = struct.pack('!Bii', 
+		msg = struct.pack('!Bi',
 			MSG_DIFF, 
 			(showCursor * self.pos) + (-1 * (not showCursor)), 
-			len(self.changeStream)
 		) + ''.join(self.changeStream)
 		self.changeStream = []
 		self.lastChangePos = -1
