@@ -377,11 +377,11 @@ class Terminal:
 			elif(not (self.buffer.atEnd and self.autoWrap == False)):
 				self.buffer.pos += 1
 
-	def broadcast(self, msg):
+	def broadcast(self, msg, opcode=2):
 		lost = []
 		for sock in self.parent.connections:
 			try:
-				sock.send(msg, 2) # opcode 2 indicates binary data
+				sock.send(msg, opcode) # opcode 2 indicates binary data
 			except IOError as e:
 				lost.append((sock, e))
 		for err in lost:
@@ -624,34 +624,35 @@ class Terminal:
 		self.erase(0, self.buffer.len, True, 'E')
 
 	def handleCmd(self, cmd):
-		self.bufferLock.acquire()
-		reInit = False
-		# do stuff
-		if(hasattr(self, cmd.cmd)):
-			reInit = getattr(self, cmd.cmd)(cmd.args)
-		else:
-			log(self, "Unimplemented command: %s" % cmd)
-		if(reInit == True):
-			# reInit is set if we've switched buffers
-			self.broadcast(self.buffer.initMsg(self.showCursor))
-		else:
-			self.updateEvent.set()
-		self.bufferLock.release()
-		# reInit is alternatively set to a string if we want to talk back to the host program
-		if(type(reInit) == str):
-			return reInit
+		with self.bufferLock:
+			resp = False
+			# do stuff
+			if(hasattr(self, cmd.cmd)):
+				resp = getattr(self, cmd.cmd)(cmd.args)
+			else:
+				log(self, "Unimplemented command: %s" % cmd)
+			if(resp == True):
+				# resp is True if we've switched buffers
+				self.broadcast(self.buffer.initMsg(self.showCursor))
+			elif(type(resp) == str):
+				# resp is set to a string if we want to talk back to the host program
+				return resp
+			else:
+				self.updateEvent.set()
 
-	def sendInit(self, sock):	
-		self.bufferLock.acquire()
-		sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
-		sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
-		self.bufferLock.release()
+	def sendInit(self, sock):
+		with self.bufferLock:
+			sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
+			sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
 
 	def sendDiff(self):
-		self.bufferLock.acquire()
-		self.broadcast(self.buffer.diffMsg(self.showCursor))
-		self.updateEvent.clear()
-		self.bufferLock.release()
+		with self.bufferLock:
+			self.broadcast(self.buffer.diffMsg(self.showCursor))
+			self.updateEvent.clear()
+
+	def sendPing(self):
+		with self.bufferLock:
+			self.broadcast('', 9) # ping opcode
 
 class Term_Server:
 	def __init__(self):
@@ -752,6 +753,11 @@ class Term_Server:
 		u.daemon = True
 		u.start()
 
+		# start a thread to ping clients
+		p = threading.Thread(target=self.pingLoop, name="pingLoop", args=(shutdown,))
+		p.daemon = True
+		p.start()
+
 		# now wait for the subprocess to terminate, and for us to flush the last of it's output
 		try:
 			os.waitpid(pid, 0)
@@ -827,4 +833,9 @@ class Term_Server:
 			self.terminal.updateEvent.wait()
 			self.terminal.sendDiff()
 			time.sleep(0.001)
+
+	def pingLoop(self, shutdown):
+		while not shutdown.is_set():
+			self.terminal.sendPing()
+			time.sleep(30)
 
