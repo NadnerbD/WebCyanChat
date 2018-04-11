@@ -8,9 +8,10 @@ body {
 }
 
 /* default bold */
-.bold {
-	color: #93a1a1;
-}
+.bold { color: #93a1a1; }
+
+/* default bold bg */
+.bgBold { background-color: #073642; }
 
 /* inverted defaults */
 .inverted {
@@ -18,11 +19,11 @@ body {
 	background-color: #839496;
 }
 
-/* inverted bold defaults */
-.inverted.bold {
-	color: #002b36;
-	background-color: #93a1a1;
-}
+/* inverted bold */
+.inverted.bold { background-color: #93a1a1; }
+
+/* inverted bold bg */
+.inverted.bgBold { color: #073642; }
 
 /* cursor colors */
 .cursor {
