@@ -28,25 +28,14 @@
 .backg-cyan { background-color: #2aa198; }
 .backg-green { background-color: #859900; }
 
-/* currently only foreground has a value
+/* intense background colors are currently unsupported */
 
-.bweight-bold.backg-black { background-color: #002b36; }
-.bweight-bold.backg-green { background-color: #586e75; }
-.bweight-bold.backg-yellow { background-color: #657b83; }
-.bweight-bold.backg-blue { background-color: #839496; }
-.bweight-bold.backg-cyan { background-color: #93a1a1; }
-.bweight-bold.backg-white { background-color: #fdf6e3; }
-.bweight-bold.backg-red { background-color: #cb4b16; }
-.bweight-bold.backg-magenta { background-color: #6c71c4; }
-
-.bweight-normal.backg-black { background-color: #073642; }
-.bweight-normal.backg-white { background-color: #eee8d5; }
-.bweight-normal.backg-yellow { background-color: #b58900; }
-.bweight-normal.backg-magenta { background-color: #d33682; }
-.bweight-normal.backg-red { background-color: #dc322f; }
-.bweight-normal.backg-blue { background-color: #268bd2; }
-.bweight-normal.backg-cyan { background-color: #2aa198; }
-.bweight-normal.backg-green { background-color: #859900; }
-
-*/
+.backg-br-black { background-color: #002b36; }
+.backg-br-green { background-color: #586e75; }
+.backg-br-yellow { background-color: #657b83; }
+.backg-br-blue { background-color: #839496; }
+.backg-br-cyan { background-color: #93a1a1; }
+.backg-br-white { background-color: #fdf6e3; }
+.backg-br-red { background-color: #cb4b16; }
+.backg-br-magenta { background-color: #6c71c4; }
 

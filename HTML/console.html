@@ -315,6 +315,10 @@
 				clearTimeout(resizeTimeout);
 				resizeTimeout = setTimeout(sizeToWindow, 200);
 			}
+
+			function setTheme(event) {
+				document.getElementById("theme").href = "console-" + event.target.value + ".css";
+			}
 		</script>
 		<style>
 			body {
@@ -346,17 +350,27 @@
 				color: black;
 				background-color: white;
 			}
-			input[value="Ctrl"] {
+			div#controls {
 				position: fixed;
 				top: 0.5em;
 				right: 0.5em;
 				opacity: 0.5;
 			}
+			input[value="Ctrl"], select {
+				float: right;
+				margin-left: 0.5em;
+			}
 		</style>
-		<link rel="stylesheet" href="console-default.css">
+		<link id="theme" rel="stylesheet" href="console-default.css">
 	</head>
 	<body onload="init()" class="backg-black">
 		<div id="grid"></div>
-		<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
+		<div id="controls">
+			<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
+			<select onchange="setTheme(event)" >
+				<option>default</option>
+				<option>solarized</option>
+			</select>
+		</div>
 	</body>
 </html>
