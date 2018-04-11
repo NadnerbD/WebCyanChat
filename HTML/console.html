@@ -194,6 +194,9 @@
 					}
 					sock.send(passwd);
 				}
+				sock.onclose = function () {
+					window.close();
+				}
 			}
 
 			function setCookie(name, value) {

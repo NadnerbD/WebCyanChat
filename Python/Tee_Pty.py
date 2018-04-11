@@ -26,7 +26,7 @@ def readUI():
 			ui = sys.stdin.read(1)
 			wstream.write(ui)
 			wstream.flush()
-			log.write('\033[32m%s' % repr(ui)[1:-1])
+			log.write('\033[32m%s\033[m' % repr(ui)[1:-1])
 			log.flush()
 		except:
 			pass
@@ -37,7 +37,7 @@ def readSO():
 			so = rstream.read(1)
 			sys.stdout.write(so)
 			sys.stdout.flush()
-			log.write('\033[0m%s' % repr(so)[1:-1])
+			log.write('%s' % repr(so)[1:-1])
 			log.flush()
 		except:
 			pass
