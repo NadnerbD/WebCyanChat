@@ -2,16 +2,16 @@
 .underline { text-decoration: underline; }
 
 /* default colors */
-body {
+body, .inverted .inverted {
 	color: #839496;
 	background-color: #002b36;
 }
 
 /* default bold */
-.bold { color: #93a1a1; }
+.bold, .inverted .inverted.bold { color: #93a1a1; }
 
 /* default bold bg */
-.bgBold { background-color: #073642; }
+.bgBold, .inverted .inverted.bold { background-color: #073642; }
 
 /* inverted defaults */
 .inverted {
@@ -20,16 +20,10 @@ body {
 }
 
 /* inverted bold */
-.inverted.bold { background-color: #93a1a1; }
+.inverted.bold, .inverted .bold { background-color: #93a1a1; }
 
 /* inverted bold bg */
-.inverted.bgBold { color: #073642; }
-
-/* cursor colors */
-.cursor {
-	color: #002b36;
-	background-color: #eee8d5;
-}
+.inverted.bgBold, .inverted .bold { color: #073642; }
 
 /* ANSI colors */
 .color-black { color: #073642; }
@@ -67,4 +61,10 @@ body {
 .bgBold.backg-white { background-color: #fdf6e3; }
 .bgBold.backg-red { background-color: #cb4b16; }
 .bgBold.backg-magenta { background-color: #6c71c4; }
+
+/* cursor colors */
+.cursor {
+	color: #002b36;
+	background-color: #eee8d5;
+}
 
