@@ -1,5 +1,7 @@
+<!DOCTYPE html>
 <html>
 	<head>
+		<meta charset="utf-8">
 		<title>Console</title>
 		<script type="text/javascript">
 			var sock;
@@ -8,20 +10,11 @@
 			var modCtrl = false;
 			var grid = new Array();
 			var appkeymode = false;
+			var firstInit = true;
 			var cursor;
 
 			var colors = [
-				"gray",
-				"red",
-				"green",
-				"yellow",
-				"blue",
-				"magenta",
-				"cyan",
-				""
-			];
-			var bgcolors = [
-				"",
+				"black",
 				"red",
 				"green",
 				"yellow",
@@ -41,28 +34,36 @@
 
 			function unpackStyle(value) {
 				return {
-					fontWeight: weights[value & 0x01],
-					textDecoration: decorations[(value & (0x01 << 1)) >> 1],
-					color: colors[(value & (0x07 << 2)) >> 2],
-					backgroundColor: bgcolors[(value & (0x07 << 5)) >> 5]
+					weight:  weights    [ value       & 0x01],
+					decor:   decorations[(value >> 1) & 0x01],
+					color:   colors     [(value >> 2) & 0x07],
+					backg:   colors     [(value >> 5) & 0x07]
 				};
+			}
+
+			function applyStyle(elem, value) {
+				var style = unpackStyle(value);
+				for(var s in style) {
+					for(var c of elem.classList) if(c.startsWith(s)) elem.classList.remove(c);
+					elem.classList.add(s + "-" + style[s]);
+				}
 			}
 
 			function createGrid(container) {
 				var cells = new Array();
+				var list = document.createElement("ul");
 				for(var y = 0; y < height; y++) {
+					var line = document.createElement("li");
 					for(var x = 0; x < width; x++) {
 						var cell = document.createElement("span");
 						var char = document.createTextNode(" ");
 						cell.appendChild(char);
-						container.appendChild(cell);
+						line.appendChild(cell);
 						cells.push(cell);
 					}
-					if(y < height - 1) {
-						var br = document.createElement("br");
-						container.appendChild(br);
-					}
+					list.appendChild(line);
 				}
+				container.appendChild(list);
 				return cells;
 			}
 
@@ -71,15 +72,17 @@
 					cursor.classList.remove("cursor");
 				if(index != -1) {
 					cursor = grid[index];
-					cursor.className = "cursor";
+					cursor.classList.add("cursor");
 				}
 			}
 
 			function init() {
 				document.addEventListener("keypress", keypress, false);
 				document.addEventListener("keydown", keydown, false);
-				document.addEventListener("keyup", keyup, false);
 				document.addEventListener("paste", handlePaste, false);
+				window.addEventListener("resize", handleResize, false);
+
+				setTheme(localStorage.getItem("consoleTheme") || "default");
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.binaryType = "arraybuffer";
@@ -87,23 +90,30 @@
 				MSG_KEYMODE = 1;
 				MSG_INIT = 2;
 				MSG_DIFF = 3;
+				MSG_TITLE = 4;
 				DIFF_CHAR = 0;
 				DIFF_SHIFT = 1;
+				DIFF_NEXT_CHAR = 2;
+				DIFF_NEXT_CHAR_NOSTYLE = 3;
 				sock.onmessage = function (msgEvent) {
 					var dv = new DataView(msgEvent.data);
 					var cmd = dv.getUint8(0);
-					if(cmd == MSG_BADPASS) {
+					switch(cmd) {
+					case MSG_BADPASS:
 						alert("Server rejected password");
 						deleteCookie("term_pass");
-						return;
-					}
-					if(cmd == MSG_KEYMODE) {
+						break;
+					case MSG_KEYMODE:
 						appkeymode = dv.getUint8(1);
-						return;
-					}
-					if(cmd == MSG_INIT) {
+						break;
+					case MSG_TITLE:
+						var dc = new TextDecoder("utf-8");
+						document.title = dc.decode(new Uint8Array(msgEvent.data, 1, msgEvent.data.byteLength - 1));
+						break;
+					case MSG_INIT:
 						var mWidth = dv.getInt16(1);
 						var mHeight = dv.getInt16(3);
+						// console.log("INIT " + mWidth + " " + mHeight);
 						var mCursor = dv.getInt32(5);
 						if(width != mWidth || height != mHeight) {
 							var container = document.getElementById("grid");
@@ -116,52 +126,63 @@
 						}
 						for(var i = 0; i < width * height; i++) {
 							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 3 * i));
-							var style = unpackStyle(dv.getUint8(11 + 3 * i));
-							for(var s in style) {
-								grid[i].style[s] = style[s];
-							}
+							applyStyle(grid[i], dv.getUint8(11 + 3 * i));
 						}
 						setCursor(mCursor);
-					}
-					if(cmd == MSG_DIFF) {
+						if(firstInit) {
+							sizeToWindow();
+							firstInit = false;
+						}
+						break;
+					case MSG_DIFF:
 						var mCursor = dv.getInt32(1);
-						var mLen = dv.getInt32(5);
-						var mOffset = 9;
+						var mOffset = 5;
 						// var LOGMSG = [];
-						for(var i = 0; i < mLen; i++) {
-							var chType = dv.getUint8(mOffset);
-							if(chType == DIFF_CHAR) {
-								var chPos = dv.getInt32(mOffset + 1);
-								var chChar = String.fromCharCode(dv.getUint16(mOffset + 5));
-								var chStyle = dv.getUint8(mOffset + 7);
-								mOffset += 8;
-								// LOGMSG.push("char: " + JSON.stringify([chChar, String.fromCharCode(chStyle)]));
+						var chPos = 0;
+						var chStyle = 0;
+						while(mOffset < msgEvent.data.byteLength) {
+							var chType = dv.getUint8(mOffset++);
+							switch(chType) {
+							case DIFF_CHAR:
+								var chPos = dv.getInt32(mOffset);
+								mOffset += 4;
+							case DIFF_NEXT_CHAR:
+								var chStyle = dv.getUint8(mOffset);
+								mOffset += 1;
+							case DIFF_NEXT_CHAR_NOSTYLE:
+								var chChar = String.fromCharCode(dv.getUint16(mOffset));
+								mOffset += 2;
+								// LOGMSG.push("char: " + JSON.stringify([chPos, chStyle, chChar]));
 								grid[chPos].firstChild.data = chChar;
-								var style = unpackStyle(chStyle);
-								for (var s in style) grid[chPos].style[s] = style[s];
-							}else if(chType == DIFF_SHIFT) {
-								var start = dv.getInt32(mOffset + 1);
-								var end = dv.getInt32(mOffset + 5);
-								var offset = dv.getInt32(mOffset + 9);
-								mOffset += 13;
+								applyStyle(grid[chPos], chStyle);
+								chPos++;
+								break;
+							case DIFF_SHIFT:
+								var start = dv.getInt32(mOffset);
+								var end = dv.getInt32(mOffset + 4);
+								var offset = dv.getInt32(mOffset + 8);
+								mOffset += 12;
 								// LOGMSG.push("shift: " + JSON.stringify([start, end, offset]));
-								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.style.cssText]);
+								var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.className]);
 								var index = Math.min(start + offset, start);
 								while(index < Math.max(end + offset, end) && index < grid.length) {
 									if(index < start + offset || index >= end + offset) {
 										grid[index].firstChild.data = " ";
-										grid[index].style = "";
+										grid[index].className = "";
 									}else{
 										var src = srcgrid[index - start - offset];
 										grid[index].firstChild.data = src[0];
-										grid[index].style = src[1];
+										grid[index].className = src[1];
+										grid[index].classList.remove("cursor");
 									}
 									index++;
 								}
+								break;
 							}
 						}
 						setCursor(mCursor);
 						// console.log(LOGMSG);
+						break;
 					}
 				}
 				sock.onopen = function () {
@@ -200,17 +221,31 @@
 				document.cookie = name + "=;path=/;expires=" + expire_string
 			}
 
+			function sendKey(keyCode) {
+				var msg = new Uint8Array([107, keyCode]); // 'k'
+				sock.send(msg);
+			}
+
+			function reqResize(x, y) {
+				var msg = new Uint8Array([114, 0, 0, 0, 0]); // 'r'
+				var dv = new DataView(msg.buffer);
+				dv.setUint16(1, x);
+				dv.setUint16(3, y);
+				sock.send(msg);
+			}
+
 			function keypress(event) {
 				// most keypresses will be handled here
 				// capitalization and such is handled by the browser
-				if(modCtrl && String.fromCharCode(event.which) == "v") return;
-				if(modCtrl) {
-					sock.send(event.which & 0037);
+				if(event.ctrlKey && event.which == 118) return; // ctrl-v
+				if(modCtrl || event.ctrlKey) {
+					sendKey(event.which & 0037);
 					modCtrl = false;
 				}else{
-					sock.send(event.which);
+					sendKey(event.which);
 				}
 				event.preventDefault();
+				event.stopPropagation();
 			}
 
 			var cursorCodes = {35: 52, 36: 49, 37: 68, 38: 65, 39: 67, 40: 66, 33: 53, 34: 54, 45: 50, 46: 51}; // 41DACB5623
@@ -225,13 +260,13 @@
 					case 38: // up
 					case 39: // right
 					case 40: // down
-						sock.send(27); // Esc
+						sendKey(27); // Esc
 						if(appkeymode) {
-							sock.send(79); // O (application mode)
+							sendKey(79); // O (application mode)
 						}else{
-							sock.send(91); // [ (normal mode)
+							sendKey(91); // [ (normal mode)
 						}
-						sock.send(cursorCodes[event.which]);
+						sendKey(cursorCodes[event.which]);
 						break;
 					// editing keys
 					case 33: // pg up
@@ -240,33 +275,25 @@
 					case 36: // home
 					case 45: // insert
 					case 46: // del
-						sock.send(27); // Esc
-						sock.send(91); // [
-						sock.send(cursorCodes[event.which]);
-						sock.send(126); // ~
+						sendKey(27); // Esc
+						sendKey(91); // [
+						sendKey(cursorCodes[event.which]);
+						sendKey(126); // ~
 						break;
 					case 27: // esc
 					case 9: // Tab
-						sock.send(event.which);
+						sendKey(event.which);
 						break;
 					case 8: // Backspace
-						sock.send(127); // 0x7F (ASCII DEL)
-						break;
-					case 17: // Ctrl
-						modCtrl = true;
+						sendKey(127); // 0x7F (ASCII DEL)
 						break;
 					default:
 						handled = false;
 						break;
 				}
-				if(handled)
+				if(handled) {
 					event.preventDefault();
-			}
-
-			function keyup(event) {
-				if(event.which == 17) {
-					modCtrl = false;
-					event.preventDefault();
+					event.stopPropagation();
 				}
 			}
 
@@ -278,29 +305,81 @@
 				var data = cData.getData("Text");
 
 				for(var i = 0; i < data.length; i++) {
-					sock.send(data.charCodeAt(i));
+					sendKey(data.charCodeAt(i));
 				}
+			}
+
+			function sizeToWindow() {
+				var charRect = document.querySelector("#grid span").getBoundingClientRect();
+				reqResize(
+					Math.floor(window.innerWidth / charRect.width),
+					Math.floor(window.innerHeight / charRect.height)
+				);
+			}
+
+			var resizeTimeout;
+			function handleResize(event) {
+				clearTimeout(resizeTimeout);
+				resizeTimeout = setTimeout(sizeToWindow, 200);
+			}
+
+			function setTheme(theme) {
+				document.getElementById("theme").href = "console-" + theme + ".css";
+				document.getElementById("themeSelect").value = theme;
+				localStorage.setItem("consoleTheme", theme);
 			}
 		</script>
 		<style>
+			body {
+				margin: 0;
+			}
 			textarea {
 				font-family: monospace;
 				font-weight: bold;
 			}
+			#grid ul {
+				list-style-type: none;
+				padding: 0;
+				margin: 0;
+			}
+			#grid li {
+				display: block;
+				white-space: nowrap;
+				line-height: 1em;
+			}
 			#grid span {
 				font-family: monospace;
-				background-color: black;
 				white-space: pre;
-				color: white;
+				/* prevent weird characters from mis-sizing our grid */
+				display: inline-block;
+				vertical-align: top;
+				width: 1ch;
 			}
 			#grid span.cursor {
 				color: black;
 				background-color: white;
 			}
+			div#controls {
+				position: fixed;
+				top: 0.5em;
+				right: 0.5em;
+				opacity: 0.5;
+			}
+			input[value="Ctrl"], select#themeSelect {
+				float: right;
+				margin-left: 0.5em;
+			}
 		</style>
+		<link id="theme" rel="stylesheet" href="console-default.css">
 	</head>
-	<body onload="init()">
+	<body onload="init()" class="backg-black">
 		<div id="grid"></div>
-		<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
+		<div id="controls">
+			<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
+			<select id="themeSelect" onchange="setTheme(event.target.value)" >
+				<option>default</option>
+				<option>solarized</option>
+			</select>
+		</div>
 	</body>
 </html>

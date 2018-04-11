@@ -21,8 +21,11 @@ MSG_BADPASS = 0
 MSG_KEYMODE = 1
 MSG_INIT = 2
 MSG_DIFF = 3
+MSG_TITLE = 4
 DIFF_CHAR = 0
 DIFF_SHIFT = 1
+DIFF_NEXT_CHAR = 2
+DIFF_NEXT_CHAR_NOSTYLE = 3
 
 class Style:
 	# this object represents the font style of a single character
@@ -99,6 +102,8 @@ class Buffer:
 		self.chars = [' ' for i in range(self.len)]
 		self.attrs = [Style() for i in range(self.len)]
 		self.changeStream = []
+		self.lastChangePos = -1
+		self.lastChangeStyle = 0
 
 	def __len__(self):
 		return self.len
@@ -108,10 +113,38 @@ class Buffer:
 		self.attrs[i] = d[1]
 		# byte type, int pos, short data, byte style
 		# log(self, repr((d[0], d[1].pack())))
-		self.changeStream.append(struct.pack('!BiHc', DIFF_CHAR, i, ord(d[0]), d[1].pack()))
+		if i == self.lastChangePos + 1 and d[1].pack() == self.lastChangeStyle:
+			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR_NOSTYLE, ord(d[0])))
+		elif i == self.lastChangePos + 1:
+			self.changeStream.append(struct.pack('!BcH', DIFF_NEXT_CHAR, d[1].pack(), ord(d[0])))
+		else:
+			self.changeStream.append(struct.pack('!BicH', DIFF_CHAR, i, d[1].pack(), ord(d[0])))
+		self.lastChangePos = i
+		self.lastChangeStyle = d[1].pack()
 
 	def __getitem__(self, i):
-		return zip(self.chars[i], self.attrs[i])
+		if type(i) == slice:
+			return zip(self.chars[i], self.attrs[i])
+		else:
+			return (self.chars[i], self.attrs[i])
+
+	def copy(self, src):
+		oWidth, oHeight = src.size
+		nWidth, nHeight = self.size
+		for y in range(min(oHeight, nHeight)):
+			for x in range(min(oWidth, nWidth)):
+				self.chars[x + y * nWidth] = src.chars[x + y * oWidth]
+				self.attrs[x + y * nWidth] = src.attrs[x + y * oWidth]
+		oX = src.pos % oWidth
+		oY = src.pos / oWidth
+		self.pos = min(oX, nWidth - 1) + min(oY, nHeight - 1) * nWidth
+		if nWidth > oWidth and src.atEnd:
+			self.atEnd = False
+			self.pos += 1
+		elif nWidth <= oX:
+			self.atEnd = True
+		else:
+			self.atEnd = src.atEnd
 
 	def shift(self, start, end, offset):
 		# shift the contents of the specified area by offset
@@ -141,14 +174,15 @@ class Buffer:
 		) + ''.join([struct.pack('!H', ord(x)) + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
 
 	def diffMsg(self, showCursor):
-		# byte type, int pos, int len, [items]
+		# byte type, int pos, [items]
 		# log(self, repr(self.changeStream))
-		msg = struct.pack('!Bii', 
+		msg = struct.pack('!Bi',
 			MSG_DIFF, 
 			(showCursor * self.pos) + (-1 * (not showCursor)), 
-			len(self.changeStream)
 		) + ''.join(self.changeStream)
 		self.changeStream = []
+		self.lastChangePos = -1
+		self.lastChangeStyle = 0
 		return msg
 
 class Charmap:
@@ -233,7 +267,6 @@ class Terminal:
 		self.savedCharsets = ['B', '0']
 		self.parent = parent
 		self.updateEvent = threading.Event()
-		self.lastUpdate = 0
 		self.appKeyMode = False
 		# this is mainly to prevent message mixing during the initial state burst
 		self.bufferLock = threading.Lock()
@@ -244,12 +277,20 @@ class Terminal:
 
 	def resize(self, nWidth, nHeight, copyData=True):
 		newBuffers = [Buffer(nWidth, nHeight), Buffer(nWidth, nHeight)]
-		(oWidth, oHeight) = self.buffers[0].size
+		oWidth, oHeight = self.buffers[0].size
+		# keep saved pos in bounds
+		oX = self.savedPos % oWidth
+		oY = self.savedPos / oWidth
+		self.savedPos = min(oX, nWidth - 1) + min(oY, nHeight - 1) * nWidth
+		# extend scroll region if it's at the bottom, and contract it if it's too large
+		if nHeight > oHeight and self.scrollRegion[1] == oHeight:
+			self.scrollRegion[1] = nHeight
+		elif nHeight < oHeight:
+			self.scrollRegion[1] = min(self.scrollRegion[1], nHeight)
+		# copy data if requested
 		if(copyData):
 			for i in range(2):
-				for y in range(min(oHeight, nHeight)):
-					for x in range(min(oWidth, nWidth)):
-						newBuffers[i][x + y * nWidth] = self.buffers[i][x + y * oWidth]
+				newBuffers[i].copy(self.buffers[i])
 		self.buffer = newBuffers[self.bufferIndex]
 		self.buffers = newBuffers
 		self.parent.resize(nWidth, nHeight)
@@ -310,8 +351,9 @@ class Terminal:
 			# if we don't encounter a tab stop, move to the right margin
 			self.move(self.buffer.size[0] - 1 - hpos, 0)
 		elif(char == '\x08'): # backspace
-			self.buffer.pos -= 1
-			self.buffer.atEnd = False
+			if not self.buffer.pos % self.buffer.size[0] == 0: # don't reverse-wrap
+				self.buffer.pos -= 1
+				self.buffer.atEnd = False
 		elif(char == '\x07'):
 			pass # bell
 		elif(char == '\x0E'):
@@ -335,16 +377,16 @@ class Terminal:
 			elif(not (self.buffer.atEnd and self.autoWrap == False)):
 				self.buffer.pos += 1
 
-	def broadcast(self, msg):
+	def broadcast(self, msg, opcode=2):
 		lost = []
 		for sock in self.parent.connections:
 			try:
-				sock.send(msg, 2) # opcode 2 indicates binary data
-			except:
-				lost.append(sock)
-		for sock in lost:
-			self.parent.connections.remove(sock)
-			log(self, "Removed connection: %r" % sock)
+				sock.send(msg, opcode) # opcode 2 indicates binary data
+			except IOError as e:
+				lost.append((sock, e))
+		for err in lost:
+			self.parent.connections.remove(err[0])
+			log(self, "Removed connection: %r (%s)" % err)
 
 	def home(self, args):
 		argDefaults(args, [0, 0])
@@ -557,6 +599,15 @@ class Terminal:
 			log(self, "Cursor position report: %r" % (rep,), 2)
 			return "\033[%d;%dR" % rep
 
+	def OSCommand(self, args):
+		if(len(args) > 1 and args[0] == 0):
+			self.broadcast(self.titleMsg(args[1].encode('utf-8', 'replace')))
+		else:
+			log(self, "Unknown OSCommand: %r" % args)
+
+	def titleMsg(self, string):
+		return struct.pack('B', MSG_TITLE) + string
+
 	def charAttributes(self, args):
 		if(len(args) == 0):
 			self.attrs.update(0)
@@ -573,42 +624,40 @@ class Terminal:
 		self.erase(0, self.buffer.len, True, 'E')
 
 	def handleCmd(self, cmd):
-		self.bufferLock.acquire()
-		reInit = False
-		# do stuff
-		if(hasattr(self, cmd.cmd)):
-			reInit = getattr(self, cmd.cmd)(cmd.args)
-		else:
-			log(self, "Unimplemented command: %s" % cmd)
-		if(reInit == True):
-			# reInit is set if we've switched buffers
-			self.broadcast(self.buffer.initMsg(self.showCursor))
-		else:
-			self.lastUpdate += 1
-			self.updateEvent.set()
-		self.bufferLock.release()
-		# reInit is alternatively set to a string if we want to talk back to the host program
-		if(type(reInit) == str):
-			return reInit
+		with self.bufferLock:
+			resp = False
+			# do stuff
+			if(hasattr(self, cmd.cmd)):
+				resp = getattr(self, cmd.cmd)(cmd.args)
+			else:
+				log(self, "Unimplemented command: %s" % cmd)
+			if(resp == True):
+				# resp is True if we've switched buffers
+				self.broadcast(self.buffer.initMsg(self.showCursor))
+			elif(type(resp) == str):
+				# resp is set to a string if we want to talk back to the host program
+				return resp
+			else:
+				self.updateEvent.set()
 
-	def sendInit(self, sock):	
-		self.bufferLock.acquire()
-		sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
-		sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
-		self.bufferLock.release()
+	def sendInit(self, sock):
+		with self.bufferLock:
+			sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
+			sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
 
 	def sendDiff(self):
-		self.bufferLock.acquire()
-		self.broadcast(self.buffer.diffMsg(self.showCursor))
-		self.lastUpdate = 0
-		self.updateEvent.clear()
-		self.bufferLock.release()
+		with self.bufferLock:
+			self.broadcast(self.buffer.diffMsg(self.showCursor))
+			self.updateEvent.clear()
+
+	def sendPing(self):
+		with self.bufferLock:
+			self.broadcast('', 9) # ping opcode
 
 class Term_Server:
 	def __init__(self):
 		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
-		self.server.redirects["/console.html"] = {"header": "User-Agent", "value": "iPhone", "location": "textConsole.html"}
 		self.sessionQueue = self.server.registerProtocol("term")
 		self.connections = list()
 		self.master = None
@@ -622,6 +671,9 @@ class Term_Server:
 			"term_height": 24, \
 			"term_width": 80, \
 			"term_pass": "pass", \
+			"https_redirect": 0, \
+			"https_cert": "server.crt", \
+			"https_key": "server.key", \
 		}
 
 	def readPrefs(self, filename="TermServer.conf"):
@@ -677,13 +729,22 @@ class Term_Server:
 
 		if(self.prefs["enable_http"]):
 			# start the http listener
-			s = threading.Thread(target=self.server.acceptLoop, name="httpThread", args=(self.prefs["http_port"], False))
+			s = threading.Thread(target=self.server.acceptLoop, name="httpThread", kwargs={
+				'port': self.prefs["http_port"],
+				'useSSL': False,
+				'SSLRedirect': self.prefs["https_port"] if self.prefs["https_redirect"] else False,
+			})
 			s.daemon = True
 			s.start()
 
 		if(self.prefs["enable_https"]):
 			# start the https listener
-			s = threading.Thread(target=self.server.acceptLoop, name="httpsThread", args=(self.prefs["https_port"], True))
+			s = threading.Thread(target=self.server.acceptLoop, name="httpsThread", kwargs={
+				'port': self.prefs["https_port"],
+				'useSSL': True,
+				'SSLCert': self.prefs["https_cert"],
+				'SSLKey': self.prefs["https_key"],
+			})
 			s.daemon = True
 			s.start()
 
@@ -691,6 +752,11 @@ class Term_Server:
 		u = threading.Thread(target=self.updateLoop, name="updateThread", args=(shutdown,))
 		u.daemon = True
 		u.start()
+
+		# start a thread to ping clients
+		p = threading.Thread(target=self.pingLoop, name="pingLoop", args=(shutdown,))
+		p.daemon = True
+		p.start()
 
 		# now wait for the subprocess to terminate, and for us to flush the last of it's output
 		try:
@@ -726,17 +792,28 @@ class Term_Server:
 		self.terminal.sendInit(sock)
 		while True:
 			try:
-				char = chr(int(sock.recvFrame()))
+				frame = sock.recvFrame()
 			except Exception as error:
 				# if we hit an error reading from the socket, remove it and end the thread
 				log(self, "Error reading from %r: %s" % (addr, error))
 				self.connections.remove(sock)
 				return
-			if(char == '\r'):
-				char = '\n'
-			log(self, "recvd: %r" % char, 4)
-			self.wstream.write(char)
-			self.wstream.flush()
+			if len(frame) == 0:
+				log(self, "End of stream from %r" % (addr,))
+				self.connections.remove(sock)
+				return
+			if frame[0] == 'k': # keypress
+				log(self, "recvd keypress: %r" % frame[1], 4)
+				self.wstream.write(frame[1])
+				self.wstream.flush()
+			elif frame[0] == 'r': #resize
+				if len(frame) != 5:
+					log(self, "Malformed resize request: %r" % frame)
+				sreq = struct.unpack('!HH', frame[1:5])
+				log(self, "recvd resize req: %r" % (sreq,))
+				with self.terminal.bufferLock:
+					self.terminal.resize(sreq[0], sreq[1]) # this will call self.resize
+					self.terminal.broadcast(self.terminal.buffer.initMsg(self.terminal.showCursor))
 
 	def sessionLoop(self, shutdown):
 		while not shutdown.is_set():
@@ -755,4 +832,10 @@ class Term_Server:
 		while not shutdown.is_set():
 			self.terminal.updateEvent.wait()
 			self.terminal.sendDiff()
+			time.sleep(0.001)
+
+	def pingLoop(self, shutdown):
+		while not shutdown.is_set():
+			self.terminal.sendPing()
+			time.sleep(30)
 

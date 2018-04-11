@@ -311,12 +311,11 @@ class HTTP_Server:
 			self.queueLen.acquire()
 			return self.queue.pop()
 	
-	def __init__(self, webRoot="../HTML", SSLRedirect=False):
+	def __init__(self, webRoot="../HTML"):
 		self.sessionList = self.sessionList()
 		self.sessionQueues = dict()
 		self.redirects = dict()
 		self.webRoot = webRoot
-		self.SSLRedirect = SSLRedirect
 	
 	def readHTTP(self, sock):
 		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
@@ -376,12 +375,12 @@ class HTTP_Server:
 			sock.send("\r\n%s" % body)
 	writeHTTP = staticmethod(writeHTTP)
 
-	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions):
-		if(self.SSLRedirect and type(sock) is not ssl.SSLSocket):
+	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions, SSLRedirect):
+		if(SSLRedirect and type(sock) is not ssl.SSLSocket):
 			# bloody hax, because the host header apparently contains the port, and IPv6 can use colons in addresses
 			ur = re.compile(r"^(\[[^\]]+\]|[^\[\]]+)(?::([0-9]+))$")
 			host_noport = ur.match(headers["host"]).groups()[0]
-			new_url = "https://%s:%d%s" % (host_noport, self.SSLRedirect, resource)
+			new_url = "https://%s:%d%s" % (host_noport, SSLRedirect, resource)
 			self.writeHTTP(sock, 302, {"Location": new_url}, "302 Redirect")
 			log(self, "redirected request from %r for %r to %r" % (addr, urllib.unquote(resource), new_url), 3)
 			return
@@ -534,7 +533,7 @@ class HTTP_Server:
 			self.writeHTTP(sock, 501)
 			log(self, "couldn't handle %s request" % method, 3)
 	
-	def acceptLoop(self, port=80, useSSL=False): #Threaded per-server port
+	def acceptLoop(self, port=80, useSSL=False, SSLCert="server.crt", SSLKey="server.key", SSLRedirect=False): #Threaded per-server port
 		listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		try:
@@ -548,15 +547,15 @@ class HTTP_Server:
 			(sock, addr) = listener.accept()
 			if(useSSL):
 				try:
-					sock = ssl.wrap_socket(sock, server_side=True, certfile="server.crt", keyfile="server.key", suppress_ragged_eofs=True)
+					sock = ssl.wrap_socket(sock, server_side=True, certfile=SSLCert, keyfile=SSLKey, suppress_ragged_eofs=True)
 				except Exception as error:
 					log(self, "Error during SSL handshake: %s" % error)
 					continue
-			sockThread = threading.Thread(None, self.sockLoop, "sockLoop", (sock, addr))
+			sockThread = threading.Thread(None, self.sockLoop, "sockLoop", (sock, addr, SSLRedirect))
 			sockThread.setDaemon(1)
 			sockThread.start()
 
-	def sockLoop(self, sock, addr): #Threaded per-socket
+	def sockLoop(self, sock, addr, SSLRedirect): #Threaded per-socket
 		while 1:
 			try:
 				(method, resource, protocol, headers, body, getOptions) = self.readHTTP(sock)
@@ -564,7 +563,7 @@ class HTTP_Server:
 				log(self, "socket closed %r" % (addr,), 3)
 				return
 			log(self, "%s %s from %r" % (method, resource, addr), 3)
-			if(self.handleReq(sock, addr, method, resource, protocol, headers, body, getOptions) == "WebSocket"):
+			if(self.handleReq(sock, addr, method, resource, protocol, headers, body, getOptions, SSLRedirect) == "WebSocket"):
 				log(self, "WebSocket passed as session", 3)
 				return
 
