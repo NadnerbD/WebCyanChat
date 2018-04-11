@@ -1,8 +1,16 @@
-.weight-normal { font-weight: normal; }
-.weight-bold   { font-weight: bold; }
+body {
+	color: white;
+	background-color: black;
+}
 
-.decor-none      { text-decoration: none; }
-.decor-underline { text-decoration: underline; }
+.cursor, .inverted {
+	color: black;
+	background-color: white;
+}
+
+.bold   { font-weight: bold; }
+
+.underline { text-decoration: underline; }
 
 .color-black   { color: gray; }
 .color-red     { color: red; }

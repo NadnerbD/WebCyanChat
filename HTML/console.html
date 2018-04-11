@@ -23,21 +23,16 @@
 				"cyan",
 				"white"
 			];
-			var weights = [
-				"normal",
-				"bold"
-			];
-			var decorations = [
-				"none",
-				"underline"
-			]
 
 			function unpackStyle(value) {
 				return {
-					weight:  weights    [ value       & 0x01],
-					decor:   decorations[(value >> 1) & 0x01],
-					color:   colors     [(value >> 2) & 0x07],
-					backg:   colors     [(value >> 5) & 0x07]
+					bold:              value        & 0x01 ,
+					bgBold:           (value >>  1) & 0x01 ,
+					underline:        (value >>  2) & 0x01 ,
+					italic:           (value >>  3) & 0x01 ,
+					inverted:         (value >>  4) & 0x01 ,
+					color:     colors[(value >>  8) & 0x0F],
+					backg:     colors[(value >> 12) & 0x0F]
 				};
 			}
 
@@ -45,7 +40,11 @@
 				var style = unpackStyle(value);
 				for(var s in style) {
 					for(var c of elem.classList) if(c.startsWith(s)) elem.classList.remove(c);
-					elem.classList.add(s + "-" + style[s]);
+					if(typeof(style[s]) == "number") {
+						if(style[s]) elem.classList.add(s);
+					}else if(style[s] != undefined) {
+						elem.classList.add(s + "-" + style[s]);
+					}
 				}
 			}
 
@@ -125,8 +124,8 @@
 							cursor = grid[mCursor];
 						}
 						for(var i = 0; i < width * height; i++) {
-							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 3 * i));
-							applyStyle(grid[i], dv.getUint8(11 + 3 * i));
+							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 4 * i));
+							applyStyle(grid[i], dv.getUint16(11 + 4 * i));
 						}
 						setCursor(mCursor);
 						if(firstInit) {
@@ -147,8 +146,8 @@
 								var chPos = dv.getInt32(mOffset);
 								mOffset += 4;
 							case DIFF_NEXT_CHAR:
-								var chStyle = dv.getUint8(mOffset);
-								mOffset += 1;
+								var chStyle = dv.getUint16(mOffset);
+								mOffset += 2;
 							case DIFF_NEXT_CHAR_NOSTYLE:
 								var chChar = String.fromCharCode(dv.getUint16(mOffset));
 								mOffset += 2;
@@ -355,10 +354,6 @@
 				vertical-align: top;
 				width: 1ch;
 			}
-			#grid span.cursor {
-				color: black;
-				background-color: white;
-			}
 			div#controls {
 				position: fixed;
 				top: 0.5em;
@@ -372,7 +367,7 @@
 		</style>
 		<link id="theme" rel="stylesheet" href="console-default.css">
 	</head>
-	<body onload="init()" class="backg-black">
+	<body onload="init()">
 		<div id="grid"></div>
 		<div id="controls">
 			<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>

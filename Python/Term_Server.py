@@ -34,32 +34,42 @@ class Style:
 	def __init__(self, init=None):
 		if(init):
 			self.bold = init.bold
+			self.bgBold = init.bgBold
+			self.italic = init.italic
 			self.underline = init.underline
 			self.fgColor = init.fgColor
 			self.bgColor = init.bgColor
 			self.inverted = init.inverted
 		else:
 			self.bold = False
+			self.bgBold = False
+			self.italic = False
 			self.underline = False
-			self.fgColor = 7
-			self.bgColor = 0
+			self.fgColor = 9
+			self.bgColor = 9
 			self.inverted = False
 
-	def pack(self):
-		# bbbfffub
+	def value(self):
+		# bbbbffff---iiubb
 		if(not self.inverted):
-			return struct.pack('B', \
-				(self.bold      & 0x01)      | \
-				(self.underline & 0x01) << 1 | \
-				(self.fgColor   & 0x07) << 2 | \
-				(self.bgColor   & 0x07) << 5   \
+			return ( \
+				(self.bold      & 0x01)       | \
+				(self.bgBold    & 0x01) << 1  | \
+				(self.underline & 0x01) << 2  | \
+				(self.italic    & 0x01) << 3  | \
+				(self.inverted  & 0x01) << 4  | \
+				(self.fgColor   & 0x0F) << 8  | \
+				(self.bgColor   & 0x0F) << 12   \
 			)
 		else:
-			return struct.pack('B', \
-				(self.bold      & 0x01)      | \
-				(self.underline & 0x01) << 1 | \
-				(self.bgColor   & 0x07) << 2 | \
-				(self.fgColor   & 0x07) << 5   \
+			return ( \
+				(self.bold      & 0x01)       | \
+				(self.bgBold    & 0x01) << 1  | \
+				(self.underline & 0x01) << 2  | \
+				(self.italic    & 0x01) << 3  | \
+				(self.inverted  & 0x01) << 4  | \
+				(self.bgColor   & 0x0F) << 8  | \
+				(self.fgColor   & 0x0F) << 12   \
 			)
 
 	def update(self, value):
@@ -69,12 +79,16 @@ class Style:
 			self.__init__()
 		elif(value == 1):
 			self.bold = True
+		elif(value == 3):
+			self.italic = True
 		elif(value == 4):
 			self.underline = True
 		elif(value == 7):
 			self.inverted = True
 		elif(value == 22):
 			self.bold = False
+		elif(value == 23):
+			self.italic = False
 		elif(value == 24):
 			self.underline = False
 		elif(value == 27):
@@ -83,15 +97,16 @@ class Style:
 			cmd = value / 10
 			num = value % 10
 			if(cmd == 3):
-				if(num == 9):
-					self.fgColor = 7
-				else:
-					self.fgColor = num
+				self.fgColor = num
 			elif(cmd == 4):
-				if(num == 9):
-					self.bgColor = 0
-				else:
-					self.bgColor = num
+				self.bgBold = False
+				self.bgColor = num
+			elif(cmd == 9):
+				self.bold = True
+				self.fgColor = num
+			elif(cmd == 10):
+				self.bgBold = True
+				self.bgColor = num
 
 class Buffer:
 	def __init__(self, width=80, height=24):
@@ -112,15 +127,15 @@ class Buffer:
 		self.chars[i] = d[0]
 		self.attrs[i] = d[1]
 		# byte type, int pos, short data, byte style
-		# log(self, repr((d[0], d[1].pack())))
-		if i == self.lastChangePos + 1 and d[1].pack() == self.lastChangeStyle:
+		# log(self, repr((d[0], d[1].value())))
+		if i == self.lastChangePos + 1 and d[1].value() == self.lastChangeStyle:
 			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR_NOSTYLE, ord(d[0])))
 		elif i == self.lastChangePos + 1:
-			self.changeStream.append(struct.pack('!BcH', DIFF_NEXT_CHAR, d[1].pack(), ord(d[0])))
+			self.changeStream.append(struct.pack('!BHH', DIFF_NEXT_CHAR, d[1].value(), ord(d[0])))
 		else:
-			self.changeStream.append(struct.pack('!BicH', DIFF_CHAR, i, d[1].pack(), ord(d[0])))
+			self.changeStream.append(struct.pack('!BiHH', DIFF_CHAR, i, d[1].value(), ord(d[0])))
 		self.lastChangePos = i
-		self.lastChangeStyle = d[1].pack()
+		self.lastChangeStyle = d[1].value()
 
 	def __getitem__(self, i):
 		if type(i) == slice:
@@ -171,7 +186,7 @@ class Buffer:
 			self.size[0],
 			self.size[1],
 			(showCursor * self.pos) + (-1 * (not showCursor))
-		) + ''.join([struct.pack('!H', ord(x)) + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
+		) + ''.join([struct.pack('!HH', ord(x), y.value()) for x, y in zip(self.chars, self.attrs)])
 
 	def diffMsg(self, showCursor):
 		# byte type, int pos, [items]
