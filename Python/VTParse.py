@@ -203,7 +203,7 @@ class Parser:
 	def csi_dispatch(self):
 		if(self.privateMarker in privateMarkers \
 		and self.char in privateMarkers[self.privateMarker]):
-			params = [int(i) for i in self.paramStr.split(';') if len(i) > 0]
+			params = [int(i) if len(i) > 0 else 0 for i in self.paramStr.split(';')]
 			cmdName = privateMarkers[self.privateMarker][self.char]
 			self.putCommand(Command(cmdName, params))
 		else:
