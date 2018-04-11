@@ -1,9 +1,9 @@
-body {
+body, .inverted.cursor, .inverted .inverted, .inverted .cursor {
 	color: white;
 	background-color: black;
 }
 
-.cursor, .inverted {
+.cursor, .inverted, .inverted .inverted.cursor {
 	color: black;
 	background-color: white;
 }
@@ -12,20 +12,20 @@ body {
 
 .underline { text-decoration: underline; }
 
-.color-black   { color: gray; }
-.color-red     { color: red; }
-.color-green   { color: green; }
-.color-yellow  { color: yellow; }
-.color-blue    { color: blue; }
-.color-magenta { color: magenta; }
-.color-cyan    { color: cyan; }
-.color-white   { color: white; }
+#grid .color-black   { color: black; }
+#grid .color-red     { color: red; }
+#grid .color-green   { color: green; }
+#grid .color-yellow  { color: yellow; }
+#grid .color-blue    { color: blue; }
+#grid .color-magenta { color: magenta; }
+#grid .color-cyan    { color: cyan; }
+#grid .color-white   { color: white; }
 
-.backg-black   { background-color: black; }
-.backg-red     { background-color: red; }
-.backg-green   { background-color: green; }
-.backg-yellow  { background-color: yellow; }
-.backg-blue    { background-color: blue; }
-.backg-magenta { background-color: magenta; }
-.backg-cyan    { background-color: cyan; }
-.backg-white   { background-color: white; }
+#grid .backg-black   { background-color: black; }
+#grid .backg-red     { background-color: red; }
+#grid .backg-green   { background-color: green; }
+#grid .backg-yellow  { background-color: yellow; }
+#grid .backg-blue    { background-color: blue; }
+#grid .backg-magenta { background-color: magenta; }
+#grid .backg-cyan    { background-color: cyan; }
+#grid .backg-white   { background-color: white; }

@@ -86,7 +86,7 @@
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.binaryType = "arraybuffer";
 				MSG_BADPASS = 0;
-				MSG_KEYMODE = 1;
+				MSG_MODES = 1;
 				MSG_INIT = 2;
 				MSG_DIFF = 3;
 				MSG_TITLE = 4;
@@ -102,8 +102,10 @@
 						alert("Server rejected password");
 						deleteCookie("term_pass");
 						break;
-					case MSG_KEYMODE:
-						appkeymode = dv.getUint8(1);
+					case MSG_MODES:
+						var modes = dv.getUint8(1);
+						appkeymode = modes & 0x01;
+						document.body.className = modes & 0x02 ? "inverted" : "";
 						break;
 					case MSG_TITLE:
 						var dc = new TextDecoder("utf-8");

@@ -18,7 +18,7 @@ from HTTP_Server import HTTP_Server
 from VTParse import Parser
 
 MSG_BADPASS = 0
-MSG_KEYMODE = 1
+MSG_MODES = 1
 MSG_INIT = 2
 MSG_DIFF = 3
 MSG_TITLE = 4
@@ -282,7 +282,8 @@ class Terminal:
 		self.savedCharsets = ['B', '0']
 		self.parent = parent
 		self.updateEvent = threading.Event()
-		self.appKeyMode = False
+		self.appKeyMode = False # 0 is normal, 1 is application mode
+		self.screenMode = False # 0 is normal, 1 is inverted
 		# this is mainly to prevent message mixing during the initial state burst
 		self.bufferLock = threading.Lock()
 
@@ -544,6 +545,9 @@ class Terminal:
 			# switch to 80 column mode
 			self.resize(80, 24, False)
 			return True
+		if(5 in args):
+			self.screenMode = False
+			self.broadcast(self.modeMsg())
 		if(6 in args):
 			self.originMode = False
 			self.setPos(0, 0)
@@ -560,6 +564,9 @@ class Terminal:
 			# switch to 132 column mode
 			self.resize(132, 24, False)
 			return True
+		if(5 in args):
+			self.screenMode = True
+			self.broadcast(self.modeMsg())
 		if(6 in args):
 			self.originMode = True
 			self.setPos(0, 0)
@@ -578,16 +585,18 @@ class Terminal:
 	def setAppKeys(self, args):
 		log(self, "Set Application Cursor Keys", 2)
 		self.appKeyMode = True
-		self.broadcast(self.keyModeMsg())
+		self.broadcast(self.modeMsg())
 
 	def setNormKeys(self, args):
 		log(self, "Set Normal Cursor Keys", 2)
 		self.appKeyMode = False
-		self.broadcast(self.keyModeMsg())
+		self.broadcast(self.modeMsg())
 
-	def keyModeMsg(self):
-		# 0 is normal, 1 is application mode
-		return struct.pack('B?', MSG_KEYMODE, self.appKeyMode)
+	def modeMsg(self):
+		return struct.pack('!BB', MSG_MODES,
+			(self.appKeyMode & 0x01)      |
+			(self.screenMode & 0x01) << 1
+		)
 
 	def sendDeviceAttributes(self, args):
 		log(self, "Device attribute request: %r" % args, 2)
@@ -654,7 +663,7 @@ class Terminal:
 
 	def sendInit(self, sock):
 		with self.bufferLock:
-			sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
+			sock.send(self.modeMsg(), 2) # opcode 2 indicates binary data
 			sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
 
 	def sendDiff(self):
