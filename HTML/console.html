@@ -10,6 +10,7 @@
 			var modCtrl = false;
 			var grid = new Array();
 			var appkeymode = false;
+			var firstInit = true;
 			var cursor;
 
 			var colors = [
@@ -81,6 +82,8 @@
 				document.addEventListener("paste", handlePaste, false);
 				window.addEventListener("resize", handleResize, false);
 
+				setTheme(localStorage.getItem("consoleTheme") || "default");
+
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
 				sock.binaryType = "arraybuffer";
 				MSG_BADPASS = 0;
@@ -126,6 +129,10 @@
 							applyStyle(grid[i], dv.getUint8(11 + 3 * i));
 						}
 						setCursor(mCursor);
+						if(firstInit) {
+							sizeToWindow();
+							firstInit = false;
+						}
 						break;
 					case MSG_DIFF:
 						var mCursor = dv.getInt32(1);
@@ -316,8 +323,10 @@
 				resizeTimeout = setTimeout(sizeToWindow, 200);
 			}
 
-			function setTheme(event) {
-				document.getElementById("theme").href = "console-" + event.target.value + ".css";
+			function setTheme(theme) {
+				document.getElementById("theme").href = "console-" + theme + ".css";
+				document.getElementById("themeSelect").value = theme;
+				localStorage.setItem("consoleTheme", theme);
 			}
 		</script>
 		<style>
@@ -356,7 +365,7 @@
 				right: 0.5em;
 				opacity: 0.5;
 			}
-			input[value="Ctrl"], select {
+			input[value="Ctrl"], select#themeSelect {
 				float: right;
 				margin-left: 0.5em;
 			}
@@ -367,7 +376,7 @@
 		<div id="grid"></div>
 		<div id="controls">
 			<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
-			<select onchange="setTheme(event)" >
+			<select id="themeSelect" onchange="setTheme(event.target.value)" >
 				<option>default</option>
 				<option>solarized</option>
 			</select>
