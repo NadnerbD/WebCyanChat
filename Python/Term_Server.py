@@ -255,7 +255,7 @@ class Charmap:
 # for setting default argument values
 def argDefaults(srcArgs, defArgs):
 	for i in range(max(len(srcArgs), len(defArgs))):
-		if(len(srcArgs) == i):
+		if(len(srcArgs) <= i):
 			srcArgs.append(defArgs[i])
 		elif(srcArgs[i] == 0):
 			srcArgs[i] = defArgs[i]
@@ -411,7 +411,6 @@ class Terminal:
 		self.horizontalTabs.add(self.buffer.pos % self.buffer.size[0])
 
 	def tabClear(self, args):
-		argDefaults(args, [0])
 		hpos = self.buffer.pos % self.buffer.size[0]
 		if(args[0] == 0 and hpos in self.horizontalTabs):
 			self.horizontalTabs.remove(hpos)
@@ -480,7 +479,6 @@ class Terminal:
 			self.move(0, -1)
 
 	def eraseOnDisplay(self, args):
-		argDefaults(args, [0])
 		if(args[0] == 1): # Above
 			self.erase(0, self.buffer.pos + 1)
 		elif(args[0] == 2): # All
@@ -489,7 +487,6 @@ class Terminal:
 			self.erase(self.buffer.pos, self.buffer.len)
 
 	def eraseOnLine(self, args):
-		argDefaults(args, [0])
 		lineStart = self.getPos()[1] * self.buffer.size[0]
 		if(args[0] == 1): # Left
 			self.erase(lineStart, self.buffer.pos + 1)
