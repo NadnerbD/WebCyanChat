@@ -1,9 +1,13 @@
 import os, sys, threading, signal, tty, termios, fcntl, signal, errno
 
+if len(sys.argv) < 2:
+	print "usage: %s <command>" % sys.argv[0]
+	exit()
+
 pid, master = os.forkpty()
 if pid == 0:
 	os.environ['TERM'] = 'xterm'
-	os.execv('/bin/bash', ['/bin/bash'])
+	os.execvp(sys.argv[1], sys.argv[1:])
 
 wstream = os.fdopen(master, 'w')
 rstream = os.fdopen(master, 'r')
