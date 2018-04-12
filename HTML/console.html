@@ -227,6 +227,7 @@
 			function sendKey(keyCode) {
 				var msg = new Uint8Array([107, keyCode]); // 'k'
 				sock.send(msg);
+				// console.log(String.fromCharCode(keyCode));
 			}
 
 			function reqResize(x, y) {
@@ -279,6 +280,32 @@
 						sendKey(27); // Esc
 						sendKey(79); // O
 						sendKey(event.which - 32);
+						break;
+					case 116: // F5
+						sendKey(27); // Esc
+						sendKey(91); // [
+						sendKey(49); // 1
+						sendKey(53); // 5
+						sendKey(126); // ~
+						break;
+					case 117: // F6
+					case 118: // F7
+					case 119: // F8
+					case 120: // F9
+					case 121: // F10
+						sendKey(27); // Esc
+						sendKey(91); // [
+						for(var digit of (event.which - 100).toString())
+							sendKey(digit.charCodeAt(0));
+						sendKey(126); // ~
+						break;
+					case 122: // F11
+					case 123: // F12
+						sendKey(27); // Esc
+						sendKey(91); // [
+						for(var digit of (event.which - 99).toString())
+							sendKey(digit.charCodeAt(0));
+						sendKey(126); // ~
 						break;
 					case 9: // Tab
 					case 13: // Enter
