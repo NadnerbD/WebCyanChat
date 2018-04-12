@@ -1,9 +1,13 @@
 import os, sys, threading, signal, tty, termios, fcntl, signal, errno
 
+if len(sys.argv) < 2:
+	print "usage: %s <command>" % sys.argv[0]
+	exit()
+
 pid, master = os.forkpty()
 if pid == 0:
 	os.environ['TERM'] = 'xterm'
-	os.execv('/bin/bash', ['/bin/bash'])
+	os.execvp(sys.argv[1], sys.argv[1:])
 
 wstream = os.fdopen(master, 'w')
 rstream = os.fdopen(master, 'r')
@@ -26,7 +30,7 @@ def readUI():
 			ui = sys.stdin.read(1)
 			wstream.write(ui)
 			wstream.flush()
-			log.write('UI> %r\n' % ui)
+			log.write('\033[32m%s\033[m' % repr(ui)[1:-1])
 			log.flush()
 		except:
 			pass
@@ -37,7 +41,7 @@ def readSO():
 			so = rstream.read(1)
 			sys.stdout.write(so)
 			sys.stdout.flush()
-			log.write('SO> %r\n' % so)
+			log.write('%s' % repr(so)[1:-1])
 			log.flush()
 		except:
 			pass

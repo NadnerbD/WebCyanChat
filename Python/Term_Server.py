@@ -18,7 +18,7 @@ from HTTP_Server import HTTP_Server
 from VTParse import Parser
 
 MSG_BADPASS = 0
-MSG_KEYMODE = 1
+MSG_MODES = 1
 MSG_INIT = 2
 MSG_DIFF = 3
 MSG_TITLE = 4
@@ -34,32 +34,42 @@ class Style:
 	def __init__(self, init=None):
 		if(init):
 			self.bold = init.bold
+			self.bgBold = init.bgBold
+			self.italic = init.italic
 			self.underline = init.underline
 			self.fgColor = init.fgColor
 			self.bgColor = init.bgColor
 			self.inverted = init.inverted
 		else:
 			self.bold = False
+			self.bgBold = False
+			self.italic = False
 			self.underline = False
-			self.fgColor = 7
-			self.bgColor = 0
+			self.fgColor = 9
+			self.bgColor = 9
 			self.inverted = False
 
-	def pack(self):
-		# bbbfffub
+	def value(self):
+		# bbbbffff---iiubb
 		if(not self.inverted):
-			return struct.pack('B', \
-				(self.bold      & 0x01)      | \
-				(self.underline & 0x01) << 1 | \
-				(self.fgColor   & 0x07) << 2 | \
-				(self.bgColor   & 0x07) << 5   \
+			return ( \
+				(self.bold      & 0x01)       | \
+				(self.bgBold    & 0x01) << 1  | \
+				(self.underline & 0x01) << 2  | \
+				(self.italic    & 0x01) << 3  | \
+				(self.inverted  & 0x01) << 4  | \
+				(self.fgColor   & 0x0F) << 8  | \
+				(self.bgColor   & 0x0F) << 12   \
 			)
 		else:
-			return struct.pack('B', \
-				(self.bold      & 0x01)      | \
-				(self.underline & 0x01) << 1 | \
-				(self.bgColor   & 0x07) << 2 | \
-				(self.fgColor   & 0x07) << 5   \
+			return ( \
+				(self.bold      & 0x01)       | \
+				(self.bgBold    & 0x01) << 1  | \
+				(self.underline & 0x01) << 2  | \
+				(self.italic    & 0x01) << 3  | \
+				(self.inverted  & 0x01) << 4  | \
+				(self.bgColor   & 0x0F) << 8  | \
+				(self.fgColor   & 0x0F) << 12   \
 			)
 
 	def update(self, value):
@@ -69,12 +79,16 @@ class Style:
 			self.__init__()
 		elif(value == 1):
 			self.bold = True
+		elif(value == 3):
+			self.italic = True
 		elif(value == 4):
 			self.underline = True
 		elif(value == 7):
 			self.inverted = True
 		elif(value == 22):
 			self.bold = False
+		elif(value == 23):
+			self.italic = False
 		elif(value == 24):
 			self.underline = False
 		elif(value == 27):
@@ -83,15 +97,16 @@ class Style:
 			cmd = value / 10
 			num = value % 10
 			if(cmd == 3):
-				if(num == 9):
-					self.fgColor = 7
-				else:
-					self.fgColor = num
+				self.fgColor = num
 			elif(cmd == 4):
-				if(num == 9):
-					self.bgColor = 0
-				else:
-					self.bgColor = num
+				self.bgBold = False
+				self.bgColor = num
+			elif(cmd == 9):
+				self.bold = True
+				self.fgColor = num
+			elif(cmd == 10):
+				self.bgBold = True
+				self.bgColor = num
 
 class Buffer:
 	def __init__(self, width=80, height=24):
@@ -112,15 +127,15 @@ class Buffer:
 		self.chars[i] = d[0]
 		self.attrs[i] = d[1]
 		# byte type, int pos, short data, byte style
-		# log(self, repr((d[0], d[1].pack())))
-		if i == self.lastChangePos + 1 and d[1].pack() == self.lastChangeStyle:
+		# log(self, repr((d[0], d[1].value())))
+		if i == self.lastChangePos + 1 and d[1].value() == self.lastChangeStyle:
 			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR_NOSTYLE, ord(d[0])))
 		elif i == self.lastChangePos + 1:
-			self.changeStream.append(struct.pack('!BcH', DIFF_NEXT_CHAR, d[1].pack(), ord(d[0])))
+			self.changeStream.append(struct.pack('!BHH', DIFF_NEXT_CHAR, d[1].value(), ord(d[0])))
 		else:
-			self.changeStream.append(struct.pack('!BicH', DIFF_CHAR, i, d[1].pack(), ord(d[0])))
+			self.changeStream.append(struct.pack('!BiHH', DIFF_CHAR, i, d[1].value(), ord(d[0])))
 		self.lastChangePos = i
-		self.lastChangeStyle = d[1].pack()
+		self.lastChangeStyle = d[1].value()
 
 	def __getitem__(self, i):
 		if type(i) == slice:
@@ -171,7 +186,7 @@ class Buffer:
 			self.size[0],
 			self.size[1],
 			(showCursor * self.pos) + (-1 * (not showCursor))
-		) + ''.join([struct.pack('!H', ord(x)) + y for x, y in zip(self.chars, [x.pack() for x in self.attrs])])
+		) + ''.join([struct.pack('!HH', ord(x), y.value()) for x, y in zip(self.chars, self.attrs)])
 
 	def diffMsg(self, showCursor):
 		# byte type, int pos, [items]
@@ -240,7 +255,7 @@ class Charmap:
 # for setting default argument values
 def argDefaults(srcArgs, defArgs):
 	for i in range(max(len(srcArgs), len(defArgs))):
-		if(len(srcArgs) == i):
+		if(len(srcArgs) <= i):
 			srcArgs.append(defArgs[i])
 		elif(srcArgs[i] == 0):
 			srcArgs[i] = defArgs[i]
@@ -267,7 +282,8 @@ class Terminal:
 		self.savedCharsets = ['B', '0']
 		self.parent = parent
 		self.updateEvent = threading.Event()
-		self.appKeyMode = False
+		self.appKeyMode = False # 0 is normal, 1 is application mode
+		self.screenMode = False # 0 is normal, 1 is inverted
 		# this is mainly to prevent message mixing during the initial state burst
 		self.bufferLock = threading.Lock()
 
@@ -396,7 +412,6 @@ class Terminal:
 		self.horizontalTabs.add(self.buffer.pos % self.buffer.size[0])
 
 	def tabClear(self, args):
-		argDefaults(args, [0])
 		hpos = self.buffer.pos % self.buffer.size[0]
 		if(args[0] == 0 and hpos in self.horizontalTabs):
 			self.horizontalTabs.remove(hpos)
@@ -465,7 +480,6 @@ class Terminal:
 			self.move(0, -1)
 
 	def eraseOnDisplay(self, args):
-		argDefaults(args, [0])
 		if(args[0] == 1): # Above
 			self.erase(0, self.buffer.pos + 1)
 		elif(args[0] == 2): # All
@@ -474,7 +488,6 @@ class Terminal:
 			self.erase(self.buffer.pos, self.buffer.len)
 
 	def eraseOnLine(self, args):
-		argDefaults(args, [0])
 		lineStart = self.getPos()[1] * self.buffer.size[0]
 		if(args[0] == 1): # Left
 			self.erase(lineStart, self.buffer.pos + 1)
@@ -532,6 +545,9 @@ class Terminal:
 			# switch to 80 column mode
 			self.resize(80, 24, False)
 			return True
+		if(5 in args):
+			self.screenMode = False
+			self.broadcast(self.modeMsg())
 		if(6 in args):
 			self.originMode = False
 			self.setPos(0, 0)
@@ -548,6 +564,9 @@ class Terminal:
 			# switch to 132 column mode
 			self.resize(132, 24, False)
 			return True
+		if(5 in args):
+			self.screenMode = True
+			self.broadcast(self.modeMsg())
 		if(6 in args):
 			self.originMode = True
 			self.setPos(0, 0)
@@ -566,16 +585,18 @@ class Terminal:
 	def setAppKeys(self, args):
 		log(self, "Set Application Cursor Keys", 2)
 		self.appKeyMode = True
-		self.broadcast(self.keyModeMsg())
+		self.broadcast(self.modeMsg())
 
 	def setNormKeys(self, args):
 		log(self, "Set Normal Cursor Keys", 2)
 		self.appKeyMode = False
-		self.broadcast(self.keyModeMsg())
+		self.broadcast(self.modeMsg())
 
-	def keyModeMsg(self):
-		# 0 is normal, 1 is application mode
-		return struct.pack('B?', MSG_KEYMODE, self.appKeyMode)
+	def modeMsg(self):
+		return struct.pack('!BB', MSG_MODES,
+			(self.appKeyMode & 0x01)      |
+			(self.screenMode & 0x01) << 1
+		)
 
 	def sendDeviceAttributes(self, args):
 		log(self, "Device attribute request: %r" % args, 2)
@@ -642,7 +663,7 @@ class Terminal:
 
 	def sendInit(self, sock):
 		with self.bufferLock:
-			sock.send(self.keyModeMsg(), 2) # opcode 2 indicates binary data
+			sock.send(self.modeMsg(), 2) # opcode 2 indicates binary data
 			sock.send(self.buffer.initMsg(self.showCursor), 2) # opcode 2 indicates binary data
 
 	def sendDiff(self):
