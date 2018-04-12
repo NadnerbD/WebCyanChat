@@ -76,7 +76,6 @@
 			}
 
 			function init() {
-				document.addEventListener("keypress", keypress, false);
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("paste", handlePaste, false);
 				window.addEventListener("resize", handleResize, false);
@@ -238,20 +237,6 @@
 				sock.send(msg);
 			}
 
-			function keypress(event) {
-				// most keypresses will be handled here
-				// capitalization and such is handled by the browser
-				if(event.ctrlKey && event.which == 118) return; // ctrl-v
-				if(modCtrl || event.ctrlKey) {
-					sendKey(event.which & 0037);
-					modCtrl = false;
-				}else{
-					sendKey(event.which);
-				}
-				event.preventDefault();
-				event.stopPropagation();
-			}
-
 			var cursorCodes = {35: 52, 36: 49, 37: 68, 38: 65, 39: 67, 40: 66, 33: 53, 34: 54, 45: 50, 46: 51}; // 41DACB5623
 			function keydown(event) {
 				// directional and special keys will only be
@@ -284,15 +269,39 @@
 						sendKey(cursorCodes[event.which]);
 						sendKey(126); // ~
 						break;
-					case 27: // esc
-					case 9: // Tab
-						sendKey(event.which);
-						break;
 					case 8: // Backspace
 						sendKey(127); // 0x7F (ASCII DEL)
 						break;
-					default:
-						handled = false;
+					case 112: // F1
+					case 113: // F2
+					case 114: // F3
+					case 115: // F4
+						sendKey(27); // Esc
+						sendKey(79); // O
+						sendKey(event.which - 32);
+						break;
+					case 9: // Tab
+					case 13: // Enter
+					case 27: // Esc
+						// send key code directly
+						sendKey(event.which);
+						break;
+					case 16: // Shift
+					case 17: // Ctrl
+					case 20: // Caps Lock
+						// don't send anything on modifier key events
+						break;
+					default: // Send character code for anything we don't recognize
+						if(event.ctrlKey && event.key == "v") { // real ctrl-v needs to trigger browser paste event
+							handled = false;
+							break;
+						}
+						if(modCtrl || event.ctrlKey) { // ctrl and soft-ctrl
+							sendKey(event.which & 0037);
+							modCtrl = false;
+						}else{
+							sendKey(event.key.charCodeAt(0));
+						}
 						break;
 				}
 				if(handled) {
