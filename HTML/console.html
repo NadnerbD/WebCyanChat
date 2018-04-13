@@ -320,7 +320,12 @@
 						break;
 					case 16: // Shift
 					case 17: // Ctrl
+					case 18: // Alt
+					case 19: // Pause/Break
 					case 20: // Caps Lock
+					case 91: // Left Windows
+					case 92: // Right Windows
+					case 93: // Context Menu
 						// don't send anything on modifier key events
 						break;
 					default: // Send character code for anything we don't recognize
@@ -415,6 +420,8 @@
 			}
 		</style>
 		<link id="theme" rel="stylesheet" href="console-default.css">
+		<link rel="icon" href="favicon.ico" type="image/x-icon">
+		<link rel="icon" href="icyanchat.png" type="image/png">
 	</head>
 	<body onload="init()">
 		<div id="grid"></div>
