@@ -345,7 +345,9 @@
 				var data = cData.getData("Text");
 
 				for(var i = 0; i < data.length; i++) {
-					sendKey(data.charCodeAt(i));
+					if(data[i] == '\r') continue;
+					if(data[i] == '\n') sendKey(13); // \r
+					else sendKey(data.charCodeAt(i));
 				}
 			}
 
