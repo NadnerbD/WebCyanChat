@@ -93,6 +93,7 @@
 				DIFF_SHIFT = 1;
 				DIFF_NEXT_CHAR = 2;
 				DIFF_NEXT_CHAR_NOSTYLE = 3;
+				var decoder = new TextDecoder('utf-8');
 				sock.onmessage = function (msgEvent) {
 					var dv = new DataView(msgEvent.data);
 					var cmd = dv.getUint8(0);
@@ -124,9 +125,10 @@
 							grid = createGrid(container);
 							cursor = grid[mCursor];
 						}
+						var charGrid = decoder.decode(new Uint8Array(msgEvent.data, 9 + width * height * 2));
 						for(var i = 0; i < width * height; i++) {
-							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 4 * i));
-							applyStyle(grid[i], dv.getUint16(11 + 4 * i));
+							grid[i].firstChild.data = charGrid[i];
+							applyStyle(grid[i], dv.getUint16(9 + 2 * i));
 						}
 						setCursor(mCursor);
 						if(firstInit) {
@@ -150,8 +152,11 @@
 								var chStyle = dv.getUint16(mOffset);
 								mOffset += 2;
 							case DIFF_NEXT_CHAR_NOSTYLE:
-								var chChar = String.fromCharCode(dv.getUint16(mOffset));
-								mOffset += 2;
+								var fb = dv.getUint8(mOffset);
+								var cLen = 1;
+								for(var b = 0; b < 4 && (fb & (0x80 >> b)); b++) cLen = b + 1;
+								var chChar = decoder.decode(new Uint8Array(msgEvent.data, mOffset, cLen));
+								mOffset += cLen;
 								// LOGMSG.push("char: " + JSON.stringify([chPos, chStyle, chChar]));
 								grid[chPos].firstChild.data = chChar;
 								applyStyle(grid[chPos], chStyle);
@@ -337,17 +342,18 @@
 				}
 			}
 
+			var encoder = new TextEncoder('utf-8');
 			function handlePaste(event) {
 				event.stopPropagation();
 				event.preventDefault();
 
 				var cData = event.clipboardData || window.clipboardData;
-				var data = cData.getData("Text");
+				var data = encoder.encode(cData.getData("Text"));
 
-				for(var i = 0; i < data.length; i++) {
-					if(data[i] == '\r') continue;
-					if(data[i] == '\n') sendKey(13); // \r
-					else sendKey(data.charCodeAt(i));
+				for(var i = 0; i < data.byteLength; i++) {
+					if(data[i] == 13) continue;    // ignore \r
+					if(data[i] == 10) sendKey(13); // \n -> \r
+					else sendKey(data[i]);
 				}
 			}
 
