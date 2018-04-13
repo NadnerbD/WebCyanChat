@@ -146,12 +146,14 @@ class Buffer:
 	def copy(self, src):
 		oWidth, oHeight = src.size
 		nWidth, nHeight = self.size
-		for y in range(min(oHeight, nHeight)):
-			for x in range(min(oWidth, nWidth)):
-				self.chars[x + y * nWidth] = src.chars[x + y * oWidth]
-				self.attrs[x + y * nWidth] = src.attrs[x + y * oWidth]
 		oX = src.pos % oWidth
 		oY = src.pos / oWidth
+		# if we push the cursor up, scroll content with it
+		scroll = max(0, oY - (nHeight - 1))
+		for y in range(min(oHeight, nHeight)):
+			for x in range(min(oWidth, nWidth)):
+				self.chars[x + y * nWidth] = src.chars[x + (y + scroll) * oWidth]
+				self.attrs[x + y * nWidth] = src.attrs[x + (y + scroll) * oWidth]
 		self.pos = min(oX, nWidth - 1) + min(oY, nHeight - 1) * nWidth
 		if nWidth > oWidth and src.atEnd:
 			self.atEnd = False
@@ -195,10 +197,13 @@ class Buffer:
 			MSG_DIFF, 
 			(showCursor * self.pos) + (-1 * (not showCursor)), 
 		) + ''.join(self.changeStream)
+		self.clearDiff()
+		return msg
+
+	def clearDiff(self):
 		self.changeStream = []
 		self.lastChangePos = -1
 		self.lastChangeStyle = 0
-		return msg
 
 class Charmap:
 	graphics_map = {\
@@ -654,6 +659,7 @@ class Terminal:
 				log(self, "Unimplemented command: %s" % cmd)
 			if(resp == True):
 				# resp is True if we've switched buffers
+				self.buffer.clearDiff()
 				self.broadcast(self.buffer.initMsg(self.showCursor))
 			elif(type(resp) == str):
 				# resp is set to a string if we want to talk back to the host program
