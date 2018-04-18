@@ -376,7 +376,7 @@ class HTTP_Server:
 	writeHTTP = staticmethod(writeHTTP)
 
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions, SSLRedirect):
-		if(SSLRedirect and type(sock) is not ssl.SSLSocket):
+		if(SSLRedirect and headers['x-forwarded-proto'] != 'https'):
 			# bloody hax, because the host header apparently contains the port, and IPv6 can use colons in addresses
 			ur = re.compile(r"^(\[[^\]]+\]|[^\[\]]+)(?::([0-9]+))$")
 			host_noport = ur.match(headers["host"]).groups()[0]
