@@ -274,6 +274,9 @@ class CC_Server:
 			"server_version": "CyanChat (Py CC Server 2.1)", \
 			"enable_http": 1, \
 			"enable_https": 0, \
+			"https_redirect": 0, \
+			"https_cert": "server.crt", \
+			"https_key": "server.key", \
 			"enable_cc": 1, \
 			"cc_port": 1812, \
 			"http_port": 81, \
