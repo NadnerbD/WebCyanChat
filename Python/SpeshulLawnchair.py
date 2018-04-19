@@ -2,7 +2,7 @@ from Cursive_Server import Cursive_Server
 from Term_Server import Term_Server
 
 from threading import Thread
-import os, sys
+import os, sys, re
 
 import stacktracer
 stacktracer.trace_start("/app/HTML/trace.html")
@@ -18,7 +18,8 @@ c.readPrefs("etc/CCServer.conf")
 
 # take the CC server's HTTP server and link it to the Term server
 t.server = c.HTTPServ
-t.sessionQueue = t.server.registerProtocol("term")
+t.sessionQueue = t.server.registerProtocol("term", "/term-socket")
+t.server.registerAuthorizer(re.compile("^/(term-socket|console\.html).*$"), t.authorize)
 
 # use the supplied port
 t.prefs["http_port"] = int(os.environ["PORT"])
