@@ -82,7 +82,7 @@
 
 				setTheme(localStorage.getItem("consoleTheme") || "default");
 
-				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
+				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/term-socket", "term");
 				sock.binaryType = "arraybuffer";
 				MSG_BADPASS = 0;
 				MSG_MODES = 1;

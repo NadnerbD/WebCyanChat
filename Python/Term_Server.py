@@ -749,10 +749,10 @@ class Term_Server:
 		shutdown = threading.Event()
 
 		# register an authorization provider with the HTTP server
-		self.server.registerAuthorizer(re.compile("^/(web-socket|console\.html).*$"), self.authorize)
+		self.server.registerAuthorizer(re.compile("^/(term-socket|console\.html).*$"), self.authorize)
 
 		# register protocol handler with HTTP server
-		self.sessionQueue = self.server.registerProtocol("term")
+		self.sessionQueue = self.server.registerProtocol("term", "/term-socket")
 
 		# start a loop to accept incoming http sessions
 		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(shutdown,))
