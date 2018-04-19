@@ -685,6 +685,8 @@ class Term_Server:
 	def __init__(self):
 		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
+		self.server.registerAuthorizer(re.compile("^/(term-socket|console\.html).*$"), self.authorize)
+		self.sessionQueue = self.server.registerProtocol("term", "/term-socket")
 		self.connections = list()
 		self.master = None
 		self.prefs = { \
@@ -747,12 +749,6 @@ class Term_Server:
 
 		# this is passed locally so we can shut down only threads that were started by this invocation
 		shutdown = threading.Event()
-
-		# register an authorization provider with the HTTP server
-		self.server.registerAuthorizer(re.compile("^/(term-socket|console\.html).*$"), self.authorize)
-
-		# register protocol handler with HTTP server
-		self.sessionQueue = self.server.registerProtocol("term", "/term-socket")
 
 		# start a loop to accept incoming http sessions
 		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(shutdown,))
