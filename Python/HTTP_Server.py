@@ -418,26 +418,26 @@ class HTTP_Server:
 				return
 		else:
 			mimeType = "application/octet-stream"
-		if(method == "GET" and resource == "/web-socket"):
-			if(headers.has_key("websocket-protocol") and self.sessionQueues.has_key(headers["websocket-protocol"])): # protocol draft 75
+		if(method == "GET" and 'upgrade' in headers and headers['upgrade'] == 'websocket'):
+			if(headers.has_key("websocket-protocol") and self.sessionQueues.has_key((headers["websocket-protocol"], resource))): # protocol draft 75
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("WebSocket-Origin", headers["origin"]), \
-					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
+					("WebSocket-Location", "%s://%s%s" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"], resource)), \
 					("WebSocket-Protocol", headers["websocket-protocol"]), \
 				]
 				log(self, "got WebSocket from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
-				self.sessionQueues[headers["websocket-protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[(headers["websocket-protocol"], resource)].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("sec-websocket-protocol") and self.sessionQueues.has_key(headers["sec-websocket-protocol"]) and not headers.has_key("sec-websocket-version")): # protocol draft 76
+			elif(headers.has_key("sec-websocket-protocol") and self.sessionQueues.has_key((headers["sec-websocket-protocol"], resource)) and not headers.has_key("sec-websocket-version")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("Sec-WebSocket-Origin", headers["origin"]), \
-					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
+					("Sec-WebSocket-Location", "%s://%s%s" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"], resource)), \
 					("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				# now we have to figure out the key
@@ -464,10 +464,10 @@ class HTTP_Server:
 				log(self, "got Sec-WebSocket from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				sock.send(md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
-				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[(headers["sec-websocket-protocol"], resource)].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
-			elif(headers.has_key("sec-websocket-version") and headers["sec-websocket-version"] in ["8", "13"] and self.sessionQueues.has_key(headers["sec-websocket-protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+			elif(headers.has_key("sec-websocket-version") and headers["sec-websocket-version"] in ["8", "13"] and self.sessionQueues.has_key((headers["sec-websocket-protocol"], resource))): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
@@ -476,7 +476,7 @@ class HTTP_Server:
 				]
 				log(self, "got Sec-WebSocket Version 8 from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
-				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket2(sock), addr))
+				self.sessionQueues[(headers["sec-websocket-protocol"], resource)].insert((self.WebSocket2(sock), addr))
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
@@ -517,10 +517,10 @@ class HTTP_Server:
 				log(self, "unauthorized upload attempt from %r" % (addr,), 3)
 				self.writeHTTP(sock, 403)
 		elif(method == "POST" and resource == "/chat-data"):
-			if(getOptions.has_key("sid") and getOptions.has_key("action") and getOptions.has_key("protocol") and self.sessionQueues.has_key(getOptions["protocol"])):
+			if(getOptions.has_key("sid") and getOptions.has_key("action") and getOptions.has_key("protocol") and self.sessionQueues.has_key((getOptions["protocol"], '/web-socket'))):
 				if(getOptions["sid"] == "0"):
 					session = self.sessionList.newSession(sock, addr)
-					self.sessionQueues[getOptions["protocol"]].insert((session, addr))
+					self.sessionQueues[(getOptions["protocol"], '/web-socket')].insert((session, addr))
 				else:
 					session = self.sessionList.findBySID(getOptions["sid"])
 				if(session):
@@ -572,12 +572,12 @@ class HTTP_Server:
 				log(self, "WebSocket passed as session", 3)
 				return
 
-	def registerProtocol(self, protocol):
-		if(not self.sessionQueues.has_key(protocol)):
-			self.sessionQueues[protocol] = self.acceptQueue()
-			return self.sessionQueues[protocol]
+	def registerProtocol(self, protocol, resource='/web-socket'):
+		if(not self.sessionQueues.has_key((protocol, resource))):
+			self.sessionQueues[(protocol, resource)] = self.acceptQueue()
+			return self.sessionQueues[(protocol, resource)]
 		else:
-			raise Exception("Protocol '%s' already registered" % protocol)
+			raise Exception("Protocol '%s' already registered for %s" % (protocol, resource))
 
 	def registerAuthorizer(self, pattern, callback, authType='Basic', body=None):
 		# pattern should be an object that supports match()
