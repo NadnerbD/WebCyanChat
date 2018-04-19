@@ -22,6 +22,10 @@ serverClasses = { \
 	"cursive": "Cursive_Server", \
 }
 serverClass = None
+
+class InvalidOptionException(Exception):
+	pass
+
 if(len(sys.argv) >= 2 and serverClasses.has_key(sys.argv[1])):
 	serverName = serverClasses[sys.argv[1]]
 	serverModule = __import__(serverName)
@@ -37,9 +41,9 @@ try:
 				value = int(value)
 			Server.prefs[name[2:]] = value
 		else:
-			raise Exception("invalid option")
+			raise InvalidOptionException
 	Server.start()
-except Exception:
+except InvalidOptionException:
 	print "usage: python %s (%s) [--pref_name=VALUE ...]" % (sys.argv[0], '|'.join(serverClasses.keys()))
 
 if(profiling):

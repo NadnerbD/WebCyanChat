@@ -40,6 +40,7 @@ class HTTP_Server:
 		#301: "Moved Permanently", \
 		302: "Found", \
 		400: "Bad Request", \
+		401: "Unauthorized", \
 		403: "Forbidden", \
 		404: "Not Found", \
 		501: "Not Implemented", \
@@ -314,6 +315,7 @@ class HTTP_Server:
 	def __init__(self, webRoot="../HTML"):
 		self.sessionList = self.sessionList()
 		self.sessionQueues = dict()
+		self.authorizers = list()
 		self.redirects = dict()
 		self.webRoot = webRoot
 	
@@ -371,8 +373,9 @@ class HTTP_Server:
 			sock.send("%s: %s\r\n" % header)
 		for key in headers:
 			sock.send("%s: %s\r\n" % (key, headers[key]))
+		sock.send("\r\n")
 		if(body):
-			sock.send("\r\n%s" % body)
+			sock.send("%s" % body)
 	writeHTTP = staticmethod(writeHTTP)
 
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions, SSLRedirect):
@@ -385,6 +388,11 @@ class HTTP_Server:
 			log(self, "redirected request from %r for %r to %r" % (addr, urllib.unquote(resource), new_url), 3)
 			return
 		resource = urllib.unquote(resource)
+		for authorizer in self.authorizers:
+			if(authorizer[0].match(resource) and not authorizer[1](headers)):
+				log(self, "Rejected authorization for %r from %r" % (resource, addr))
+				self.writeHTTP(sock, 401, {"WWW-Authenticate": authorizer[2]}, authorizer[3])
+				return
 		if(self.redirects.has_key(resource)):
 			redirect = self.redirects[resource]
 			if(type(redirect) is str):
@@ -399,8 +407,7 @@ class HTTP_Server:
 					redirect["header"], \
 					redirect["value"]), 3)
 				return
-		#resExt = resource.rsplit('.', 1)
-		resExt = resource.split('.')
+		resExt = resource.rsplit('.', 1)
 		if(len(resExt) > 1):
 			extension = resExt[-1].lower()
 			if(self.mimeTypes.has_key(extension)):
@@ -411,27 +418,26 @@ class HTTP_Server:
 				return
 		else:
 			mimeType = "application/octet-stream"
-		if(method == "GET" and resource == "/web-socket"):
-			if(headers.has_key("websocket-protocol") and self.sessionQueues.has_key(headers["websocket-protocol"])): # protocol draft 75
+		if(method == "GET" and 'upgrade' in headers and headers['upgrade'] == 'websocket'):
+			if(headers.has_key("websocket-protocol") and self.sessionQueues.has_key((headers["websocket-protocol"], resource))): # protocol draft 75
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("WebSocket-Origin", headers["origin"]), \
-					("WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
+					("WebSocket-Location", "%s://%s%s" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"], resource)), \
 					("WebSocket-Protocol", headers["websocket-protocol"]), \
 				]
 				log(self, "got WebSocket from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
-				sock.send("\r\n")
-				self.sessionQueues[headers["websocket-protocol"]].insert((self.WebSocket(sock), addr))
+				self.sessionQueues[(headers["websocket-protocol"], resource)].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("sec-websocket-protocol") and self.sessionQueues.has_key(headers["sec-websocket-protocol"]) and not headers.has_key("sec-websocket-version")): # protocol draft 76
+			elif(headers.has_key("sec-websocket-protocol") and self.sessionQueues.has_key((headers["sec-websocket-protocol"], resource)) and not headers.has_key("sec-websocket-version")): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
 					("Sec-WebSocket-Origin", headers["origin"]), \
-					("Sec-WebSocket-Location", "%s://%s/web-socket" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"])), \
+					("Sec-WebSocket-Location", "%s://%s%s" % (["ws", "wss"][type(sock) is ssl.SSLSocket], headers["host"], resource)), \
 					("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				# now we have to figure out the key
@@ -457,11 +463,11 @@ class HTTP_Server:
 				# finish the handshake
 				log(self, "got Sec-WebSocket from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
-				sock.send("\r\n" + md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
-				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket(sock), addr))
+				sock.send(md5(struct.pack(">I", Value1) + struct.pack(">I", Value2) + Value3).digest())
+				self.sessionQueues[(headers["sec-websocket-protocol"], resource)].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
-			elif(headers.has_key("sec-websocket-version") and headers["sec-websocket-version"] in ["8", "13"] and self.sessionQueues.has_key(headers["sec-websocket-protocol"])): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+			elif(headers.has_key("sec-websocket-version") and headers["sec-websocket-version"] in ["8", "13"] and self.sessionQueues.has_key((headers["sec-websocket-protocol"], resource))): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
@@ -470,8 +476,7 @@ class HTTP_Server:
 				]
 				log(self, "got Sec-WebSocket Version 8 from %r" % (addr,), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
-				sock.send("\r\n")
-				self.sessionQueues[headers["sec-websocket-protocol"]].insert((self.WebSocket2(sock), addr))
+				self.sessionQueues[(headers["sec-websocket-protocol"], resource)].insert((self.WebSocket2(sock), addr))
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
@@ -512,10 +517,10 @@ class HTTP_Server:
 				log(self, "unauthorized upload attempt from %r" % (addr,), 3)
 				self.writeHTTP(sock, 403)
 		elif(method == "POST" and resource == "/chat-data"):
-			if(getOptions.has_key("sid") and getOptions.has_key("action") and getOptions.has_key("protocol") and self.sessionQueues.has_key(getOptions["protocol"])):
+			if(getOptions.has_key("sid") and getOptions.has_key("action") and getOptions.has_key("protocol") and self.sessionQueues.has_key((getOptions["protocol"], '/web-socket'))):
 				if(getOptions["sid"] == "0"):
 					session = self.sessionList.newSession(sock, addr)
-					self.sessionQueues[getOptions["protocol"]].insert((session, addr))
+					self.sessionQueues[(getOptions["protocol"], '/web-socket')].insert((session, addr))
 				else:
 					session = self.sessionList.findBySID(getOptions["sid"])
 				if(session):
@@ -567,12 +572,18 @@ class HTTP_Server:
 				log(self, "WebSocket passed as session", 3)
 				return
 
-	def registerProtocol(self, protocol):
-		if(not self.sessionQueues.has_key(protocol)):
-			self.sessionQueues[protocol] = self.acceptQueue()
-			return self.sessionQueues[protocol]
+	def registerProtocol(self, protocol, resource='/web-socket'):
+		if(not self.sessionQueues.has_key((protocol, resource))):
+			self.sessionQueues[(protocol, resource)] = self.acceptQueue()
+			return self.sessionQueues[(protocol, resource)]
 		else:
-			raise Exception("Protocol '%s' already registered" % protocol)
+			raise Exception("Protocol '%s' already registered for %s" % (protocol, resource))
+
+	def registerAuthorizer(self, pattern, callback, authType='Basic', body=None):
+		# pattern should be an object that supports match()
+		# requests that match pattern will pass headers to callback for validation
+		# authType will be passed to the client in the WWW-Authenticate header
+		self.authorizers.append((pattern, callback, authType, body))
 	
 	def fileUploaded(self, filename):
 		# this is an event handler to be overloaded by subclasses who actually care if this happens

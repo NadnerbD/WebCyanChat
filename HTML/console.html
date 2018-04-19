@@ -82,7 +82,7 @@
 
 				setTheme(localStorage.getItem("consoleTheme") || "default");
 
-				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/web-socket", "term");
+				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/term-socket", "term");
 				sock.binaryType = "arraybuffer";
 				MSG_BADPASS = 0;
 				MSG_MODES = 1;
@@ -98,10 +98,6 @@
 					var dv = new DataView(msgEvent.data);
 					var cmd = dv.getUint8(0);
 					switch(cmd) {
-					case MSG_BADPASS:
-						alert("Server rejected password");
-						deleteCookie("term_pass");
-						break;
 					case MSG_MODES:
 						var modes = dv.getUint8(1);
 						appkeymode = modes & 0x01;
@@ -190,43 +186,9 @@
 						break;
 					}
 				}
-				sock.onopen = function () {
-					var passwd = getCookie("term_pass");
-					if(passwd == "") {
-						passwd = prompt("Enter your password", "");
-						setCookie("term_pass", passwd);
-					}
-					sock.send(passwd);
-				}
 				sock.onclose = function () {
 					window.close();
 				}
-			}
-
-			function setCookie(name, value) {
-				// cookies are set to expire in one week
-				var today = new Date();
-				expire_date = new Date(today.getTime() + (7 * 1000 * 60 * 60 * 24));
-				expire_string = expire_date.toGMTString();
-				document.cookie = name + "=" + escape(value) + ";path=/;expires=" + expire_string;
-			}
-
-			function getCookie(name) {
-				// first check if the cookie exists
-				if(document.cookie.split(name + "=").length > 1) {
-					// if so, extract it
-					return unescape(document.cookie.split(name + "=")[1].split(";")[0]);
-				}else{
-					// otherwise return an empty string
-					return "";
-				}
-			}
-
-			function deleteCookie(name) {
-				// we delete cookies by setting their expiry date to the past
-				today = new Date();
-				expire_string = new Date(today.getTime() - 1).toGMTString();
-				document.cookie = name + "=;path=/;expires=" + expire_string
 			}
 
 			function sendKey(keyCode) {
