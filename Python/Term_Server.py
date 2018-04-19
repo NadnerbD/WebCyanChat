@@ -126,14 +126,14 @@ class Buffer:
 	def __setitem__(self, i, d):
 		self.chars[i] = d[0]
 		self.attrs[i] = d[1]
-		# byte type, int pos, short data, byte style
+		# byte type, int pos, short style, utf-8 data
 		# log(self, repr((d[0], d[1].value())))
 		if i == self.lastChangePos + 1 and d[1].value() == self.lastChangeStyle:
-			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR_NOSTYLE, ord(d[0])))
+			self.changeStream.append(struct.pack('!B', DIFF_NEXT_CHAR_NOSTYLE) + d[0].encode('utf-8'))
 		elif i == self.lastChangePos + 1:
-			self.changeStream.append(struct.pack('!BHH', DIFF_NEXT_CHAR, d[1].value(), ord(d[0])))
+			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR, d[1].value()) + d[0].encode('utf-8'))
 		else:
-			self.changeStream.append(struct.pack('!BiHH', DIFF_CHAR, i, d[1].value(), ord(d[0])))
+			self.changeStream.append(struct.pack('!BiH', DIFF_CHAR, i, d[1].value()) + d[0].encode('utf-8'))
 		self.lastChangePos = i
 		self.lastChangeStyle = d[1].value()
 
@@ -146,12 +146,14 @@ class Buffer:
 	def copy(self, src):
 		oWidth, oHeight = src.size
 		nWidth, nHeight = self.size
-		for y in range(min(oHeight, nHeight)):
-			for x in range(min(oWidth, nWidth)):
-				self.chars[x + y * nWidth] = src.chars[x + y * oWidth]
-				self.attrs[x + y * nWidth] = src.attrs[x + y * oWidth]
 		oX = src.pos % oWidth
 		oY = src.pos / oWidth
+		# if we push the cursor up, scroll content with it
+		scroll = max(0, oY - (nHeight - 1))
+		for y in range(min(oHeight, nHeight)):
+			for x in range(min(oWidth, nWidth)):
+				self.chars[x + y * nWidth] = src.chars[x + (y + scroll) * oWidth]
+				self.attrs[x + y * nWidth] = src.attrs[x + (y + scroll) * oWidth]
 		self.pos = min(oX, nWidth - 1) + min(oY, nHeight - 1) * nWidth
 		if nWidth > oWidth and src.atEnd:
 			self.atEnd = False
@@ -179,14 +181,14 @@ class Buffer:
 		self.changeStream.append(struct.pack('!Biii', DIFF_SHIFT, start, end, offset))
 
 	def initMsg(self, showCursor):
-		# byte type, short width, short height, int pos, [short data, byte style]
+		# byte type, short width, short height, int pos, [short style], [utf-8 style]
 		# network stream (big endian)
 		return struct.pack('!Bhhi',
 			MSG_INIT,
 			self.size[0],
 			self.size[1],
 			(showCursor * self.pos) + (-1 * (not showCursor))
-		) + ''.join([struct.pack('!HH', ord(x), y.value()) for x, y in zip(self.chars, self.attrs)])
+		) + ''.join([struct.pack('!H', a.value()) for a in self.attrs]) + ''.join(self.chars).encode('utf-8')
 
 	def diffMsg(self, showCursor):
 		# byte type, int pos, [items]
@@ -195,10 +197,13 @@ class Buffer:
 			MSG_DIFF, 
 			(showCursor * self.pos) + (-1 * (not showCursor)), 
 		) + ''.join(self.changeStream)
+		self.clearDiff()
+		return msg
+
+	def clearDiff(self):
 		self.changeStream = []
 		self.lastChangePos = -1
 		self.lastChangeStyle = 0
-		return msg
 
 class Charmap:
 	graphics_map = {\
@@ -654,6 +659,7 @@ class Terminal:
 				log(self, "Unimplemented command: %s" % cmd)
 			if(resp == True):
 				# resp is True if we've switched buffers
+				self.buffer.clearDiff()
 				self.broadcast(self.buffer.initMsg(self.showCursor))
 			elif(type(resp) == str):
 				# resp is set to a string if we want to talk back to the host program

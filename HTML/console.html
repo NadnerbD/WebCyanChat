@@ -76,7 +76,6 @@
 			}
 
 			function init() {
-				document.addEventListener("keypress", keypress, false);
 				document.addEventListener("keydown", keydown, false);
 				document.addEventListener("paste", handlePaste, false);
 				window.addEventListener("resize", handleResize, false);
@@ -94,6 +93,7 @@
 				DIFF_SHIFT = 1;
 				DIFF_NEXT_CHAR = 2;
 				DIFF_NEXT_CHAR_NOSTYLE = 3;
+				var decoder = new TextDecoder('utf-8');
 				sock.onmessage = function (msgEvent) {
 					var dv = new DataView(msgEvent.data);
 					var cmd = dv.getUint8(0);
@@ -125,9 +125,10 @@
 							grid = createGrid(container);
 							cursor = grid[mCursor];
 						}
+						var charGrid = decoder.decode(new Uint8Array(msgEvent.data, 9 + width * height * 2));
 						for(var i = 0; i < width * height; i++) {
-							grid[i].firstChild.data = String.fromCharCode(dv.getUint16(9 + 4 * i));
-							applyStyle(grid[i], dv.getUint16(11 + 4 * i));
+							grid[i].firstChild.data = charGrid[i];
+							applyStyle(grid[i], dv.getUint16(9 + 2 * i));
 						}
 						setCursor(mCursor);
 						if(firstInit) {
@@ -151,8 +152,11 @@
 								var chStyle = dv.getUint16(mOffset);
 								mOffset += 2;
 							case DIFF_NEXT_CHAR_NOSTYLE:
-								var chChar = String.fromCharCode(dv.getUint16(mOffset));
-								mOffset += 2;
+								var fb = dv.getUint8(mOffset);
+								var cLen = 1;
+								for(var b = 0; b < 4 && (fb & (0x80 >> b)); b++) cLen = b + 1;
+								var chChar = decoder.decode(new Uint8Array(msgEvent.data, mOffset, cLen));
+								mOffset += cLen;
 								// LOGMSG.push("char: " + JSON.stringify([chPos, chStyle, chChar]));
 								grid[chPos].firstChild.data = chChar;
 								applyStyle(grid[chPos], chStyle);
@@ -228,6 +232,7 @@
 			function sendKey(keyCode) {
 				var msg = new Uint8Array([107, keyCode]); // 'k'
 				sock.send(msg);
+				// console.log(String.fromCharCode(keyCode));
 			}
 
 			function reqResize(x, y) {
@@ -236,20 +241,6 @@
 				dv.setUint16(1, x);
 				dv.setUint16(3, y);
 				sock.send(msg);
-			}
-
-			function keypress(event) {
-				// most keypresses will be handled here
-				// capitalization and such is handled by the browser
-				if(event.ctrlKey && event.which == 118) return; // ctrl-v
-				if(modCtrl || event.ctrlKey) {
-					sendKey(event.which & 0037);
-					modCtrl = false;
-				}else{
-					sendKey(event.which);
-				}
-				event.preventDefault();
-				event.stopPropagation();
 			}
 
 			var cursorCodes = {35: 52, 36: 49, 37: 68, 38: 65, 39: 67, 40: 66, 33: 53, 34: 54, 45: 50, 46: 51}; // 41DACB5623
@@ -284,15 +275,70 @@
 						sendKey(cursorCodes[event.which]);
 						sendKey(126); // ~
 						break;
-					case 27: // esc
-					case 9: // Tab
-						sendKey(event.which);
-						break;
 					case 8: // Backspace
 						sendKey(127); // 0x7F (ASCII DEL)
 						break;
-					default:
-						handled = false;
+					case 112: // F1
+					case 113: // F2
+					case 114: // F3
+					case 115: // F4
+						sendKey(27); // Esc
+						sendKey(79); // O
+						sendKey(event.which - 32);
+						break;
+					case 116: // F5
+						sendKey(27); // Esc
+						sendKey(91); // [
+						sendKey(49); // 1
+						sendKey(53); // 5
+						sendKey(126); // ~
+						break;
+					case 117: // F6
+					case 118: // F7
+					case 119: // F8
+					case 120: // F9
+					case 121: // F10
+						sendKey(27); // Esc
+						sendKey(91); // [
+						for(var digit of (event.which - 100).toString())
+							sendKey(digit.charCodeAt(0));
+						sendKey(126); // ~
+						break;
+					case 122: // F11
+					case 123: // F12
+						sendKey(27); // Esc
+						sendKey(91); // [
+						for(var digit of (event.which - 99).toString())
+							sendKey(digit.charCodeAt(0));
+						sendKey(126); // ~
+						break;
+					case 9: // Tab
+					case 13: // Enter
+					case 27: // Esc
+						// send key code directly
+						sendKey(event.which);
+						break;
+					case 16: // Shift
+					case 17: // Ctrl
+					case 18: // Alt
+					case 19: // Pause/Break
+					case 20: // Caps Lock
+					case 91: // Left Windows
+					case 92: // Right Windows
+					case 93: // Context Menu
+						// don't send anything on modifier key events
+						break;
+					default: // Send character code for anything we don't recognize
+						if(event.ctrlKey && event.key == "v") { // real ctrl-v needs to trigger browser paste event
+							handled = false;
+							break;
+						}
+						if(modCtrl || event.ctrlKey) { // ctrl and soft-ctrl
+							sendKey(event.which & 0037);
+							modCtrl = false;
+						}else{
+							sendKey(event.key.charCodeAt(0));
+						}
 						break;
 				}
 				if(handled) {
@@ -301,15 +347,18 @@
 				}
 			}
 
+			var encoder = new TextEncoder('utf-8');
 			function handlePaste(event) {
 				event.stopPropagation();
 				event.preventDefault();
 
 				var cData = event.clipboardData || window.clipboardData;
-				var data = cData.getData("Text");
+				var data = encoder.encode(cData.getData("Text"));
 
-				for(var i = 0; i < data.length; i++) {
-					sendKey(data.charCodeAt(i));
+				for(var i = 0; i < data.byteLength; i++) {
+					if(data[i] == 13) continue;    // ignore \r
+					if(data[i] == 10) sendKey(13); // \n -> \r
+					else sendKey(data[i]);
 				}
 			}
 
@@ -371,6 +420,8 @@
 			}
 		</style>
 		<link id="theme" rel="stylesheet" href="console-default.css">
+		<link rel="icon" href="favicon.ico" type="image/x-icon">
+		<link rel="icon" href="icyanchat.png" type="image/png">
 	</head>
 	<body onload="init()">
 		<div id="grid"></div>

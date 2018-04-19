@@ -393,7 +393,7 @@ class CC_Server:
 			acceptThread.start()
 		if(self.prefs["enable_http"]):
 			# start the http server's thread
-			HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (self.prefs["http_port"],))
+			HTTPServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPServThread", (self.prefs["http_port"], False, None, None, self.prefs["https_port"] if self.prefs["https_redirect"] else False))
 			HTTPServThread.setDaemon(1)
 			HTTPServThread.start()
 			HTTPWatchdogThread = threading.Thread(None, self.watchThread, "HTTPWatchdogThread", (HTTPServThread,))
@@ -401,7 +401,7 @@ class CC_Server:
 			HTTPWatchdogThread.start()
 		if(self.prefs["enable_https"]):
 			# start the http server's https thread
-			HTTPSServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPSServThread", (self.prefs["https_port"], True))
+			HTTPSServThread = threading.Thread(None, self.HTTPServ.acceptLoop, "HTTPSServThread", (self.prefs["https_port"], True, self.prefs["https_cert"], self.prefs["https_key"]))
 			HTTPSServThread.setDaemon(1)
 			HTTPSServThread.start()
 			HTTPSWatchdogThread = threading.Thread(None, self.watchThread, "HTTPSWatchdogThread", (HTTPSServThread,))
