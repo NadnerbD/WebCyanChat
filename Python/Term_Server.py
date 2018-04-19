@@ -9,6 +9,7 @@ import json
 import time
 import sys
 import os
+import re
 
 import Logger
 log = Logger.log
@@ -17,7 +18,6 @@ from Utils import parseToDict
 from HTTP_Server import HTTP_Server
 from VTParse import Parser
 
-MSG_BADPASS = 0
 MSG_MODES = 1
 MSG_INIT = 2
 MSG_DIFF = 3
@@ -685,7 +685,6 @@ class Term_Server:
 	def __init__(self):
 		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
-		self.sessionQueue = self.server.registerProtocol("term")
 		self.connections = list()
 		self.master = None
 		self.prefs = { \
@@ -697,7 +696,7 @@ class Term_Server:
 			"term_args": "", \
 			"term_height": 24, \
 			"term_width": 80, \
-			"term_pass": "pass", \
+			"term_pass": "user:pass", \
 			"https_redirect": 0, \
 			"https_cert": "server.crt", \
 			"https_key": "server.key", \
@@ -721,7 +720,12 @@ class Term_Server:
 		# winsize is 4 unsigned shorts: (ws_row, ws_col, ws_xpixel, ws_ypixel)
 		winsize = struct.pack('HHHH', height, width, 0, 0)
 		fcntl.ioctl(self.master, termios.TIOCSWINSZ, winsize)
-		
+
+	def authorize(self, headers):
+		try:
+			return base64.b64decode(headers['authorization'].split(' ')[1]) == self.prefs['term_pass']
+		except:
+			return False
 	
 	def start(self):
 		# init the terminal emulator
@@ -743,6 +747,12 @@ class Term_Server:
 
 		# this is passed locally so we can shut down only threads that were started by this invocation
 		shutdown = threading.Event()
+
+		# register an authorization provider with the HTTP server
+		self.server.registerAuthorizer(re.compile("^/(web-socket|console\.html).*$"), self.authorize)
+
+		# register protocol handler with HTTP server
+		self.sessionQueue = self.server.registerProtocol("term")
 
 		# start a loop to accept incoming http sessions
 		a = threading.Thread(target=self.sessionLoop, name="sessionLoop", args=(shutdown,))
@@ -809,13 +819,7 @@ class Term_Server:
 			
 	def handleInput(self, sock, addr):
 		# the first frame sent over the socket must be the password
-		passwd = sock.recvFrame()
-		if(passwd != self.prefs["term_pass"]):
-			log(self, "Incorrect password attempt from %s: %r" % (addr, passwd))
-			sock.send(struct.pack('B', MSG_BADPASS), 2) # opcode 2 indicates binary data
-			sock.close()
-			return
-		log(self, "Accepted password from %r" % (addr,))
+		log(self, "Accepted term connection from %r" % (addr,))
 		self.terminal.sendInit(sock)
 		while True:
 			try:
