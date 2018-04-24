@@ -46,6 +46,9 @@ class HTTP_Server:
 		501: "Not Implemented", \
 	}
 	defaultResponseData = { \
+		401: """<html><head><title>Auhtorization Required</title></head>
+			<body><h3>401 Unauthorized</h3><br />
+			Provide valid credentials to access this resource.</body></html>""", \
 		403: """<html><head><title>403 Error</title></head>
 			<body><h3>403 Forbidden</h3><br />
 			You shouldn't be here</body></html>""", \
