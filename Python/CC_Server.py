@@ -17,7 +17,7 @@ try:
 except ImportError:
 	HAS_DNSPYTHON = False
 
-class CC_Server:
+class CC_Server(object):
 	class connectionList:
 		def __init__(self, parent):
 			self.broadcastLock = threading.Lock()
