@@ -1,7 +1,7 @@
 import Logger
 log = Logger.log
 
-from Utils import *
+from Utils import readTo, parseToDict
 from HTTP_Server import HTTP_Server
 
 import threading
@@ -264,7 +264,7 @@ class CC_Server:
 			    Language filter is currently %(censor_level)s
 			    Bans are currently %(enable_bans)s
 			Comments can be sent to Nadnerb@urulive.guildaxis.net
-			Server commands now available, type !\? at the beginning of a line."""
+			Server commands now available, type !\\? at the beginning of a line."""
 		self.welcomeParams = { \
 			"server_version": ["value"], \
 			"censor_level": ["disabled", "replace", "warn", "kick"], \
@@ -736,9 +736,7 @@ class CC_Server:
 		# 3 - kick/ban (unless in relay mode, then switch to 2)
 		if(self.prefs["censor_level"] == 1):
 			for match in matches:
-				fill = ''
-				for i in range(match[1] - match[0]):
-					fill += '*'
+				fill = '*' * (match[1] - match[0])
 				line = line[0:match[0]] + fill + line[match[1]:]
 		elif(self.prefs["censor_level"] == 2):
 			if(len(matches) > 0):

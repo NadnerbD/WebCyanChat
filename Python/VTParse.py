@@ -184,7 +184,7 @@ class Parser:
 		charLen = 0
 		while((ord(self.char) << charLen) & 0x80):
 			charLen += 1
-		for i in range(charLen - 1):
+		for _ in range(charLen - 1):
 			self.char += self.stream.read(1)
 		try:
 			self.putCommand(Command('add', unicode(self.char, 'utf-8')))

@@ -1,4 +1,4 @@
-from cStringIO import *
+from cStringIO import StringIO
 
 def readTo(stream, delim, ignore):
 	matches = 0

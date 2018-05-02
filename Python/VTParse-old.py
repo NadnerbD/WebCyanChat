@@ -78,7 +78,7 @@ class Parser:
 			while((ord(char[0]) << charLen) & 0x80):
 				charLen += 1
 			if(charLen > 1 and charLen <= 4):
-				for i in range(charLen - 1):
+				for _ in range(charLen - 1):
 					char += self.consume()
 			return self.command('add', unicode(char, "utf-8", errors='replace'))
 

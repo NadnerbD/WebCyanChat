@@ -84,7 +84,6 @@
 
 				sock = new WebSocket((window.location.protocol=="https:"?"wss://":"ws://") + window.location.host + "/term-socket", "term");
 				sock.binaryType = "arraybuffer";
-				MSG_BADPASS = 0;
 				MSG_MODES = 1;
 				MSG_INIT = 2;
 				MSG_DIFF = 3;
