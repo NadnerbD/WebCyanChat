@@ -1,11 +1,7 @@
 var sock;
-var width = 0;
-var height = 0;
 var modCtrl = false;
-var grid = new Array();
 var appkeymode = false;
 var firstInit = true;
-var cursor;
 
 var colors = [
 	"black",
@@ -29,45 +25,8 @@ function unpackStyle(value) {
 		backg:     colors[(value >> 12) & 0x0F]
 	};
 }
-
-function applyStyle(elem, value) {
-	var style = unpackStyle(value);
-	for(var s in style) {
-		for(var c of elem.classList) if(c.startsWith(s)) elem.classList.remove(c);
-		if(typeof(style[s]) == "number") {
-			if(style[s]) elem.classList.add(s);
-		}else if(style[s] != undefined) {
-			elem.classList.add(s + "-" + style[s]);
-		}
-	}
-}
-
-function createGrid(container) {
-	var cells = new Array();
-	var list = document.createElement("ul");
-	for(var y = 0; y < height; y++) {
-		var line = document.createElement("li");
-		for(var x = 0; x < width; x++) {
-			var cell = document.createElement("span");
-			var char = document.createTextNode(" ");
-			cell.appendChild(char);
-			line.appendChild(cell);
-			cells.push(cell);
-		}
-		list.appendChild(line);
-	}
-	container.appendChild(list);
-	return cells;
-}
-
-function setCursor(index) {
-	if(cursor)
-		cursor.classList.remove("cursor");
-	if(index != -1) {
-		cursor = grid[index];
-		cursor.classList.add("cursor");
-	}
-}
+// "default" color is 9
+var blank_style = (9 << 8) | (9 << 12);
 
 function init() {
 	document.addEventListener("keydown", keydown, false);
@@ -94,7 +53,7 @@ function init() {
 		case MSG_MODES:
 			var modes = dv.getUint8(1);
 			appkeymode = modes & 0x01;
-			document.body.className = modes & 0x02 ? "inverted" : "";
+			grid.inverted = modes & 0x02;
 			break;
 		case MSG_TITLE:
 			var dc = new TextDecoder("utf-8");
@@ -105,21 +64,15 @@ function init() {
 			var mHeight = dv.getInt16(3);
 			// console.log("INIT " + mWidth + " " + mHeight);
 			var mCursor = dv.getInt32(5);
-			if(width != mWidth || height != mHeight) {
-				var container = document.getElementById("grid");
-				while(container.childNodes.length)
-					container.removeChild(container.firstChild);
-				width = mWidth;
-				height = mHeight;
-				grid = createGrid(container);
-				cursor = grid[mCursor];
+			if(grid.width != mWidth || grid.height != mHeight) {
+				grid = new Grid(mWidth, mHeight);
 			}
-			var charGrid = decoder.decode(new Uint8Array(msgEvent.data, 9 + width * height * 2));
-			for(var i = 0; i < width * height; i++) {
-				grid[i].firstChild.data = charGrid[i];
-				applyStyle(grid[i], dv.getUint16(9 + 2 * i));
+			var charGrid = decoder.decode(new Uint8Array(msgEvent.data, 9 + grid.width * grid.height * 2));
+			for(var i = 0; i < grid.width * grid.height; i++) {
+				grid.cells[i].glyph = charGrid[i];
+				grid.cells[i].style = dv.getUint16(9 + 2 * i);
 			}
-			setCursor(mCursor);
+			grid.cursor = mCursor;
 			if(firstInit) {
 				sizeToWindow();
 				firstInit = false;
@@ -147,8 +100,8 @@ function init() {
 					var chChar = decoder.decode(new Uint8Array(msgEvent.data, mOffset, cLen));
 					mOffset += cLen;
 					// LOGMSG.push("char: " + JSON.stringify([chPos, chStyle, chChar]));
-					grid[chPos].firstChild.data = chChar;
-					applyStyle(grid[chPos], chStyle);
+					grid.cells[chPos].glyph = chChar;
+					grid.cells[chPos].style = chStyle;
 					chPos++;
 					break;
 				case DIFF_SHIFT:
@@ -157,24 +110,23 @@ function init() {
 					var offset = dv.getInt32(mOffset + 8);
 					mOffset += 12;
 					// LOGMSG.push("shift: " + JSON.stringify([start, end, offset]));
-					var srcgrid = grid.slice(start, end).map(e => [e.firstChild.data, e.className]);
+					var srcgrid = grid.cells.slice(start, end).map(c => [c.glyph, c.style]);
 					var index = Math.min(start + offset, start);
-					while(index < Math.max(end + offset, end) && index < grid.length) {
+					while(index < Math.max(end + offset, end) && index < grid.cells.length) {
 						if(index < start + offset || index >= end + offset) {
-							grid[index].firstChild.data = " ";
-							grid[index].className = "";
+							grid.cells[index].glyph = " ";
+							grid.cells[index].style = blank_style;
 						}else{
 							var src = srcgrid[index - start - offset];
-							grid[index].firstChild.data = src[0];
-							grid[index].className = src[1];
-							grid[index].classList.remove("cursor");
+							grid.cells[index].glyph = src[0];
+							grid.cells[index].style = src[1];
 						}
 						index++;
 					}
 					break;
 				}
 			}
-			setCursor(mCursor);
+			grid.cursor = mCursor;
 			// console.log(LOGMSG);
 			break;
 		}
@@ -317,22 +269,9 @@ function handlePaste(event) {
 	}
 }
 
-function sizeToWindow() {
-	var charRect = document.querySelector("#grid span").getBoundingClientRect();
-	reqResize(
-		Math.floor(window.innerWidth / charRect.width),
-		Math.floor(window.innerHeight / charRect.height)
-	);
-}
-
 var resizeTimeout;
 function handleResize(event) {
 	clearTimeout(resizeTimeout);
 	resizeTimeout = setTimeout(sizeToWindow, 200);
 }
 
-function setTheme(theme) {
-	document.getElementById("theme").href = "console-" + theme + ".css";
-	document.getElementById("themeSelect").value = theme;
-	localStorage.setItem("consoleTheme", theme);
-}
