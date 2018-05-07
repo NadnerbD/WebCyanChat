@@ -1,7 +1,6 @@
 class Cell {
 	constructor(cell) {
 		this.elem = cell;
-		this.style_value = blank_style;
 	}
 	set glyph(g) {
 		this.elem.firstChild.data = g;
@@ -10,19 +9,22 @@ class Cell {
 		return this.elem.firstChild.data;
 	}
 	set style(v) {
-		this.style_value = v;
-		var style = unpackStyle(v);
-		for(var s in style) {
-			for(var c of this.elem.classList) if(c.startsWith(s)) this.elem.classList.remove(c);
-			if(typeof(style[s]) == "number") {
-				if(style[s]) this.elem.classList.add(s);
-			}else if(style[s] != undefined) {
-				this.elem.classList.add(s + "-" + style[s]);
+		if(typeof(v) == 'string' || v == blank_style) {
+			this.elem.className = v;
+		}else{
+			var style = unpackStyle(v);
+			for(var s in style) {
+				for(var c of this.elem.classList) if(c.startsWith(s)) this.elem.classList.remove(c);
+				if(typeof(style[s]) == "number") {
+					if(style[s]) this.elem.classList.add(s);
+				}else if(style[s] != undefined) {
+					this.elem.classList.add(s + "-" + style[s]);
+				}
 			}
 		}
 	}
 	get style() {
-		return this.style_value;
+		return this.elem.className.replace('cursor', '');
 	}
 }
 
