@@ -9,8 +9,10 @@ class Cell {
 		return this.elem.firstChild.data;
 	}
 	set style(v) {
-		if(typeof(v) == 'string' || v == blank_style) {
+		if(typeof(v) == 'string') {
 			this.elem.className = v;
+		}else if(v == blank_style) {
+			this.elem.className = '';
 		}else{
 			var style = unpackStyle(v);
 			for(var s in style) {
