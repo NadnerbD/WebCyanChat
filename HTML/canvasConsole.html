@@ -4,7 +4,26 @@
 		<script src="console.js"></script>
 		<script src="canvasConsole.js"></script>
 	</head>
+	<style>
+		body {
+			font-family: monospace;
+			font-size: 16px;
+		}
+		canvas#grid {
+			position: absolute;
+			left: 0px;
+			top: 0px;
+		}
+		span#char {
+			display: inline-block;
+			vertical-align: top;
+			white-space: pre;
+			line-height: 1em;
+			width: 1ch;
+		}
+	</style>
 	<body onload="init(); startDisplay()">
-		<canvas width="800" height="600"></canvas>
+		<span id="char"> </span>
+		<canvas id="grid"></canvas>
 	</body>
 </html>
