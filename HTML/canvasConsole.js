@@ -51,10 +51,34 @@ function startDisplay() {
 		ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		// then add our data
-		ctx.fillStyle = "rgb(0, 255, 0)"
 		for(var y = 0; y < grid.height; y++) {
-			var line = grid.cells.slice(grid.width * y, grid.width * y + grid.width).map(c => c.glyph).join('');
-			ctx.fillText(line, 0, ch * y);
+			for(var x = 0; x < grid.width; x++) {
+				var cell = grid.cells[y * grid.width + x];
+				if((cell.style >> 15) & 0x1) {
+					if((cell.style >> 4) & 0x1) {
+						ctx.fillStyle = "rgb(255, 255, 255)";
+						ctx.fillRect(x * cw, y * ch, cw, ch);
+					}
+				}else{
+					ctx.fillStyle = "rgb(" +
+						255 * ((cell.style >> 12) & 0x1) + "," +
+						255 * ((cell.style >> 13) & 0x1) + "," +
+						255 * ((cell.style >> 14) & 0x1) + ")";
+					ctx.fillRect(x * cw, y * ch, cw, ch);
+				}
+				if((cell.style >> 11) & 0x1) {
+					if((cell.style >> 4) & 0x1) {
+						ctx.fillStyle = "rgb(0, 0, 0)";
+					}else{
+						ctx.fillStyle = "rgb(255, 255, 255)";
+					}
+				}else{ ctx.fillStyle = "rgb(" +
+					255 * ((cell.style >> 8) & 0x1) + "," +
+					255 * ((cell.style >> 9) & 0x1) + "," +
+					255 * ((cell.style >> 10) & 0x1) + ")";
+				}
+				ctx.fillText(cell.glyph, x * cw, y * ch);
+			}
 		}
 		// cursor
 		if(grid.cursor != -1) {
