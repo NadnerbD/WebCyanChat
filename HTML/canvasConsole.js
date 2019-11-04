@@ -21,7 +21,7 @@ function setTheme(theme) {
 }
 
 function sizeToWindow() {
-	var charRect = {width: 6, height: 5}; //document.querySelector("span#char").getBoundingClientRect();
+	var charRect = {width: 6, height: 6}; //document.querySelector("span#char").getBoundingClientRect();
 	reqResize(
 		Math.floor(window.innerWidth / charRect.width),
 		Math.floor(window.innerHeight / charRect.height)
@@ -60,7 +60,7 @@ function startDisplay() {
 	var canvas = document.querySelector("canvas#grid");
 	var ctx = canvas.getContext("2d");
 	//var span = document.querySelector("span#char").getBoundingClientRect();
-	var ch = 5; //span.height;
+	var ch = 6; //span.height;
 	var cw = 6; //span.width;
 	function canvasResize(event) {
 		canvas.height = window.innerHeight;
