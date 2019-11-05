@@ -113,7 +113,7 @@ function startDisplay() {
 		canvas.width = window.innerWidth;
 		ctx = canvas.getContext("2d");
 		ctx.textBaseline = "hanging";
-		ctx.font = ch + "px monospace";
+		ctx.font = document.querySelector("span#char").getBoundingClientRect().height + "px monospace";
 		ctx.fillStyle = "rgba(0, 0, 0, 1.0)";
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 	}
