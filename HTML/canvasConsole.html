@@ -1,6 +1,7 @@
 <html>
 	<head>
 		<title>Console</title>
+		<link rel="stylesheet" href="console.css" />
 		<script src="console.js"></script>
 		<script src="canvasConsole.js"></script>
 	</head>
@@ -25,5 +26,14 @@
 	<body onload="init(); startDisplay()">
 		<span id="char"> </span>
 		<canvas id="grid"></canvas>
+		<div id="controls">
+			<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
+			<select id="fontSelect" onchange="setFont(event.target.value)" >
+				<option>Bitfont</option>
+				<option>Pico-8</option>
+				<option>Minecraft</option>
+				<option>Browser Monospace</option>
+			</select>
+		</div>
 	</body>
 </html>
