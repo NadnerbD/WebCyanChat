@@ -111,9 +111,10 @@ function startDisplay() {
 	window.addEventListener("resize", canvasResize);
 	canvasResize();
 	// fill loop
+	var blink = 0;
 	setInterval(function() {
 		// instead of clearing fade
-		ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
+		ctx.fillStyle = "rgba(0, 0, 0, 1.0)";
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		// then add our data
 		for(var y = 0; y < grid.height; y++) {
@@ -146,7 +147,9 @@ function startDisplay() {
 			}
 		}
 		// cursor
-		if(grid.cursor != -1) {
+		blink++;
+		if(blink > 20) blink = 0;
+		if(blink < 10 && grid.cursor != -1) {
 			var cursorx = grid.cursor % grid.width;
 			var cursory = Math.floor(grid.cursor / grid.width);
 			ctx.fillRect(cursorx * cw, cursory * ch, cw, ch);
