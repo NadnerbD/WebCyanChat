@@ -30,7 +30,8 @@ function getCharSize() {
 	if(fonts[fontSelection] != undefined) {
 		return {width: fonts[fontSelection].width+1, height: fonts[fontSelection].height+1};
 	}else{
-		return document.querySelector("span#char").getBoundingClientRect();
+		var rect = document.querySelector("span#char").getBoundingClientRect();
+		return {width: Math.ceil(rect.width), height: Math.ceil(rect.height)};
 	}
 }
 
@@ -155,10 +156,11 @@ function startDisplay() {
 					}else{
 						ctx.fillStyle = "rgb(255, 255, 255)";
 					}
-				}else{ ctx.fillStyle = "rgb(" +
-					255 * ((cell.style >> 8) & 0x1) + "," +
-					255 * ((cell.style >> 9) & 0x1) + "," +
-					255 * ((cell.style >> 10) & 0x1) + ")";
+				}else{
+					ctx.fillStyle = "rgb(" +
+						255 * ((cell.style >> 8) & 0x1) + "," +
+						255 * ((cell.style >> 9) & 0x1) + "," +
+						255 * ((cell.style >> 10) & 0x1) + ")";
 				}
 				BlitChar(ctx, cell.glyph, x * cw, y * ch);
 			}
