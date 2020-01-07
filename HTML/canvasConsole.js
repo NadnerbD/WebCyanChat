@@ -138,30 +138,21 @@ function startDisplay() {
 		for(var y = 0; y < grid.height; y++) {
 			for(var x = 0; x < grid.width; x++) {
 				var cell = grid.cells[y * grid.width + x];
-				if((cell.style >> 15) & 0x1) {
-					if((cell.style >> 4) & 0x1) {
-						ctx.fillStyle = "rgb(255, 255, 255)";
-						ctx.fillRect(x * cw, y * ch, cw, ch);
-					}
-				}else{
-					ctx.fillStyle = "rgb(" +
-						255 * ((cell.style >> 12) & 0x1) + "," +
-						255 * ((cell.style >> 13) & 0x1) + "," +
-						255 * ((cell.style >> 14) & 0x1) + ")";
-					ctx.fillRect(x * cw, y * ch, cw, ch);
-				}
-				if((cell.style >> 11) & 0x1) {
-					if((cell.style >> 4) & 0x1) {
-						ctx.fillStyle = "rgb(0, 0, 0)";
-					}else{
-						ctx.fillStyle = "rgb(255, 255, 255)";
-					}
-				}else{
-					ctx.fillStyle = "rgb(" +
-						255 * ((cell.style >> 8) & 0x1) + "," +
-						255 * ((cell.style >> 9) & 0x1) + "," +
-						255 * ((cell.style >> 10) & 0x1) + ")";
-				}
+				var style = unpackStyle(cell.style);
+				var fgF   = style.bold   ? 255 : 127;
+				var bgF   = style.bgBold ? 255 : 127;
+				var toRGB = (color, F) => 
+					"rgb(" +
+					F * ((color     ) & 0x1) + "," +
+					F * ((color >> 1) & 0x1) + "," +
+					F * ((color >> 2) & 0x1) + ")";
+				var bgStyle = style.backg == undefined ? toRGB(0x0, bgF) : toRGB(cell.style >> 12, bgF);
+				var fgStyle = style.color == undefined ? toRGB(0x7, fgF) : toRGB(cell.style >>  8, fgF);
+				// draw bg
+				ctx.fillStyle = style.inverted ? fgStyle : bgStyle;
+				ctx.fillRect(x * cw, y * ch, cw, ch);
+				// draw fg
+				ctx.fillStyle = style.inverted ? bgStyle : fgStyle;
 				BlitChar(ctx, cell.glyph, x * cw, y * ch);
 			}
 		}
@@ -173,7 +164,7 @@ function startDisplay() {
 			var cursory = Math.floor(grid.cursor / grid.width);
 			ctx.fillRect(cursorx * cw, cursory * ch, cw, ch);
 			// cursor contains inverted copy of the letter it is occluding
-			ctx.fillStyle = "rgb(0, 0, 0)";
+			ctx.fillStyle = style.inverted ? fgStyle : bgStyle;
 			BlitChar(ctx, grid.cells[grid.cursor].glyph, cursorx * cw, cursory * ch);
 		}
 	}, 1000 / 60);
