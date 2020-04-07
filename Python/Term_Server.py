@@ -685,7 +685,7 @@ class Term_Server:
 	def __init__(self):
 		self.server = HTTP_Server()
 		self.server.redirects["/"] = "console.html"
-		self.server.registerAuthorizer(re.compile("^/(term-socket|console\.html).*$"), self.authorize)
+		self.server.registerAuthorizer(re.compile("^/(term-socket|.*[Cc]onsole\.html).*$"), self.authorize)
 		self.sessionQueue = self.server.registerProtocol("term", "/term-socket")
 		self.connections = list()
 		self.master = None

@@ -1,5 +1,5 @@
 import sys, termios, tty
-from StringIO import *
+from cStringIO import StringIO
 
 def readToEsc(stream):
 	sio = StringIO()

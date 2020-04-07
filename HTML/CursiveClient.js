@@ -356,9 +356,15 @@ function addTextOut(nick, nickflag, message, messageflag, userid) {
 	
 	// messageflag 0: private, 1: normal, 2: join, 3: leave
 	if(messageflag == "2") {
-		var structure = {tag: "p", attrs: {className: "l-uid-0 join"}, children: ["[" + nick + "] has joined the chat"]};
+		var structure = {tag: "p", attrs: {className: "l-uid-0 join"}, children: [
+			{tag: "span", attrs: {className: "username " + styles[parseInt(nickflag)]}, children: ["[" + nick + "] "]},
+			"has joined the chat"
+		]};
 	}else if(messageflag == "3") {
-		var structure = {tag: "p", attrs: {className: "l-uid-0 leave"}, children: ["[" + nick + "] has left the chat"]};
+		var structure = {tag: "p", attrs: {className: "l-uid-0 leave"}, children: [
+			{tag: "span", attrs: {className: "username " + styles[parseInt(nickflag)]}, children: ["[" + nick + "] "]},
+			"has left the chat"
+		]};
 	}else{
 		var structure = {tag: "p", attrs: {className: (userid ? "l-uid-" + userid : "l-uid-0") + (messageflag == "0" ? " private" : "")}, children: [
 			{tag: "span", attrs: {className: "avatar"}},

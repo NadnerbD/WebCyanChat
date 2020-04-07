@@ -1,4 +1,4 @@
-from Logger import *
+from Logger import log
 from CC_Server import CC_Server
 
 import Skype4Py

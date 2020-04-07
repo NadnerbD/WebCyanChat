@@ -1,6 +1,8 @@
-from Logger import *
-from Utils import *
+from Logger import log
+from Utils import readTo, parseToDict
+from cStringIO import StringIO
 
+import threading
 import socket
 import struct
 import base64
@@ -46,6 +48,9 @@ class HTTP_Server:
 		501: "Not Implemented", \
 	}
 	defaultResponseData = { \
+		401: """<html><head><title>Auhtorization Required</title></head>
+			<body><h3>401 Unauthorized</h3><br />
+			Provide valid credentials to access this resource.</body></html>""", \
 		403: """<html><head><title>403 Error</title></head>
 			<body><h3>403 Forbidden</h3><br />
 			You shouldn't be here</body></html>""", \
@@ -342,7 +347,7 @@ class HTTP_Server:
 				log(self, "Nice client gave us a Content-Length: %s" % headers["content-length"], 3)
 			else:# didn't send us a goddamn Content-Length
 				body = readTo(sock, "--%s--" % formHeaders["boundary"], [])
-				log(self, "No Content-Length, read multipart from sock using boundary, length: %d" % len(formData), 3)
+				log(self, "No Content-Length, read multipart from sock using boundary, length: %d" % len(body), 3)
 			body = body.split("--%s" % formHeaders["boundary"])[1:-1]
 			output = list()
 			for data in body:
@@ -480,7 +485,7 @@ class HTTP_Server:
 				return "WebSocket"
 			else:
 				self.writeHTTP(sock, 400) #Bad Request
-				log(self, "bad websocket request from %r headers: %r" % (addr, headers), 3);
+				log(self, "bad websocket request from %r headers: %r" % (addr, headers), 3)
 				return
 		elif(method == "GET"):
 			try:

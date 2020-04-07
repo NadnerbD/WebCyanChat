@@ -1,0 +1,41 @@
+<html>
+	<head>
+		<title>Console</title>
+		<link rel="stylesheet" href="console.css" />
+		<script src="console.js"></script>
+		<script src="canvasConsole.js"></script>
+		<link rel="icon" href="favicon.ico" type="image/x-icon">
+		<link rel="icon" href="icyanchat.png" type="image/png">
+	</head>
+	<style>
+		body {
+			font-family: monospace;
+			font-size: 16px;
+		}
+		canvas#grid {
+			position: absolute;
+			left: 0px;
+			top: 0px;
+		}
+		span#char {
+			display: inline-block;
+			vertical-align: top;
+			white-space: pre;
+			line-height: 1em;
+			width: 1ch;
+		}
+	</style>
+	<body onload="init(); startDisplay()">
+		<span id="char"> </span>
+		<canvas id="grid"></canvas>
+		<div id="controls">
+			<input type="button" value="Ctrl" onclick="modCtrl=true;" onkeyup="event.preventDefault();"/>
+			<select id="fontSelect" onchange="setFont(event.target.value)" >
+				<option>Bitfont</option>
+				<option>Pico-8</option>
+				<option>Minecraft</option>
+				<option>Browser Monospace</option>
+			</select>
+		</div>
+	</body>
+</html>

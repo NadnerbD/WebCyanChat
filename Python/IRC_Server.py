@@ -1,5 +1,5 @@
-from Logger import *
-from Utils import *
+from Logger import log
+from Utils import readTo, parseToDict
 from HTTP_Server import HTTP_Server
 
 import threading
@@ -663,7 +663,7 @@ class IRC_Server:
 				userMsg = self.IRC_Message("MODE")
 				userMsg.prefix = self.hostname
 				userMsg.params = [channelNames[channel], str(channelModes[channel])]
-				for i in range(len(userMsg.params[1]) - 1):
+				for _ in range(len(userMsg.params[1]) - 1):
 					userMsg.params.append(user.nick)
 				connection.send(userMsg.toString())
 		for channel in self.channels:

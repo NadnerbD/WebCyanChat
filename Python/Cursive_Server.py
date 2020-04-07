@@ -1,5 +1,5 @@
-from Logger import *
-from Utils import *
+from Logger import log
+from Utils import readTo, parseToDict
 from CC_Server import CC_Server
 
 class Cursive_Server(CC_Server):
