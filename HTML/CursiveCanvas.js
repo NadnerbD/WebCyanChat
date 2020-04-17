@@ -71,11 +71,23 @@ function initCanvas() {
 	function getPos(e) {
 		// tablet-provided offset coordinates, using the event coordinates only to subtract the element's screen position
 		// this corrects for screen coordinates that are not on the primary monitor, but does not correct coordinate scaling, so other monitors must have the same dimensions
-		if(useTabCoords) {
-			return penAPI.isWacom ? [penAPI.sysX - (e.screenX - screen.left - e.offsetX), penAPI.sysY - (e.screenY - screen.top - e.offsetY), penAPI.pressure] : [e.offsetX, e.offsetY, 0.5];
-		}else{
-			return penAPI.isWacom ? [e.offsetX, e.offsetY, penAPI.pressure] : [e.offsetX, e.offsetY, 0.5];
-		}
+		var x, y, p;
+		if(useTabCoords && penAPI.isWacom)
+			[x, y] = [penAPI.sysX - (e.screenX - screen.left - e.offsetX), penAPI.sysY - (e.screenY - screen.top - e.offsetY)];
+		else if(e.touches && e.touches[0]) {
+			// the touch event does not provide "offset*" properties so we have to construct that ourselves
+			e.preventDefault();
+			var rect = e.target.getBoundingClientRect();
+			[x, y] = [e.touches[0].pageX - rect.left, e.touches[0].pageY - rect.top];
+		}else
+			[x, y] = [e.offsetX, e.offsetY];
+		if(penAPI.isWacom)
+			p = penAPI.pressure;
+		else if(e.touches && e.touches[0] && e.touches[0].force != undefined && e.touches[0].force > 0)
+			p = e.touches[0].force;
+		else
+			p = 0.5;
+		return [x, y, p]
 	}
 	function paintLine(e) {
 		var rad = 4;
@@ -98,9 +110,10 @@ function initCanvas() {
 		cont.style.transform = "scale(" + canvasScale + ", " + canvasScale + ") translate(" + canvasOffset[0] + "px, " + canvasOffset[1] + "px)";
 	}
 	function panCanvas(e) {
-		canvasOffset[0] += (e.pageX - lastPos[0]) / canvasScale;
-		canvasOffset[1] += (e.pageY - lastPos[1]) / canvasScale;
-		lastPos = [e.pageX, e.pageY];
+		var pos = getPos(e);
+		canvasOffset[0] += (pos[0] - lastPos[0]) / canvasScale;
+		canvasOffset[1] += (pos[1] - lastPos[1]) / canvasScale;
+		lastPos = [pos[0], pos[1]];
 		updateCanvasTransform();
 	}
 	function scaleCanvas(value) {
@@ -117,11 +130,14 @@ function initCanvas() {
 	function paintStart(e) {
 		if(spaceDown) {
 			fc.addEventListener("mousemove", panCanvas, false);
-			lastPos = [e.pageX, e.pageY];
+			fc.addEventListener("touchmove", panCanvas, false);
+			var pos = getPos(e);
+			lastPos = [pos[0], pos[1]];
 		}else{
 			// save last state for undo
 			undoList.push(fct.getImageData(0, 0, rect.width, rect.height));
 			fc.addEventListener("mousemove", paintLine, false);
+			fc.addEventListener("touchmove", paintLine, false);
 			lastPoint = getPos(e);
 			// clip drawing to the letter the stroke started in
 			fct.save();
@@ -138,11 +154,16 @@ function initCanvas() {
 		}
 	}
 	fc.addEventListener("mousedown", paintStart, false);
+	fc.addEventListener("touchstart", paintStart, false);
 	function paintEnd(e) {
 		fc.removeEventListener("mousemove", paintLine, false);
 		fc.removeEventListener("mousemove", panCanvas, false);
+		fc.removeEventListener("touchmove", paintLine, false);
+		fc.removeEventListener("touchmove", panCanvas, false);
 		fct.restore(); // this removes the clipping mask
 	}
+	fc.addEventListener("touchend", paintEnd, false);
+	fc.addEventListener("touchleave", paintEnd, false);
 	fc.addEventListener("mouseout", paintEnd, false);
 	fc.addEventListener("mouseup", paintEnd, false);
 	// compositing modes for draw and erase
