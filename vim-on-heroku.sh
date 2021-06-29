@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-curl https://s3.amazonaws.com/heroku-jvm-buildpack-vi/vim-7.3.tar.gz --output vim.tar.gz
-mkdir vim && tar xzf vim.tar.gz -C vim
-export PATH=$PATH:/app/vim/bin
-export VIM=/app/vim/share/vim/vim73
+mkdir ~/vim
+pushd ~/vim
+
+# Staically linked vim version compiled from https://github.com/ericpruitt/static-vim
+# Compiled on Jul 20 2017
+curl 'https://s3.amazonaws.com/bengoa/vim-static.tar.gz' | tar -xz
+
+export VIMRUNTIME="$HOME/vim/runtime"
+export PATH="$HOME/vim:$PATH"
+popd
+
 alias vi=vim
 alias ls="ls --color=always"
 git config --global core.editor vim
