@@ -388,7 +388,7 @@ class HTTP_Server:
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions, SSLRedirect):
 		if(SSLRedirect and type(sock) is not ssl.SSLSocket):
 			# bloody hax, because the host header apparently contains the port, and IPv6 can use colons in addresses
-			ur = re.compile(r"^(\[[^\]]+\]|[^\[\]]+)(?::([0-9]+))?$")
+			ur = re.compile(r"^(\[[^\]]+\]|[^\[\]:]+)(?::([0-9]+))?$")
 			host_noport = ur.match(headers["host"]).groups()[0]
 			new_url = "https://%s:%d%s" % (host_noport, SSLRedirect, resource)
 			self.writeHTTP(sock, 302, {"Location": new_url}, "302 Redirect")
