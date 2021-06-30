@@ -1,8 +1,11 @@
-from cStringIO import StringIO
+from io import StringIO, BytesIO
 
 def readTo(stream, delim, ignore):
 	matches = 0
-	output = StringIO()
+	if(type(delim) == bytes):
+		output = BytesIO()
+	else:
+		output = StringIO()
 	if(hasattr(stream, 'recv')):
 		read = stream.recv
 	else:
@@ -11,7 +14,7 @@ def readTo(stream, delim, ignore):
 		char = read(1)
 		if(not char):
 			return None
-		elif(char == delim[matches]):
+		elif(char == delim[matches:matches+1]):
 			matches += 1
 		elif(not char in ignore):
 			matches = 0

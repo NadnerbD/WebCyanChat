@@ -94,7 +94,7 @@ class Style:
 		elif(value == 27):
 			self.inverted = False
 		else:
-			cmd = value / 10
+			cmd = value // 10
 			num = value % 10
 			if(cmd == 3):
 				self.fgColor = num
@@ -139,7 +139,7 @@ class Buffer:
 
 	def __getitem__(self, i):
 		if type(i) == slice:
-			return zip(self.chars[i], self.attrs[i])
+			return list(zip(self.chars[i], self.attrs[i]))
 		else:
 			return (self.chars[i], self.attrs[i])
 
@@ -147,7 +147,7 @@ class Buffer:
 		oWidth, oHeight = src.size
 		nWidth, nHeight = self.size
 		oX = src.pos % oWidth
-		oY = src.pos / oWidth
+		oY = src.pos // oWidth
 		# if we push the cursor up, scroll content with it
 		scroll = max(0, oY - (nHeight - 1))
 		for y in range(min(oHeight, nHeight)):
@@ -188,7 +188,7 @@ class Buffer:
 			self.size[0],
 			self.size[1],
 			(showCursor * self.pos) + (-1 * (not showCursor))
-		) + ''.join([struct.pack('!H', a.value()) for a in self.attrs]) + ''.join(self.chars).encode('utf-8')
+		) + b''.join([struct.pack('!H', a.value()) for a in self.attrs]) + ''.join(self.chars).encode('utf-8')
 
 	def diffMsg(self, showCursor):
 		# byte type, int pos, [items]
@@ -196,7 +196,7 @@ class Buffer:
 		msg = struct.pack('!Bi',
 			MSG_DIFF, 
 			(showCursor * self.pos) + (-1 * (not showCursor)), 
-		) + ''.join(self.changeStream)
+		) + b''.join(self.changeStream)
 		self.clearDiff()
 		return msg
 
@@ -207,38 +207,38 @@ class Buffer:
 
 class Charmap:
 	graphics_map = {\
-		'_': u'\u2400',\
-		'`': u'\u25C6',\
-		'a': u'\u2592',\
-		'b': u'\u2409',\
-		'c': u'\u240C',\
-		'd': u'\u240D',\
-		'e': u'\u240A',\
-		'f': u'\u00B0',\
-		'g': u'\u00B1',\
-		'h': u'\u2424',\
-		'i': u'\u240B',\
-		'j': u'\u2518',\
-		'k': u'\u2510',\
-		'l': u'\u250C',\
-		'm': u'\u2514',\
-		'n': u'\u253C',\
-		'o': u'\u23BA',\
-		'p': u'\u23BB',\
-		'q': u'\u2500',\
-		'r': u'\u23BC',\
-		's': u'\u23BD',\
-		't': u'\u251C',\
-		'u': u'\u2524',\
-		'v': u'\u2534',\
-		'w': u'\u252C',\
-		'x': u'\u2502',\
-		'y': u'\u2264',\
-		'z': u'\u2265',\
-		'{': u'\u03C0',\
-		'|': u'\u2260',\
-		'}': u'\u00A3',\
-		'~': u'\u00B7',\
+		'_': '\u2400',\
+		'`': '\u25C6',\
+		'a': '\u2592',\
+		'b': '\u2409',\
+		'c': '\u240C',\
+		'd': '\u240D',\
+		'e': '\u240A',\
+		'f': '\u00B0',\
+		'g': '\u00B1',\
+		'h': '\u2424',\
+		'i': '\u240B',\
+		'j': '\u2518',\
+		'k': '\u2510',\
+		'l': '\u250C',\
+		'm': '\u2514',\
+		'n': '\u253C',\
+		'o': '\u23BA',\
+		'p': '\u23BB',\
+		'q': '\u2500',\
+		'r': '\u23BC',\
+		's': '\u23BD',\
+		't': '\u251C',\
+		'u': '\u2524',\
+		'v': '\u2534',\
+		'w': '\u252C',\
+		'x': '\u2502',\
+		'y': '\u2264',\
+		'z': '\u2265',\
+		'{': '\u03C0',\
+		'|': '\u2260',\
+		'}': '\u00A3',\
+		'~': '\u00B7',\
 	}
 
 	def __init__(self, mode='B'):
@@ -250,7 +250,7 @@ class Charmap:
 	def map(self, char):
 		if self.mode == 'A':
 			if char == '#':
-				return u'\u00A3'
+				return '\u00A3'
 		elif self.mode == '0':
 			if char in Charmap.graphics_map:
 				return Charmap.graphics_map[char]
@@ -301,7 +301,7 @@ class Terminal:
 		oWidth, oHeight = self.buffers[0].size
 		# keep saved pos in bounds
 		oX = self.savedPos % oWidth
-		oY = self.savedPos / oWidth
+		oY = self.savedPos // oWidth
 		self.savedPos = min(oX, nWidth - 1) + min(oY, nHeight - 1) * nWidth
 		# extend scroll region if it's at the bottom, and contract it if it's too large
 		if nHeight > oHeight and self.scrollRegion[1] == oHeight:
@@ -318,10 +318,10 @@ class Terminal:
 
 	def getPos(self):
 		if(self.originMode):
-			return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0] \
+			return (self.buffer.pos % self.buffer.size[0], self.buffer.pos // self.buffer.size[0] \
 				- (self.scrollRegion[0] - 1))
 		else:
-			return (self.buffer.pos % self.buffer.size[0], self.buffer.pos / self.buffer.size[0])
+			return (self.buffer.pos % self.buffer.size[0], self.buffer.pos // self.buffer.size[0])
 
 	def setPos(self, x, y):
 		x = min(max(x, 0), self.buffer.size[0] - 1)
@@ -357,7 +357,7 @@ class Terminal:
 			self.buffer.pos -= self.buffer.pos % self.buffer.size[0]
 			self.buffer.atEnd = False
 		elif(char == '\n' or char == '\x0b' or char == '\x0c'): # LineFeed, VerticalTab, FormFeed
-			if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+			if(self.buffer.pos // self.buffer.size[0] == self.scrollRegion[1] - 1):
 				self.scroll(1)
 			else:
 				self.buffer.pos += self.buffer.size[0]
@@ -466,20 +466,20 @@ class Terminal:
 		self.setPos(args[0] - 1, self.getPos()[1])
 
 	def nextLine(self, args):
-		if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+		if(self.buffer.pos // self.buffer.size[0] == self.scrollRegion[1] - 1):
 			self.scroll(1)
 		else:
 			self.move(0, 1)
 		self.buffer.pos -= self.buffer.pos % self.buffer.size[0]
 
 	def index(self, args):
-		if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[1] - 1):
+		if(self.buffer.pos // self.buffer.size[0] == self.scrollRegion[1] - 1):
 			self.scroll(1)
 		else:
 			self.move(0, 1)
 
 	def reverseIndex(self, args):
-		if(self.buffer.pos / self.buffer.size[0] == self.scrollRegion[0] - 1):
+		if(self.buffer.pos // self.buffer.size[0] == self.scrollRegion[0] - 1):
 			self.scroll(-1)
 		else:
 			self.move(0, -1)
@@ -513,7 +513,7 @@ class Terminal:
 		# adds (erases) lines at curPos and pushes (scrolls) subsequent ones down
 		argDefaults(args, [1])
 		tmp = self.scrollRegion # store scroll region
-		self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
+		self.scrollRegion = [self.buffer.pos // self.buffer.size[0] + 1, self.scrollRegion[1]]
 		self.scroll(-args[0])
 		self.scrollRegion = tmp # restore scroll region
 
@@ -521,7 +521,7 @@ class Terminal:
 		# removes (erases) lines at curPos and pulls (scrolls) subsequent ones up
 		argDefaults(args, [1])
 		tmp = self.scrollRegion # store scroll region
-		self.scrollRegion = [self.buffer.pos / self.buffer.size[0] + 1, self.scrollRegion[1]]
+		self.scrollRegion = [self.buffer.pos // self.buffer.size[0] + 1, self.scrollRegion[1]]
 		self.scroll(args[0])
 		self.scrollRegion = tmp # restore scroll region
 
@@ -607,23 +607,23 @@ class Terminal:
 		log(self, "Device attribute request: %r" % args, 2)
 		# Identifying as "VT100 with Advanced Video Option" as described on 
 		# http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Functions-using-CSI-_-ordered-by-the-final-character_s_
-		return "\033[?1;2c"
+		return b"\033[?1;2c"
 
 	def sendDeviceAttributes2(self, args):
 		log(self, "Secondary attribute request: %r" % args, 2)
 		# copying the response I observed PuTTY generate
-		return "\033[>0;136;0c"
+		return b"\033[>0;136;0c"
 
 	def deviceStatusReport(self, args):
 		log(self, "Device status request: %r" % args, 2)
 		# see https://vt100.net/docs/vt100-ug/chapter3.html
 		if(args[0] == 5): # report status
-			return "\033[0n" # ready
+			return b"\033[0n" # ready
 		elif(args[0] == 6): # report cursor position
 			pos = self.getPos()
 			rep = (pos[1] + 1, pos[0] + 1)
 			log(self, "Cursor position report: %r" % (rep,), 2)
-			return "\033[%d;%dR" % rep
+			return b"\033[%d;%dR" % rep
 
 	def OSCommand(self, args):
 		if(len(args) > 1 and args[0] == 0):
@@ -661,7 +661,7 @@ class Terminal:
 				# resp is True if we've switched buffers
 				self.buffer.clearDiff()
 				self.broadcast(self.buffer.initMsg(self.showCursor))
-			elif(type(resp) == str):
+			elif(type(resp) == bytes):
 				# resp is set to a string if we want to talk back to the host program
 				return resp
 			else:
@@ -679,7 +679,7 @@ class Terminal:
 
 	def sendPing(self):
 		with self.bufferLock:
-			self.broadcast('', 9) # ping opcode
+			self.broadcast(b'', 9) # ping opcode
 
 class Term_Server:
 	def __init__(self):
@@ -706,7 +706,7 @@ class Term_Server:
 
 	def readPrefs(self, filename="TermServer.conf"):
 		log(self, "reading %s" % filename)
-		prefsFile = file(filename, 'r')
+		prefsFile = open(filename, 'r')
 		prefsData = prefsFile.read()
 		prefsFile.close()
 		newPrefs = parseToDict(prefsData, ':', '\n')
@@ -725,7 +725,7 @@ class Term_Server:
 
 	def authorize(self, headers):
 		try:
-			return base64.b64decode(headers['authorization'].split(' ')[1]) == self.prefs['term_pass']
+			return base64.b64decode(headers['authorization'].split(' ')[1]).decode('utf-8') == self.prefs['term_pass']
 		except:
 			return False
 	
@@ -744,8 +744,8 @@ class Term_Server:
 		self.resize(self.prefs["term_width"], self.prefs["term_height"])
 
 		# open the psuedo terminal master file (this is what we read/write to)
-		self.wstream = os.fdopen(self.master, "w")
-		self.rstream = os.fdopen(self.master, "r")
+		self.wstream = os.fdopen(self.master, "wb")
+		self.rstream = os.fdopen(self.master, "rb")
 
 		# this is passed locally so we can shut down only threads that were started by this invocation
 		shutdown = threading.Event()
@@ -814,7 +814,6 @@ class Term_Server:
 				self.wstream.flush()
 			
 	def handleInput(self, sock, addr):
-		# the first frame sent over the socket must be the password
 		log(self, "Accepted term connection from %r" % (addr,))
 		self.terminal.sendInit(sock)
 		while True:
@@ -829,11 +828,11 @@ class Term_Server:
 				log(self, "End of stream from %r" % (addr,))
 				self.connections.remove(sock)
 				return
-			if frame[0] == 'k': # keypress
-				log(self, "recvd keypress: %r" % frame[1], 4)
-				self.wstream.write(frame[1])
+			if frame[0] == b'k'[0]: # keypress
+				log(self, "recvd keypress: %r" % frame[1:2], 4)
+				self.wstream.write(frame[1:2])
 				self.wstream.flush()
-			elif frame[0] == 'r': #resize
+			elif frame[0] == b'r'[0]: #resize
 				if len(frame) != 5:
 					log(self, "Malformed resize request: %r" % frame)
 				sreq = struct.unpack('!HH', frame[1:5])
@@ -841,6 +840,8 @@ class Term_Server:
 				with self.terminal.bufferLock:
 					self.terminal.resize(sreq[0], sreq[1]) # this will call self.resize
 					self.terminal.broadcast(self.terminal.buffer.initMsg(self.terminal.showCursor))
+			else:
+				log(self, "Unrecognized input frame: %r" % frame)
 
 	def sessionLoop(self, shutdown):
 		while not shutdown.is_set():

@@ -1,12 +1,12 @@
 from Logger import log
 from Utils import readTo, parseToDict
-from cStringIO import StringIO
+from io import StringIO
 
 import threading
 import socket
 import struct
 import base64
-import urllib
+import urllib.parse
 import time
 import ssl
 import re
@@ -21,7 +21,7 @@ except:
 	sha1 = sha.sha
 
 def recvall(sock, size):
-	data = ''
+	data = bytes()
 	while(len(data) < size):
 		data += sock.recv(size - len(data))
 	return data
@@ -250,10 +250,10 @@ class HTTP_Server:
 			self.sock.sendall(data)
 
 		def decode(data, key):
-			out = ''
+			out = [None] * len(data)
 			for i in range(len(data)):
-				out += chr(ord(data[i]) ^ ord(key[i % len(key)]))
-			return out
+				out[i] = data[i] ^ key[i % len(key)]
+			return bytes(out)
 		decode = staticmethod(decode)
 		
 		def recvPayload(self):
@@ -266,7 +266,7 @@ class HTTP_Server:
 			return self.decode(recvall(self.sock, payLen), key)
 
 		def recvFrame(self):
-			data = ''
+			data = bytes()
 			while(True):
 				start = struct.unpack("B", self.sock.recv(1))[0]
 				final_fragment = ((start & 0x80) != 0)
@@ -280,7 +280,7 @@ class HTTP_Server:
 				elif(opcode == 8): # close opcode
 					log(self, "recieved close frame: %r" % self.recvPayload())
 					self.closed = True
-					return ''
+					return bytes()
 				elif(opcode == 9): # ping opcode
 					pingdata = self.recvPayload()
 					self.send(pingdata, 0x0A) # pong
@@ -290,18 +290,16 @@ class HTTP_Server:
 					log(self, "received pong frame: %r" % pongdata, 4)
 
 		def recv(self, count):
-			data = ''
-			while(len(data) < count):
-				if(self.closed):
-					return ''
-				while(len(self.buffer) and len(data) < count):
-					data += self.buffer.pop(0)
-				if(len(data) < count):
-					self.buffer.extend(self.recvFrame())
+			while(len(self.buffer) < count and not self.closed):
+				self.buffer.extend(self.recvFrame())
+			if(self.closed):
+				return bytes()
+			data = bytes(self.buffer[0:count])
+			self.buffer = self.buffer[count:]
 			return data
 
 		def close(self):
-			self.send('', 0x08) # close opcode
+			self.send(bytes(), 0x08) # close opcode
 			self.sock.close()
 	
 	class acceptQueue:
@@ -325,9 +323,10 @@ class HTTP_Server:
 		self.webRoot = webRoot
 	
 	def readHTTP(self, sock):
-		data = readTo(sock, "\r\n\r\n", ['\t', ' '])
+		data = readTo(sock, b"\r\n\r\n", [b'\t', b' '])
 		if(not data):
 			raise IOError
+		data = data.decode('ascii') # only ascii allowed within headers section
 		(method, resource, protocol) = data.split(' ', 2)
 		(protocol, data) = protocol.split("\r\n", 1)
 		getOptions = dict()
@@ -336,24 +335,24 @@ class HTTP_Server:
 			getOptions = parseToDict(getOptions, '=', '&')
 		headers = lowerKeys(parseToDict(data, ": ", "\r\n"))
 		body = False
-		if(headers.has_key("expect") and headers["expect"] == "100-continue"):
-			sock.send("HTTP/1.1 100 Continue\r\n\r\n")
-		if(headers.has_key("content-length")):
+		if("expect" in headers and headers["expect"] == "100-continue"):
+			sock.send(b"HTTP/1.1 100 Continue\r\n\r\n")
+		if("content-length" in headers):
 			body = recvall(sock, int(headers["content-length"]))
-		if(headers.has_key("content-type") and headers["content-type"].startswith("multipart/form-data")):
+		if("content-type" in headers and headers["content-type"].startswith("multipart/form-data")):
 			formHeaders = parseToDict(headers["content-type"], '=', "; ")
 			log(self, "multipart/form-data boundary: %s" % formHeaders["boundary"], 3)
 			if(body):
 				log(self, "Nice client gave us a Content-Length: %s" % headers["content-length"], 3)
 			else:# didn't send us a goddamn Content-Length
-				body = readTo(sock, "--%s--" % formHeaders["boundary"], [])
+				body = readTo(sock, bytes("--%s--" % formHeaders["boundary"], 'ascii'), [])
 				log(self, "No Content-Length, read multipart from sock using boundary, length: %d" % len(body), 3)
-			body = body.split("--%s" % formHeaders["boundary"])[1:-1]
+			body = body.split(bytes("--%s" % formHeaders["boundary"], 'ascii'))[1:-1]
 			output = list()
 			for data in body:
-				(dataHeaders, data) = data.split("\r\n\r\n", 1)
-				dataHeaders = lowerKeys(parseToDict(dataHeaders, ": ", "\r\n"))
-				if(dataHeaders.has_key("content-disposition")):
+				(dataHeaders, data) = data.split(b"\r\n\r\n", 1)
+				dataHeaders = lowerKeys(parseToDict(dataHeaders.decode('ascii'), ": ", "\r\n"))
+				if("content-disposition" in dataHeaders):
 					dataHeaders["content-disposition"] = parseToDict(dataHeaders["content-disposition"], '=', "; ")
 				output.append({"headers": dataHeaders, "data": data})
 			body = output
@@ -366,21 +365,24 @@ class HTTP_Server:
 		return (method, resource, protocol, headers, body, getOptions)
 		
 	def writeHTTP(sock, code, headers={}, body=None, orderedHeaders=[]):
-		if(not body and HTTP_Server.defaultResponseData.has_key(code)):
+		if(not body and code in HTTP_Server.defaultResponseData):
 			body = HTTP_Server.defaultResponseData[code]
 			headers["Content-Type"] = "text/html"
-		if(body and not headers.has_key("Content-Type")):
+		if(body and "Content-Type" not in headers):
 			headers["Content-Type"] = "text/plain"
 		if(body):
 			headers["Content-Length"] = len(body)
-		sock.send("HTTP/1.1 %d %s\r\n" % (code, HTTP_Server.statusCodes[code]))
+		sock.send(bytes("HTTP/1.1 %d %s\r\n" % (code, HTTP_Server.statusCodes[code]), 'ascii'))
 		for header in orderedHeaders:
-			sock.send("%s: %s\r\n" % header)
+			sock.send(bytes("%s: %s\r\n" % header, 'ascii'))
 		for key in headers:
-			sock.send("%s: %s\r\n" % (key, headers[key]))
-		sock.send("\r\n")
+			sock.send(bytes("%s: %s\r\n" % (key, headers[key]), 'ascii'))
+		sock.send(b"\r\n")
 		if(body):
-			sock.send("%s" % body)
+			if(type(body) == str):
+				sock.send(body.encode('utf-8'))
+			else:
+				sock.send(body)
 	writeHTTP = staticmethod(writeHTTP)
 
 	def handleReq(self, sock, addr, method, resource, protocol, headers, body, getOptions, SSLRedirect):
@@ -390,21 +392,21 @@ class HTTP_Server:
 			host_noport = ur.match(headers["host"]).groups()[0]
 			new_url = "https://%s:%d%s" % (host_noport, SSLRedirect, resource)
 			self.writeHTTP(sock, 302, {"Location": new_url}, "302 Redirect")
-			log(self, "redirected request from %r for %r to %r" % (addr, urllib.unquote(resource), new_url), 3)
+			log(self, "redirected request from %r for %r to %r" % (addr, urllib.parse.unquote(resource), new_url), 3)
 			return
-		resource = urllib.unquote(resource)
+		resource = urllib.parse.unquote(resource)
 		for authorizer in self.authorizers:
 			if(authorizer[0].match(resource) and not authorizer[1](headers)):
 				log(self, "Rejected authorization for %r from %r" % (resource, addr))
 				self.writeHTTP(sock, 401, {"WWW-Authenticate": authorizer[2]}, authorizer[3])
 				return
-		if(self.redirects.has_key(resource)):
+		if(resource in self.redirects):
 			redirect = self.redirects[resource]
 			if(type(redirect) is str):
 				self.writeHTTP(sock, 302, {"Location": redirect}, "302 Redirect")
 				log(self, "redirected %r from %s to %s" % (addr, resource, self.redirects[resource]), 3)
 				return
-			elif(headers.has_key(redirect["header"]) and headers[redirect["header"]].find(redirect["value"]) != -1):
+			elif(redirect["header"] in headers and headers[redirect["header"]].find(redirect["value"]) != -1):
 				self.writeHTTP(sock, 302, {"Location": redirect["location"]}, "302 Redirect")
 				log(self, "redirected request for %s to %s due to %s value containing %s" % ( \
 					resource, \
@@ -415,7 +417,7 @@ class HTTP_Server:
 		resExt = resource.rsplit('.', 1)
 		if(len(resExt) > 1):
 			extension = resExt[-1].lower()
-			if(self.mimeTypes.has_key(extension)):
+			if(extension in self.mimeTypes):
 				mimeType = self.mimeTypes[extension]
 			else:
 				log(self, "denied request for %s" % resource, 3)
@@ -424,7 +426,7 @@ class HTTP_Server:
 		else:
 			mimeType = "application/octet-stream"
 		if(method == "GET" and 'upgrade' in headers and headers['upgrade'] == 'websocket'):
-			if(headers.has_key("websocket-protocol") and self.sessionQueues.has_key((headers["websocket-protocol"], resource))): # protocol draft 75
+			if("websocket-protocol" in headers and (headers["websocket-protocol"], resource) in self.sessionQueues): # protocol draft 75
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
@@ -437,7 +439,7 @@ class HTTP_Server:
 				self.sessionQueues[(headers["websocket-protocol"], resource)].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket" 
-			elif(headers.has_key("sec-websocket-protocol") and self.sessionQueues.has_key((headers["sec-websocket-protocol"], resource)) and not headers.has_key("sec-websocket-version")): # protocol draft 76
+			elif("sec-websocket-protocol" in headers and (headers["sec-websocket-protocol"], resource) in self.sessionQueues and "sec-websocket-version" not in headers): # protocol draft 76
 				responseHeaders = [ \
 					("Upgrade", "WebSocket"), \
 					("Connection", "Upgrade"), \
@@ -472,14 +474,14 @@ class HTTP_Server:
 				self.sessionQueues[(headers["sec-websocket-protocol"], resource)].insert((self.WebSocket(sock), addr))
 				# now get out of the socket loop and let the cc server take over
 				return "WebSocket"
-			elif(headers.has_key("sec-websocket-version") and headers["sec-websocket-version"] in ["8", "13"] and self.sessionQueues.has_key((headers["sec-websocket-protocol"], resource))): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
+			elif("sec-websocket-version" in headers and headers["sec-websocket-version"] in ["8", "13"] and (headers["sec-websocket-protocol"], resource) in self.sessionQueues): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
-					("Sec-WebSocket-Accept", base64.encodestring(sha1(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest()).strip()), \
+					("Sec-WebSocket-Accept", base64.encodestring(sha1(bytes(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', 'ascii')).digest()).decode('ascii').strip()), \
 			        	("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
-				log(self, "got Sec-WebSocket Version 8 from %r" % (addr,), 3)
+				log(self, "got Sec-WebSocket Version %s from %r" % (headers["sec-websocket-version"], addr), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
 				self.sessionQueues[(headers["sec-websocket-protocol"], resource)].insert((self.WebSocket2(sock), addr))
 				return "WebSocket"
@@ -489,7 +491,7 @@ class HTTP_Server:
 				return
 		elif(method == "GET"):
 			try:
-				resourceFile = file("%s/%s" % (self.webRoot, resource), "rb")
+				resourceFile = open("%s/%s" % (self.webRoot, resource), "rb")
 				resourceData = resourceFile.read()
 				resourceFile.close()
 			except:
@@ -499,17 +501,17 @@ class HTTP_Server:
 			self.writeHTTP(sock, 200, {"Content-Type": mimeType}, resourceData)
 			log(self, "served %s" % resource, 3)
 		elif(method == "POST" and resource == "/file-upload"):
-			if(getOptions.has_key("authkey") and self.isAuthorized(getOptions["authkey"]) > 1):
+			if("authkey" in getOptions and self.isAuthorized(getOptions["authkey"]) > 1):
 				log(self, "authorized file upload from %r, looking for file" % (addr,), 3)
 				for part in body:
-					if(part["headers"]["Content-Disposition"].has_key("filename")):
-						filename = part["headers"]["Content-Disposition"]["filename"][1:-1] # filename is quoted
+					if("filename" in part["headers"]["content-disposition"]):
+						filename = part["headers"]["content-disposition"]["filename"][1:-1] # filename is quoted
 						if(filename == ""):
 							log(self, "empty filename", 3)
 							self.writeHTTP(sock, 400, {}, "empty filename")
 							return
 						newFileURI = "images/%s" % filename
-						outputFile = file("%s/%s" % (self.webRoot, newFileURI), "wb")
+						outputFile = open("%s/%s" % (self.webRoot, newFileURI), "wb")
 						outputFile.write(part["data"])
 						outputFile.close()
 						log(self, "sucessfully uploaded file: %s" % filename, 3)
@@ -522,7 +524,7 @@ class HTTP_Server:
 				log(self, "unauthorized upload attempt from %r" % (addr,), 3)
 				self.writeHTTP(sock, 403)
 		elif(method == "POST" and resource == "/chat-data"):
-			if(getOptions.has_key("sid") and getOptions.has_key("action") and getOptions.has_key("protocol") and self.sessionQueues.has_key((getOptions["protocol"], '/web-socket'))):
+			if("sid" in getOptions and "action" in getOptions and "protocol" in getOptions and (getOptions["protocol"], '/web-socket') in self.sessionQueues):
 				if(getOptions["sid"] == "0"):
 					session = self.sessionList.newSession(sock, addr)
 					self.sessionQueues[(getOptions["protocol"], '/web-socket')].insert((session, addr))
@@ -578,7 +580,7 @@ class HTTP_Server:
 				return
 
 	def registerProtocol(self, protocol, resource='/web-socket'):
-		if(not self.sessionQueues.has_key((protocol, resource))):
+		if((protocol, resource) not in self.sessionQueues):
 			self.sessionQueues[(protocol, resource)] = self.acceptQueue()
 			return self.sessionQueues[(protocol, resource)]
 		else:

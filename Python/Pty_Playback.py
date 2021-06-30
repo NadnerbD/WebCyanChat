@@ -1,5 +1,5 @@
 import sys, termios, tty
-from cStringIO import StringIO
+from io import StringIO
 
 def readToEsc(stream):
 	sio = StringIO()
@@ -21,7 +21,7 @@ if len(sys.argv) == 2:
 			so = readToEsc(inFile)
 		except:
 			termios.tcsetattr(sys.stdin, termios.TCSADRAIN, attrs)
-			print "\r\n\033[31mREACHED END OF OUTPUT\033[m"
+			print("\r\n\033[31mREACHED END OF OUTPUT\033[m")
 			break
 		sys.stdout.write(so.decode('string-escape'))
 		sys.stdout.flush()
@@ -31,4 +31,4 @@ if len(sys.argv) == 2:
 		sys.stdin.read(1)
 	inFile.close()
 else:
-	print 'usage: %s <log_file>' % sys.argv[0]
+	print('usage: %s <log_file>' % sys.argv[0])

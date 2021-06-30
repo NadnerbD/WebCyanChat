@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import sys
 import os
 
@@ -23,13 +23,19 @@ serverClasses = { \
 }
 serverClass = None
 
+def usage():
+	print("usage: python %s (%s) [--pref_name=VALUE ...]" % (sys.argv[0], '|'.join(serverClasses.keys())))
+	exit()
+
 class InvalidOptionException(Exception):
 	pass
 
-if(len(sys.argv) >= 2 and serverClasses.has_key(sys.argv[1])):
+if(len(sys.argv) >= 2 and sys.argv[1] in serverClasses):
 	serverName = serverClasses[sys.argv[1]]
 	serverModule = __import__(serverName)
 	serverClass = serverModule.__getattribute__(serverName)
+else:
+	usage()
 try:
 	Server = serverClass()
 	Server.readPrefs("etc/CCServer.conf")
@@ -44,7 +50,7 @@ try:
 			raise InvalidOptionException
 	Server.start()
 except InvalidOptionException:
-	print "usage: python %s (%s) [--pref_name=VALUE ...]" % (sys.argv[0], '|'.join(serverClasses.keys()))
+	usage()
 
 if(profiling):
 	yappi.get_func_stats().print_all()

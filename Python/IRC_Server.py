@@ -39,8 +39,8 @@ class IRC_Server:
 	network = "Nadru"
 
 	NumericReplies = { \
-		001: "Welcome, %s", \
-		005: "Are supported by this server", \
+		0o01: "Welcome, %s", \
+		0o05: "Are supported by this server", \
 		318: "End of /WHOIS list", \
 		321: "Users  Name", \
 		323: "End of /LIST", \
@@ -541,7 +541,7 @@ class IRC_Server:
 
 	def sendReply(self, connection, replyID, params=[], trail=None):
 		rpl = self.IRC_Message("%03d" % int(replyID))
-		if(self.NumericReplies.has_key(replyID)):
+		if(replyID in self.NumericReplies):
 			rpl.trail = self.NumericReplies[int(replyID)]
 		if(trail and rpl.trail):
 			rpl.trail %= trail
@@ -884,7 +884,7 @@ class IRC_Server:
 			if(len(msg.params) > 1):
 				keys = msg.params[1].split(",")
 			else:
-				keys = range(len(chans))
+				keys = list(range(len(chans)))
 			for i, chanName in enumerate(chans):
 				if(chanName[0] not in IRC_Server.chan_types):
 					continue

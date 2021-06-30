@@ -16,9 +16,8 @@ class CC_Relay(CC_Server):
 				relayRecvThread = threading.Thread(None, self.parent.relayRecvLoop, "relayRecvLoop", (connection,))
 				relayRecvThread.setDaemon(1)
 				relayRecvThread.start()
-			except: #except Exception as error:
-				#print error
-				log(self, "error connecting to relay target %s" % self.parent.prefs["relay_addr"], 2)
+			except Exception as error:
+				log(self, "error connecting to relay target %s: %s" % (self.parent.prefs["relay_addr"], error), 2)
 				self.sendPM(CC_Server.chatServer(3), connection, "Error connecting to relay target", 1)
 				connection.connectEvent.set() #allow the loop to run, but it will throw errors on every forward
 		
@@ -50,9 +49,9 @@ class CC_Relay(CC_Server):
 			self.relayComLock.acquire()
 			try:
 				log(self, "forwarding: %s from %s" % (repr(message), self), 2)
-				self.relaySock.send(message + "\r\n")
-			except:
-				log(self, "forward error from: %s" % self, 2)
+				self.relaySock.send(bytes(message + "\r\n", 'utf-8'))
+			except Exception as error:
+				log(self, "forward error from %s: %s" % (self, error), 2)
 			self.relayComLock.release()
 	
 	def __init__(self):
@@ -81,7 +80,7 @@ class CC_Relay(CC_Server):
 	def relayRecvLoop(self, connection): #Threaded per-relay-socket
 		while 1:
 			try:
-				line = readTo(connection.relaySock, '\n', ['\r'])
+				line = readTo(connection.relaySock, b'\n', [b'\r']).decode('utf-8')
 			except:
 				log(self, "removed relay connection to server for: %s" % connection, 2)
 				return

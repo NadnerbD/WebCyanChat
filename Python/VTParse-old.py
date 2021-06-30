@@ -80,7 +80,7 @@ class Parser:
 			if(charLen > 1 and charLen <= 4):
 				for _ in range(charLen - 1):
 					char += self.consume()
-			return self.command('add', unicode(char, "utf-8", errors='replace'))
+			return self.command('add', str(char, "utf-8", errors='replace'))
 
 	def escapeCode(self):
 		if(self.accept('[')):
