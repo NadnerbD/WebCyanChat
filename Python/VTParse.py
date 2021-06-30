@@ -4,66 +4,66 @@ import threading
 from Logger import log
 
 escapeCodeStrings = { \
-	'=': 'setAppKeys', \
-	'>': 'setNormKeys', \
-	'(': 'setG0CharSet', \
-	')': 'setG1CharSet', \
-	'E': 'nextLine', \
-	'D': 'index', \
-	'M': 'reverseIndex', \
-	'H': 'tabSet', \
-	'7': 'saveCursor', \
-	'8': 'restoreCursor', \
-	'#8': 'screenAlignment', \
+	b'=': 'setAppKeys', \
+	b'>': 'setNormKeys', \
+	b'(': 'setG0CharSet', \
+	b')': 'setG1CharSet', \
+	b'E': 'nextLine', \
+	b'D': 'index', \
+	b'M': 'reverseIndex', \
+	b'H': 'tabSet', \
+	b'7': 'saveCursor', \
+	b'8': 'restoreCursor', \
+	b'#8': 'screenAlignment', \
 }
 
 paramCmdStrings = { \
-	's': 'saveCursor', \
-	'u': 'restoreCursor', \
-	'H': 'home', \
-	'f': 'home', \
-	'r': 'setScrollRegion', \
-	'm': 'charAttributes', \
-	'h': 'setMode', \
-	'l': 'resetMode', \
-	'n': 'deviceStatusReport', \
-	'd': 'linePosAbs', \
-	'g': 'tabClear', \
-	'c': 'sendDeviceAttributes', \
-	'G': 'curCharAbs', \
-	'J': 'eraseOnDisplay', \
-	'K': 'eraseOnLine', \
-	'S': 'scrollUp', \
-	'T': 'scrollDown', \
-	'L': 'insertLines', \
-	'M': 'removeLines', \
-	'A': 'cursorUp', \
-	'B': 'cursorDown', \
-	'C': 'cursorFwd', \
-	'D': 'cursorBack', \
-	'P': 'deleteChars', \
-	'@': 'addBlanks', \
-	'X': 'eraseChars', \
+	b's': 'saveCursor', \
+	b'u': 'restoreCursor', \
+	b'H': 'home', \
+	b'f': 'home', \
+	b'r': 'setScrollRegion', \
+	b'm': 'charAttributes', \
+	b'h': 'setMode', \
+	b'l': 'resetMode', \
+	b'n': 'deviceStatusReport', \
+	b'd': 'linePosAbs', \
+	b'g': 'tabClear', \
+	b'c': 'sendDeviceAttributes', \
+	b'G': 'curCharAbs', \
+	b'J': 'eraseOnDisplay', \
+	b'K': 'eraseOnLine', \
+	b'S': 'scrollUp', \
+	b'T': 'scrollDown', \
+	b'L': 'insertLines', \
+	b'M': 'removeLines', \
+	b'A': 'cursorUp', \
+	b'B': 'cursorDown', \
+	b'C': 'cursorFwd', \
+	b'D': 'cursorBack', \
+	b'P': 'deleteChars', \
+	b'@': 'addBlanks', \
+	b'X': 'eraseChars', \
 }
 
 DECModeCmdStrings = { \
-	'h': 'setDECMode', \
-	'l': 'resetDECMode', \
+	b'h': 'setDECMode', \
+	b'l': 'resetDECMode', \
 }
 
 termCmdStrings = { \
-	'T': 'resetTitleMode', \
-	'c': 'sendDeviceAttributes2', \
-	'm': 'setModifierSeqs', \
-	'n': 'resetModifierSeqs', \
-	'p': 'setPointerMode', \
-	't': 'setTitleModeFeatures', \
+	b'T': 'resetTitleMode', \
+	b'c': 'sendDeviceAttributes2', \
+	b'm': 'setModifierSeqs', \
+	b'n': 'resetModifierSeqs', \
+	b'p': 'setPointerMode', \
+	b't': 'setTitleModeFeatures', \
 }
 
 privateMarkers = { \
-	'':  paramCmdStrings, \
-	'?': DECModeCmdStrings, \
-	'>': termCmdStrings, \
+	b'':  paramCmdStrings, \
+	b'?': DECModeCmdStrings, \
+	b'>': termCmdStrings, \
 }
 
 class Command:
@@ -142,20 +142,20 @@ class Parser:
 			try:
 				self.char = self.stream.read(1)
 			except:
-				self.char = ''
-			if(self.char == ''):
+				self.char = None
+			if(self.char == None):
 				self.commandReady.release()
 				return
 			#log(self, "got char: %r" % self.char)
 			self.debugStr += self.char
 			# Check the 'from anywhere' directives
-			if(self.char   == '\x1B'): # ESC
+			if(self.char   == b'\x1B'): # ESC
 				self.setState(self.escape)
-			elif(self.char == '\x9D'):
+			elif(self.char == b'\x9D'):
 				self.setState(self.osc_string)
-			elif(self.char == '\x9B'):
+			elif(self.char == b'\x9B'):
 				self.setState(self.csi_entry)
-			elif(self.char == '\x9C'): # ST
+			elif(self.char == b'\x9C'): # ST
 				self.setState(self.ground)
 			elif(self.rangeTest([[0x18], [0x1A], [0x80, 0x8F], [0x91, 0x97], [0x99], [0x9A]])):
 				self.execute()
@@ -167,17 +167,17 @@ class Parser:
 	#### Commands, to be executed from inside parser states ####
 
 	def clear(self):
-		self.oscStr = str()
-		self.paramStr = str()
-		self.privateMarker = str()
+		self.oscStr = bytes()
+		self.paramStr = bytes()
+		self.privateMarker = bytes()
 		# used for parse failure log messages
-		self.debugStr = str()
+		self.debugStr = bytes()
 
 	def execute(self):
-		self.putCommand(Command('add', self.char))
+		self.putCommand(Command('add', str(self.char, 'ascii')))
 
 	def print_ascii(self):
-		self.putCommand(Command('add', self.char))
+		self.putCommand(Command('add', str(self.char, 'ascii')))
 
 	def print_utf8(self):
 		# consumes directly from the stream to the end of the utf-8 character
@@ -187,9 +187,9 @@ class Parser:
 		for _ in range(charLen - 1):
 			self.char += self.stream.read(1)
 		try:
-			self.putCommand(Command('add', unicode(self.char, 'utf-8')))
+			self.putCommand(Command('add', str(self.char, 'utf-8')))
 		except UnicodeDecodeError:
-			self.putCommand(Command('add', u'\ufffd'))
+			self.putCommand(Command('add', '\ufffd'))
 
 	def esc_dispatch(self):
 		cmd = self.privateMarker + self.char
@@ -203,7 +203,7 @@ class Parser:
 	def csi_dispatch(self):
 		if(self.privateMarker in privateMarkers \
 		and self.char in privateMarkers[self.privateMarker]):
-			params = [int(i) if len(i) > 0 else 0 for i in self.paramStr.split(';')]
+			params = [int(i) if len(i) > 0 else 0 for i in self.paramStr.split(b';')]
 			cmdName = privateMarkers[self.privateMarker][self.char]
 			self.putCommand(Command(cmdName, params))
 		else:
@@ -211,8 +211,8 @@ class Parser:
 
 	def osc_end(self):
 		try:
-			(cmd, str) = self.oscStr.split(';', 1)
-			self.putCommand(Command('OSCommand', [int(cmd), unicode(str, 'utf-8')]))
+			(cmd, string) = self.oscStr.split(b';', 1)
+			self.putCommand(Command('OSCommand', [int(cmd), str(string, 'utf-8')]))
 		except:
 			log(self, 'Error parsing OSC string: %r' % self.debugStr)
 
@@ -240,7 +240,7 @@ class Parser:
 	def escape(self):
 		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
 			self.execute()
-		elif(self.char == '\x7F'):
+		elif(self.char == b'\x7F'):
 			pass
 		elif(self.rangeTest([[0x20, 0x2F]])):
 			self.collect()
@@ -248,9 +248,9 @@ class Parser:
 		elif(self.rangeTest([[0x30, 0x4F], [0x51, 0x57], [0x59], [0x5A], [0x5C], [0x60, 0x7E]])):
 			self.esc_dispatch()
 			self.setState(self.ground)
-		elif(self.char == '\x5B'): # [
+		elif(self.char == b'\x5B'): # [
 			self.setState(self.csi_entry)
-		elif(self.char == '\x5D'): # ]
+		elif(self.char == b'\x5D'): # ]
 			self.setState(self.osc_string)
 		else:
 			self.missingAction('escape')
@@ -260,7 +260,7 @@ class Parser:
 			self.execute()
 		elif(self.rangeTest([[0x20, 0x2F]])):
 			self.collect()
-		elif(self.char == '\x7F'):
+		elif(self.char == b'\x7F'):
 			pass
 		elif(self.rangeTest([[0x30, 0x7E]])):
 			self.esc_dispatch()
@@ -269,7 +269,7 @@ class Parser:
 			self.missingAction('escape_intermediate')
 
 	def osc_string(self):
-		if(self.char == '\x07'):
+		if(self.char == b'\x07'):
 			# for some reason, the diagram I made this from does
 			# not show osc_string ending with a BEL character
 			self.osc_end()
@@ -284,7 +284,7 @@ class Parser:
 	def csi_entry(self):
 		if(self.rangeTest([[0x00, 0x17], [0x19], [0x1C, 0x1F]])):
 			self.execute()
-		elif(self.char == '\x7F'):
+		elif(self.char == b'\x7F'):
 			pass
 		elif(self.rangeTest([[0x40, 0x7E]])):
 			self.csi_dispatch()
@@ -295,7 +295,7 @@ class Parser:
 		elif(self.rangeTest([[0x3C, 0x3F]])):
 			self.collect()
 			self.setState(self.csi_param)
-		elif(self.char == '\x3A'):
+		elif(self.char == b'\x3A'):
 			self.setState(self.csi_ignore)
 		elif(self.rangeTest([[0x20, 0x2F]])):
 			self.collect()
@@ -308,7 +308,7 @@ class Parser:
 			self.execute()
 		elif(self.rangeTest([[0x20, 0x2F]])):
 			self.collect()
-		elif(self.char == '\x7F'):
+		elif(self.char == b'\x7F'):
 			pass
 		elif(self.rangeTest([[0x30, 0x3F]])):
 			self.setState(self.csi_ignore)
@@ -323,7 +323,7 @@ class Parser:
 			self.execute()
 		elif(self.rangeTest([[0x30, 0x39], [0x3B]])):
 			self.param()
-		elif(self.char == '\x7F'):
+		elif(self.char == b'\x7F'):
 			pass
 		elif(self.rangeTest([[0x3A], [0x3C, 0x3F]])):
 			self.setState(self.csi_ignore)

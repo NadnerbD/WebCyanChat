@@ -87,7 +87,7 @@ class CC_Server(object):
 				connection.send("11")
 				if(wasnamed and self.parent.prefs["enable_protocol_extensions"]):
 					self.sendChat(connection, "<[%s] is now known as [%s]>" % (oldname, name), 2)
-				elif(connectMessages.has_key(connection.level())):
+				elif(connection.level() in connectMessages):
 					self.sendChat(connection, connectMessages[connection.level()], 2)
 				elif(HAS_DNSPYTHON and self.parent.prefs["use_reverse_dns"]):
 					try:
@@ -238,7 +238,7 @@ class CC_Server(object):
 			if(not self.bounceDisconnected.isSet() or self.bounceBursting):
 				try:
 					log(self, "sending: %s to %s" % (repr(message), self), 2)
-					self.sock.send(message + "\r\n")
+					self.sock.send(bytes(message + "\r\n", 'utf-8'))
 				except Exception as error:
 					log(self, "send error to %s: %s" % (self, error), 2)
 			self.comLock.release()
@@ -327,7 +327,7 @@ class CC_Server(object):
 	
 	def readPrefs(self, filename="CCServer.conf"):
 		log(self, "reading %s" % filename)
-		prefsFile = file(filename, 'r')
+		prefsFile = open(filename, 'r')
 		prefsData = prefsFile.read()
 		prefsFile.close()
 		newPrefs = parseToDict(prefsData, ':', '\n')
@@ -342,7 +342,7 @@ class CC_Server(object):
 	def readWelcome(self, filename=None):
 		if(not filename):
 			filename = self.prefs["welcome_file"]
-		welcomeFile = file(filename, 'r')
+		welcomeFile = open(filename, 'r')
 		self.welcomeMessage = readTo(welcomeFile, "\n\n", ['\r'])
 		welcomeParams = welcomeFile.read()
 		welcomeFile.close()
@@ -357,7 +357,7 @@ class CC_Server(object):
 	def readWordList(self, filename=None):
 		if(not filename):
 			filename = self.prefs["word_file"]
-		wordFile = file(filename, 'r')
+		wordFile = open(filename, 'r')
 		wordData = wordFile.read()
 		wordFile.close()
 		newWords = parseToDict(wordData, ':', '\n')
@@ -367,7 +367,7 @@ class CC_Server(object):
 	
 	def parseAuth(self):
 		authLevel = 1
-		while(self.prefs.has_key("auth_%d" % authLevel)):
+		while("auth_%d" % authLevel in self.prefs):
 			self.authDict[str(self.prefs["auth_%d" % authLevel])] = authLevel
 			log(self, "set auth password for level %d: %s" % (authLevel, self.prefs["auth_%d" % authLevel]), 3)
 			authLevel += 1
@@ -375,7 +375,7 @@ class CC_Server(object):
 	def parseWelcome(self):
 		insertValues = dict()
 		for paramKey in self.welcomeParams:
-			if(self.prefs.has_key(paramKey)):
+			if(paramKey in self.prefs):
 				if(len(self.welcomeParams[paramKey]) > 1):
 					insertValues[paramKey] = self.welcomeParams[paramKey][self.prefs[paramKey]]
 				else:
@@ -471,7 +471,7 @@ class CC_Server(object):
 	def sockLoop(self, connection): #Threaded per-socket
 		while 1:
 			try:
-				line = readTo(connection.sock, '\n', ['\r'])
+				line = readTo(connection.sock, b'\n', [b'\r']).decode('utf-8')
 			except Exception as error:
 				log(self, "error reading from socket on %s: %s" % (connection, error), 2)
 				line = None
@@ -556,7 +556,7 @@ class CC_Server(object):
 	
 	def handleExt(self, connection, cmd, msg):
 		if(cmd == 12): # auth
-			if(self.authDict.has_key(msg)):
+			if(msg in self.authDict):
 				connection.authLevel = self.authDict[msg]
 				connection.authKey = hex(random.randint(0, 0x7FFFFFFE))[2:]
 				connection.send("13|%d|%s" % (connection.authLevel, connection.authKey))
@@ -642,7 +642,7 @@ class CC_Server(object):
 			elif(msg.startswith("get ")):
 				args = msg[4:].split(" ")
 				for arg in args:
-					if(self.prefs.has_key(arg)):
+					if(arg in self.prefs):
 						self.connections.sendPM(self.chatServer(2), connection, "%s=%r" % (arg, self.prefs[arg]), 1)
 			else:
 				return 0

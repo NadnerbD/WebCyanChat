@@ -1,7 +1,7 @@
 import os, sys, threading, signal, tty, termios, fcntl, signal, errno
 
 if len(sys.argv) < 2:
-	print "usage: %s <command>" % sys.argv[0]
+	print("usage: %s <command>" % sys.argv[0])
 	exit()
 
 pid, master = os.forkpty()
@@ -59,7 +59,7 @@ while running:
 	try:
 		os.waitpid(pid, 0)
 		running = False
-	except OSError, e:
+	except OSError as e:
 		if e.errno != errno.EINTR:
 			raise
 log.close()

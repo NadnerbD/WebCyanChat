@@ -31,17 +31,20 @@ logLock = threading.Lock()
 def log(obj, msg, level=0):
 	if(logging >= level):
 		logLock.acquire()
-		print "%s: %s" % (obj.__class__.__name__, msg)
+		print("%s: %s" % (obj.__class__.__name__, msg))
 		logLock.release()
 
 class errorLogger:
 	def __init__(self, stderr):
 		self.errorLog = None
 		self.stderr = stderr
+
+	def flush(self):
+		pass
 	
 	def write(self, string):
-		if(type(self.errorLog) != file):
-			self.errorLog = file("CCErrorLog.log", 'w')
+		if(self.errorLog is None):
+			self.errorLog = open("CCErrorLog.log", 'w')
 		self.errorLog.write(string)
 		self.errorLog.flush()
 		# we should also pass the error through to the console

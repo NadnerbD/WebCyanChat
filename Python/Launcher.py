@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import sys
 import os
 
@@ -26,7 +26,7 @@ serverClass = None
 class InvalidOptionException(Exception):
 	pass
 
-if(len(sys.argv) >= 2 and serverClasses.has_key(sys.argv[1])):
+if(len(sys.argv) >= 2 and sys.argv[1] in serverClasses):
 	serverName = serverClasses[sys.argv[1]]
 	serverModule = __import__(serverName)
 	serverClass = serverModule.__getattribute__(serverName)
@@ -44,7 +44,7 @@ try:
 			raise InvalidOptionException
 	Server.start()
 except InvalidOptionException:
-	print "usage: python %s (%s) [--pref_name=VALUE ...]" % (sys.argv[0], '|'.join(serverClasses.keys()))
+	print("usage: python %s (%s) [--pref_name=VALUE ...]" % (sys.argv[0], '|'.join(list(serverClasses.keys()))))
 
 if(profiling):
 	yappi.get_func_stats().print_all()
