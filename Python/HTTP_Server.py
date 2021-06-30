@@ -504,8 +504,8 @@ class HTTP_Server:
 			if("authkey" in getOptions and self.isAuthorized(getOptions["authkey"]) > 1):
 				log(self, "authorized file upload from %r, looking for file" % (addr,), 3)
 				for part in body:
-					if("filename" in part["headers"]["Content-Disposition"]):
-						filename = part["headers"]["Content-Disposition"]["filename"][1:-1] # filename is quoted
+					if("filename" in part["headers"]["content-disposition"]):
+						filename = part["headers"]["content-disposition"]["filename"][1:-1] # filename is quoted
 						if(filename == ""):
 							log(self, "empty filename", 3)
 							self.writeHTTP(sock, 400, {}, "empty filename")

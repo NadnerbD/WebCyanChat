@@ -90,16 +90,16 @@ class TIA_Server(CC_Server):
 	
 	def readTileData(self):
 		try:
-			imgsIn = file(self.prefs["tile_filename"], 'r')
+			imgsIn = open(self.prefs["tile_filename"], 'r')
 		except:
-			imgsOut = file(self.prefs["tile_filename"], 'w')
+			imgsOut = open(self.prefs["tile_filename"], 'w')
 			imgsOut.close()
 		else:
 			self.imageList = imgsIn.read().splitlines()
 			imgsIn.close()
 		# also need to read grid data
 		try:
-			gridIn = file(self.prefs["grid_filename"], 'r')
+			gridIn = open(self.prefs["grid_filename"], 'r')
 		except:
 			pass
 		else:
@@ -108,12 +108,12 @@ class TIA_Server(CC_Server):
 
 	def addNewTile(self, filename):
 		self.imageList.append(filename)
-		imgsOut = file(self.prefs["tile_filename"], 'w')
+		imgsOut = open(self.prefs["tile_filename"], 'w')
 		imgsOut.write('\n'.join(self.imageList))
 		imgsOut.close()
 		self.connections.sendChat(self.chatServer(2), "tileImgList|%d|%s" % (len(self.imageList), '|'.join(self.imageList)))
 
 	def updateGridFile(self):
-		gridOut = file(self.prefs["grid_filename"], 'w')
+		gridOut = open(self.prefs["grid_filename"], 'w')
 		gridOut.write('|'.join(self.tileGrid))
 		gridOut.close()
