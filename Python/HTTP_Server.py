@@ -478,7 +478,7 @@ class HTTP_Server:
 				responseHeaders = [ \
 				        ("Upgrade", "websocket"), \
 			        	("Connection", "Upgrade"), \
-					("Sec-WebSocket-Accept", base64.encodestring(sha1(bytes(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', 'ascii')).digest()).decode('ascii').strip()), \
+					("Sec-WebSocket-Accept", base64.b64encode(sha1(bytes(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', 'ascii')).digest()).decode('ascii')), \
 			        	("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				log(self, "got Sec-WebSocket Version %s from %r" % (headers["sec-websocket-version"], addr), 3)
