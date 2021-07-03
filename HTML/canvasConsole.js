@@ -19,7 +19,6 @@ class Grid {
 	}
 }
 
-var grid = new Grid(0, 0);
 var inverted = false;
 
 function setTheme(theme) {

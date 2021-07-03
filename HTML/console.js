@@ -32,6 +32,7 @@ function init() {
 	document.addEventListener("keydown", keydown, false);
 	document.addEventListener("paste", handlePaste, false);
 	window.addEventListener("resize", handleResize, false);
+	grid = new Grid(0, 0);
 
 	setTheme(localStorage.getItem("consoleTheme") || "default");
 
