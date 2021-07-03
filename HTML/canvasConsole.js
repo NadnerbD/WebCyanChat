@@ -150,13 +150,14 @@ function startDisplay() {
 					F * ((color     ) & 0x1) + "," +
 					F * ((color >> 1) & 0x1) + "," +
 					F * ((color >> 2) & 0x1) + ")";
-				var bgStyle = style.backg == undefined ? toRGB(0x0, bgF) : toRGB(cell.style >> 12, bgF);
-				var fgStyle = style.color == undefined ? toRGB(0x7, fgF) : toRGB(cell.style >>  8, fgF);
+				// non-default colors are inverted for us, we only need to invert the default colors
+				var bgStyle = style.backg == undefined ? toRGB(style.inverted ^ grid.inverted ? 0x7 : 0x0, bgF) : toRGB(cell.style >> 12, bgF);
+				var fgStyle = style.color == undefined ? toRGB(style.inverted ^ grid.inverted ? 0x0 : 0x7, fgF) : toRGB(cell.style >>  8, fgF);
 				// draw bg
-				ctx.fillStyle = style.inverted ^ grid.inverted ? fgStyle : bgStyle;
+				ctx.fillStyle = bgStyle;
 				ctx.fillRect(x * cw, y * ch, cw, ch);
 				// draw fg
-				ctx.fillStyle = style.inverted ^ grid.inverted ? bgStyle : fgStyle;
+				ctx.fillStyle = fgStyle;
 				BlitChar(ctx, cell.glyph, x * cw, y * ch);
 			}
 		}
@@ -168,7 +169,7 @@ function startDisplay() {
 			var cursory = Math.floor(grid.cursor / grid.width);
 			ctx.fillRect(cursorx * cw, cursory * ch, cw, ch);
 			// cursor contains inverted copy of the letter it is occluding
-			ctx.fillStyle = style.inverted ^ grid.inverted ? fgStyle : bgStyle;
+			ctx.fillStyle = bgStyle;
 			BlitChar(ctx, grid.cells[grid.cursor].glyph, cursorx * cw, cursory * ch);
 		}
 	}, 1000 / 60);

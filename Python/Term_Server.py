@@ -170,7 +170,7 @@ class Buffer:
 		while index < max(end + offset, end) and index < len(self):
 			if(index < start + offset or index >= end + offset):
 				self.chars[index] = ' '
-				self.attrs[index] =  Style()
+				self.attrs[index] = Style()
 			else:
 				n = buffer[index - start - offset]
 				self.chars[index] = n[0]
