@@ -57,13 +57,11 @@ function init() {
 			grid.inverted = !!(modes & 0x02);
 			break;
 		case MSG_TITLE:
-			var dc = new TextDecoder("utf-8");
-			document.title = dc.decode(new Uint8Array(msgEvent.data, 1, msgEvent.data.byteLength - 1));
+			document.title = decoder.decode(new Uint8Array(msgEvent.data, 1, msgEvent.data.byteLength - 1));
 			break;
 		case MSG_INIT:
 			var mWidth = dv.getInt16(1);
 			var mHeight = dv.getInt16(3);
-			// console.log("INIT " + mWidth + " " + mHeight);
 			var mCursor = dv.getInt32(5);
 			if(grid.width != mWidth || grid.height != mHeight) {
 				grid = new Grid(mWidth, mHeight);
@@ -82,7 +80,6 @@ function init() {
 		case MSG_DIFF:
 			var mCursor = dv.getInt32(1);
 			var mOffset = 5;
-			// var LOGMSG = [];
 			var chPos = 0;
 			var chStyle = 0;
 			while(mOffset < msgEvent.data.byteLength) {
@@ -100,7 +97,6 @@ function init() {
 					for(var b = 0; b < 4 && (fb & (0x80 >> b)); b++) cLen = b + 1;
 					var chChar = decoder.decode(new Uint8Array(msgEvent.data, mOffset, cLen));
 					mOffset += cLen;
-					// LOGMSG.push("char: " + JSON.stringify([chPos, chStyle, chChar]));
 					grid.cells[chPos].glyph = chChar;
 					grid.cells[chPos].style = chStyle;
 					chPos++;
@@ -110,7 +106,6 @@ function init() {
 					var end = dv.getInt32(mOffset + 4);
 					var offset = dv.getInt32(mOffset + 8);
 					mOffset += 12;
-					// LOGMSG.push("shift: " + JSON.stringify([start, end, offset]));
 					var srcgrid = grid.cells.slice(start, end).map(c => [c.glyph, c.style]);
 					var index = Math.min(start + offset, start);
 					while(index < Math.max(end + offset, end) && index < grid.cells.length) {
@@ -128,7 +123,6 @@ function init() {
 				}
 			}
 			grid.cursor = mCursor;
-			// console.log(LOGMSG);
 			break;
 		}
 	}
