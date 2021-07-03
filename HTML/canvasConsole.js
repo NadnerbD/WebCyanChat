@@ -3,9 +3,7 @@ class Grid {
 		this.width = width;
 		this.height = height;
 		this.cells = new Array(width * height);
-		this.cursor_cell = undefined;
 		this.cursor = -1;
-		this.inverted = false;
 		for(var i = 0; i < width * height; i++) {
 			this.cells[i] = {
 				glyph: ' ',
@@ -13,9 +11,16 @@ class Grid {
 			};
 		}
 	}
+	set inverted(v) {
+		inverted = v;
+	}
+	get inverted() {
+		return inverted;
+	}
 }
 
 var grid = new Grid(0, 0);
+var inverted = false;
 
 function setTheme(theme) {
 }
@@ -149,10 +154,10 @@ function startDisplay() {
 				var bgStyle = style.backg == undefined ? toRGB(0x0, bgF) : toRGB(cell.style >> 12, bgF);
 				var fgStyle = style.color == undefined ? toRGB(0x7, fgF) : toRGB(cell.style >>  8, fgF);
 				// draw bg
-				ctx.fillStyle = style.inverted ? fgStyle : bgStyle;
+				ctx.fillStyle = style.inverted ^ grid.inverted ? fgStyle : bgStyle;
 				ctx.fillRect(x * cw, y * ch, cw, ch);
 				// draw fg
-				ctx.fillStyle = style.inverted ? bgStyle : fgStyle;
+				ctx.fillStyle = style.inverted ^ grid.inverted ? bgStyle : fgStyle;
 				BlitChar(ctx, cell.glyph, x * cw, y * ch);
 			}
 		}
@@ -164,7 +169,7 @@ function startDisplay() {
 			var cursory = Math.floor(grid.cursor / grid.width);
 			ctx.fillRect(cursorx * cw, cursory * ch, cw, ch);
 			// cursor contains inverted copy of the letter it is occluding
-			ctx.fillStyle = style.inverted ? fgStyle : bgStyle;
+			ctx.fillStyle = style.inverted ^ grid.inverted ? fgStyle : bgStyle;
 			BlitChar(ctx, grid.cells[grid.cursor].glyph, cursorx * cw, cursory * ch);
 		}
 	}, 1000 / 60);

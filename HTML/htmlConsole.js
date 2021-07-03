@@ -67,6 +67,9 @@ class Grid {
 	set inverted(value) {
 		document.body.className = value ? "inverted" : "";
 	}
+	get inverted() {
+		return document.body.className == "inverted";
+	}
 }
 
 function setTheme(theme) {

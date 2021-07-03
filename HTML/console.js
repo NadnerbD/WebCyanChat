@@ -53,7 +53,7 @@ function init() {
 		case MSG_MODES:
 			var modes = dv.getUint8(1);
 			appkeymode = modes & 0x01;
-			grid.inverted = modes & 0x02;
+			grid.inverted = !!(modes & 0x02);
 			break;
 		case MSG_TITLE:
 			var dc = new TextDecoder("utf-8");
