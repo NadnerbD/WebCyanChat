@@ -1,30 +1,30 @@
-import sys, termios, tty
-from io import StringIO
+import sys, termios, tty, codecs
+from io import BytesIO
 
 def readToEsc(stream):
-	sio = StringIO()
+	bio = BytesIO()
 	while True:
 		c = stream.read(1)
-		if c == '\033':
-			return sio.getvalue()
-		elif c == '':
+		if c == b'\033':
+			return bio.getvalue()
+		elif c == b'':
 			raise Exception
 		else:
-			sio.write(c)
+			bio.write(c)
 
 if len(sys.argv) == 2:
 	attrs = termios.tcgetattr(sys.stdin)
 	tty.setraw(sys.stdin.fileno())
-	inFile = open(sys.argv[1], 'r')
+	inFile = open(sys.argv[1], 'rb')
 	while True:
 		try:
 			so = readToEsc(inFile)
 		except:
 			termios.tcsetattr(sys.stdin, termios.TCSADRAIN, attrs)
-			print("\r\n\033[31mREACHED END OF OUTPUT\033[m")
+			sys.stdout.buffer.write(b"\r\n\033[31mREACHED END OF OUTPUT\033[m\r\n")
 			break
-		sys.stdout.write(so.decode('string-escape'))
-		sys.stdout.flush()
+		sys.stdout.buffer.write(codecs.escape_decode(so)[0])
+		sys.stdout.buffer.flush()
 		# skip the user input
 		readToEsc(inFile)
 		inFile.read(2)
