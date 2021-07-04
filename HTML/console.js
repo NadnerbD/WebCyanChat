@@ -15,18 +15,26 @@ var colors = [
 ];
 
 function unpackStyle(value) {
+	var fgColorMode = !!(Number(value >> 5n) & 0x01);
+	var bgColorMode = !!(Number(value >> 6n) & 0x01);
+	var color = Number(value >>  8n) & 0xFFFFFF;
+	var backg = Number(value >> 32n) & 0xFFFFFF;
 	return {
-		bold:              value        & 0x01 ,
-		bgBold:           (value >>  1) & 0x01 ,
-		underline:        (value >>  2) & 0x01 ,
-		italic:           (value >>  3) & 0x01 ,
-		inverted:         (value >>  4) & 0x01 ,
-		color:     colors[(value >>  8) & 0x0F],
-		backg:     colors[(value >> 12) & 0x0F]
+		bold:             Number(value       ) & 0x01,
+		bgBold:           Number(value >>  1n) & 0x01,
+		underline:        Number(value >>  2n) & 0x01,
+		italic:           Number(value >>  3n) & 0x01,
+		inverted:         Number(value >>  4n) & 0x01,
+		fgColorMode,
+		bgColorMode,
+		color: fgColorMode ? "#" + color.toString(16).padStart(6, "0") : colors[color],
+		backg: bgColorMode ? "#" + backg.toString(16).padStart(6, "0") : colors[backg],
+		rawc: color,
+		rawb: backg
 	};
 }
 // "default" color is 9
-var blank_style = (9 << 8) | (9 << 12);
+var blank_style = (9n << 8n) | (9n << 32n);
 
 function init() {
 	document.addEventListener("keydown", keydown, false);
@@ -66,10 +74,10 @@ function init() {
 			if(grid.width != mWidth || grid.height != mHeight) {
 				grid = new Grid(mWidth, mHeight);
 			}
-			var charGrid = decoder.decode(new Uint8Array(msgEvent.data, 9 + grid.width * grid.height * 2));
+			var charGrid = decoder.decode(new Uint8Array(msgEvent.data, 9 + grid.width * grid.height * 8));
 			for(var i = 0; i < grid.width * grid.height; i++) {
 				grid.cells[i].glyph = charGrid[i];
-				grid.cells[i].style = dv.getUint16(9 + 2 * i);
+				grid.cells[i].style = dv.getBigUint64(9 + 8 * i);
 			}
 			grid.cursor = mCursor;
 			if(firstInit) {
@@ -89,8 +97,8 @@ function init() {
 					var chPos = dv.getInt32(mOffset);
 					mOffset += 4;
 				case DIFF_NEXT_CHAR:
-					var chStyle = dv.getUint16(mOffset);
-					mOffset += 2;
+					var chStyle = dv.getBigUint64(mOffset);
+					mOffset += 8;
 				case DIFF_NEXT_CHAR_NOSTYLE:
 					var fb = dv.getUint8(mOffset);
 					var cLen = 1;

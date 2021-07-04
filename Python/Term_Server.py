@@ -27,49 +27,85 @@ DIFF_SHIFT = 1
 DIFF_NEXT_CHAR = 2
 DIFF_NEXT_CHAR_NOSTYLE = 3
 
+def rgbFrom256(value):
+	if(value < 8):
+		return ( \
+			((value >> 2 & 1) * 127)       | \
+			((value >> 1 & 1) * 127) << 8  | \
+			((value >> 0 & 1) * 127) << 16   \
+		)
+	elif(value < 16):
+		return ( \
+			((value >> 2 & 1) * 255)       | \
+			((value >> 1 & 1) * 255) << 8  | \
+			((value >> 0 & 1) * 255) << 16   \
+		)
+	elif(value < 232):
+		value -= 16
+		return (
+			((value // 36) % 6 * 51)       | \
+			((value //  6) % 6 * 51) << 8  | \
+			((value      ) % 6 * 51) << 16   \
+		)
+	else:
+		value -= 232
+		return (
+			(8 + 10 * value)       | \
+			(8 + 10 * value) << 8  | \
+			(8 + 10 * value) << 16   \
+		)
+
 class Style:
 	# this object represents the font style of a single character
 	# it bit-packs 4 attributes (fgColor, bgColor, bold, underline) into a one byte
 	# representation
 	def __init__(self, init=None):
+		# Color modes: 0 default/ASNI, 1 24 Bit RGB
 		if(init):
 			self.bold = init.bold
 			self.bgBold = init.bgBold
 			self.italic = init.italic
 			self.underline = init.underline
+			self.inverted = init.inverted
+			self.fgColorMode = init.fgColorMode
+			self.bgColorMode = init.bgColorMode
 			self.fgColor = init.fgColor
 			self.bgColor = init.bgColor
-			self.inverted = init.inverted
 		else:
 			self.bold = False
 			self.bgBold = False
 			self.italic = False
 			self.underline = False
+			self.inverted = False
+			self.fgColorMode = 0
+			self.bgColorMode = 0
 			self.fgColor = 9
 			self.bgColor = 9
-			self.inverted = False
 
 	def value(self):
-		# bbbbffff---iiubb
 		if(not self.inverted):
 			return ( \
-				(self.bold      & 0x01)       | \
-				(self.bgBold    & 0x01) << 1  | \
-				(self.underline & 0x01) << 2  | \
-				(self.italic    & 0x01) << 3  | \
-				(self.inverted  & 0x01) << 4  | \
-				(self.fgColor   & 0x0F) << 8  | \
-				(self.bgColor   & 0x0F) << 12   \
+				(self.bold        & 0x01)           | \
+				(self.bgBold      & 0x01) << 1      | \
+				(self.underline   & 0x01) << 2      | \
+				(self.italic      & 0x01) << 3      | \
+				(self.inverted    & 0x01) << 4      | \
+				(self.fgColorMode & 0x01) << 5      | \
+				(self.bgColorMode & 0x01) << 6      | \
+				(self.fgColor     & 0xFFFFFF) << 8  | \
+				(self.bgColor     & 0xFFFFFF) << 32   \
 			)
 		else:
 			return ( \
-				(self.bold      & 0x01)       | \
-				(self.bgBold    & 0x01) << 1  | \
-				(self.underline & 0x01) << 2  | \
-				(self.italic    & 0x01) << 3  | \
-				(self.inverted  & 0x01) << 4  | \
-				(self.bgColor   & 0x0F) << 8  | \
-				(self.fgColor   & 0x0F) << 12   \
+				(self.bold        & 0x01)           | \
+				(self.bgBold      & 0x01) << 1      | \
+				(self.underline   & 0x01) << 2      | \
+				(self.italic      & 0x01) << 3      | \
+				(self.inverted    & 0x01) << 4      | \
+				(self.bgColorMode & 0x01) << 5      | \
+				(self.fgColorMode & 0x01) << 6      | \
+				(self.bgColor     & 0xFFFFFF) << 8  | \
+				(self.fgColor     & 0xFFFFFF) << 32   \
 			)
 
 	def update(self, value):
@@ -98,15 +134,19 @@ class Style:
 			num = value % 10
 			if(cmd == 3):
 				self.fgColor = num
+				self.fgColorMode = 0
 			elif(cmd == 4):
 				self.bgBold = False
 				self.bgColor = num
+				self.bgColorMode = 0
 			elif(cmd == 9):
 				self.bold = True
 				self.fgColor = num
+				self.fgColorMode = 0
 			elif(cmd == 10):
 				self.bgBold = True
 				self.bgColor = num
+				self.bgColorMode = 0
 
 class Buffer:
 	def __init__(self, width=80, height=24):
@@ -128,14 +168,15 @@ class Buffer:
 		self.attrs[i] = d[1]
 		# byte type, int pos, short style, utf-8 data
 		# log(self, repr((d[0], d[1].value())))
-		if i == self.lastChangePos + 1 and d[1].value() == self.lastChangeStyle:
+		newStyle = d[1].value()
+		if i == self.lastChangePos + 1 and newStyle == self.lastChangeStyle:
 			self.changeStream.append(struct.pack('!B', DIFF_NEXT_CHAR_NOSTYLE) + d[0].encode('utf-8'))
 		elif i == self.lastChangePos + 1:
-			self.changeStream.append(struct.pack('!BH', DIFF_NEXT_CHAR, d[1].value()) + d[0].encode('utf-8'))
+			self.changeStream.append(struct.pack('!BQ', DIFF_NEXT_CHAR, newStyle) + d[0].encode('utf-8'))
 		else:
-			self.changeStream.append(struct.pack('!BiH', DIFF_CHAR, i, d[1].value()) + d[0].encode('utf-8'))
+			self.changeStream.append(struct.pack('!BiQ', DIFF_CHAR, i, newStyle) + d[0].encode('utf-8'))
 		self.lastChangePos = i
-		self.lastChangeStyle = d[1].value()
+		self.lastChangeStyle = newStyle
 
 	def __getitem__(self, i):
 		if type(i) == slice:
@@ -188,7 +229,7 @@ class Buffer:
 			self.size[0],
 			self.size[1],
 			(showCursor * self.pos) + (-1 * (not showCursor))
-		) + b''.join([struct.pack('!H', a.value()) for a in self.attrs]) + ''.join(self.chars).encode('utf-8')
+		) + b''.join([struct.pack('!Q', a.value()) for a in self.attrs]) + ''.join(self.chars).encode('utf-8')
 
 	def diffMsg(self, showCursor):
 		# byte type, int pos, [items]
@@ -637,8 +678,21 @@ class Terminal:
 	def charAttributes(self, args):
 		if(len(args) == 0):
 			self.attrs.update(0)
-		for arg in args:
-			self.attrs.update(arg)
+		elif(len(args) == 3 and args[0:2] == [38, 5]): # 256 color fg set
+			self.attrs.fgColorMode = 1
+			self.attrs.fgColor = rgbFrom256(args[2])
+		elif(len(args) == 3 and args[0:2] == [48, 5]): # 256 color bg set
+			self.attrs.bgColorMode = 1
+			self.attrs.bgColor = rgbFrom256(args[2])
+		elif(len(args) == 5 and args[0:2] == [38, 2]): # 24 bit color fg set
+			self.attrs.fgColorMode = 1
+			self.attrs.fgColor = args[2] | args[3] << 8 | args[4] << 16
+		elif(len(args) == 5 and args[0:2] == [48, 2]): # 24 bit color bg set
+			self.attrs.bgColorMode = 1
+			self.attrs.bgColor = args[2] | args[3] << 8 | args[4] << 16
+		else:
+			for arg in args:
+				self.attrs.update(arg)
 
 	def setG0CharSet(self, args):
 		self.charmaps[0].setMode(args[0])

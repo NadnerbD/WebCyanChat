@@ -1,6 +1,7 @@
 class Cell {
 	constructor(cell) {
 		this.elem = cell;
+		this._style = blank_style;
 	}
 	set glyph(g) {
 		this.elem.firstChild.data = g;
@@ -9,24 +10,33 @@ class Cell {
 		return this.elem.firstChild.data;
 	}
 	set style(v) {
-		if(typeof(v) == 'string') {
-			this.elem.className = v;
-		}else if(v == blank_style) {
-			this.elem.className = '';
-		}else{
-			var style = unpackStyle(v);
-			for(var s in style) {
-				for(var c of this.elem.classList) if(c.startsWith(s)) this.elem.classList.remove(c);
-				if(typeof(style[s]) == "number") {
-					if(style[s]) this.elem.classList.add(s);
-				}else if(style[s] != undefined) {
-					this.elem.classList.add(s + "-" + style[s]);
-				}
+		this._style = v;
+		var hasCursor = this.elem.classList.contains('cursor');
+		this.elem.className = '';
+		this.elem.style.color = '';
+		this.elem.style.backgroundColor = '';
+		var style = unpackStyle(v);
+		for(var s in style) {
+			if(style[s] === 1) {
+				if(style[s]) this.elem.classList.add(s);
 			}
+		}
+		if(style.fgColorMode == 1) {
+			this.elem.style.color = style.color;
+		}else if(style.color) {
+			this.elem.classList.add('color-' + style.color);
+		}
+		if(style.bgColorMode == 1) {
+			this.elem.style.backgroundColor = style.backg;
+		}else if(style.backg) {
+			this.elem.classList.add('backg-' + style.backg);
+		}
+		if(hasCursor) {
+			this.elem.classList.add('cursor');
 		}
 	}
 	get style() {
-		return this.elem.className.replace('cursor', '');
+		return this._style;
 	}
 }
 

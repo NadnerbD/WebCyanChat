@@ -151,8 +151,8 @@ function startDisplay() {
 					F * ((color >> 1) & 0x1) + "," +
 					F * ((color >> 2) & 0x1) + ")";
 				// non-default colors are inverted for us, we only need to invert the default colors
-				var bgStyle = style.backg == undefined ? toRGB(style.inverted ^ grid.inverted ? 0x7 : 0x0, bgF) : toRGB(cell.style >> 12, bgF);
-				var fgStyle = style.color == undefined ? toRGB(style.inverted ^ grid.inverted ? 0x0 : 0x7, fgF) : toRGB(cell.style >>  8, fgF);
+				var fgStyle = style.fgColorMode ? style.color : style.color == undefined ? toRGB(style.inverted ^ grid.inverted ? 0x0 : 0x7, fgF) : toRGB(style.rawc, fgF);
+				var bgStyle = style.bgColorMode ? style.backg : style.backg == undefined ? toRGB(style.inverted ^ grid.inverted ? 0x7 : 0x0, bgF) : toRGB(style.rawb, bgF);
 				// draw bg
 				ctx.fillStyle = bgStyle;
 				ctx.fillRect(x * cw, y * ch, cw, ch);
