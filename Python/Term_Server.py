@@ -779,8 +779,9 @@ class Term_Server:
 
 	def authorize(self, headers):
 		try:
-			return base64.b64decode(headers['authorization'].split(' ')[1]).decode('utf-8') == self.prefs['term_pass']
-		except:
+			return base64.b64decode(bytes(headers['authorization'].split(' ')[1], 'utf-8')).decode('utf-8') == self.prefs['term_pass']
+		except Exception as e:
+			log(self, "Error in authorize: %s" % e)
 			return False
 	
 	def start(self):
