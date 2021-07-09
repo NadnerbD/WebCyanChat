@@ -15,16 +15,16 @@ var colors = [
 ];
 
 function unpackStyle(value) {
-	var fgColorMode = !!(Number(value >> 5n) & 0x01);
-	var bgColorMode = !!(Number(value >> 6n) & 0x01);
+	var fgColorMode = Number(value >> 5n) & 0x01;
+	var bgColorMode = Number(value >> 6n) & 0x01;
 	var color = Number(value >>  8n) & 0xFFFFFF;
 	var backg = Number(value >> 32n) & 0xFFFFFF;
 	return {
-		bold:             Number(value       ) & 0x01,
-		bgBold:           Number(value >>  1n) & 0x01,
-		underline:        Number(value >>  2n) & 0x01,
-		italic:           Number(value >>  3n) & 0x01,
-		inverted:         Number(value >>  4n) & 0x01,
+		bold:             !!(Number(value       ) & 0x01),
+		bgBold:           !!(Number(value >>  1n) & 0x01),
+		underline:        !!(Number(value >>  2n) & 0x01),
+		italic:           !!(Number(value >>  3n) & 0x01),
+		inverted:         !!(Number(value >>  4n) & 0x01),
 		fgColorMode,
 		bgColorMode,
 		color: fgColorMode ? "#" + color.toString(16).padStart(6, "0") : colors[color],

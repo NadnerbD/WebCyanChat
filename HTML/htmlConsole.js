@@ -17,8 +17,8 @@ class Cell {
 		this.elem.style.backgroundColor = '';
 		var style = unpackStyle(v);
 		for(var s in style) {
-			if(style[s] === 1) {
-				if(style[s]) this.elem.classList.add(s);
+			if(style[s] === true) {
+				this.elem.classList.add(s);
 			}
 		}
 		if(style.fgColorMode == 1) {
