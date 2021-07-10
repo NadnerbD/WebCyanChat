@@ -43,9 +43,9 @@ def rgbFrom256(value):
 	elif(value < 232):
 		value -= 16
 		return (
-			((value // 36) % 6 * 51)       | \
+			((value      ) % 6 * 51)       | \
 			((value //  6) % 6 * 51) << 8  | \
-			((value      ) % 6 * 51) << 16   \
+			((value // 36) % 6 * 51) << 16   \
 		)
 	else:
 		value -= 232
