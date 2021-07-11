@@ -1,5 +1,6 @@
 from Logger import log
 from Utils import readTo, parseToDict
+from hashlib import md5, sha1
 from io import StringIO
 
 import threading
@@ -10,15 +11,6 @@ import urllib.parse
 import time
 import ssl
 import re
-try:
-	import hashlib
-	md5 = hashlib.md5
-	sha1 = hashlib.sha1
-except:
-	import md5
-	import sha
-	md5 = md5.md5
-	sha1 = sha.sha
 
 def recvall(sock, size):
 	data = bytes()
@@ -476,10 +468,10 @@ class HTTP_Server:
 				return "WebSocket"
 			elif("sec-websocket-version" in headers and headers["sec-websocket-version"] in ["8", "13"] and (headers["sec-websocket-protocol"], resource) in self.sessionQueues): # http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-08
 				responseHeaders = [ \
-				        ("Upgrade", "websocket"), \
-			        	("Connection", "Upgrade"), \
+					("Upgrade", "websocket"), \
+					("Connection", "Upgrade"), \
 					("Sec-WebSocket-Accept", base64.b64encode(sha1(bytes(headers["sec-websocket-key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', 'ascii')).digest()).decode('ascii')), \
-			        	("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
+					("Sec-WebSocket-Protocol", headers["sec-websocket-protocol"]), \
 				]
 				log(self, "got Sec-WebSocket Version %s from %r" % (headers["sec-websocket-version"], addr), 3)
 				self.writeHTTP(sock, 101, {}, None, responseHeaders)
