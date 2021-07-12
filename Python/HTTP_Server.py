@@ -11,6 +11,7 @@ import urllib.parse
 import time
 import ssl
 import re
+import os
 
 def recvall(sock, size):
 	data = bytes()
@@ -31,6 +32,7 @@ class HTTP_Server:
 		101: "Switching Protocols", \
 		200: "OK", \
 		201: "Created", \
+		206: "Partial Content", \
 		#301: "Moved Permanently", \
 		302: "Found", \
 		400: "Bad Request", \
@@ -65,6 +67,7 @@ class HTTP_Server:
 		"jpeg": "image/jpeg", \
 		"png": "image/png", \
 		"gif": "image/gif", \
+		"mkv": "video/x-matroska", \
 	}
 	class sessionList:
 		def __init__(self):
@@ -412,7 +415,7 @@ class HTTP_Server:
 			if(extension in self.mimeTypes):
 				mimeType = self.mimeTypes[extension]
 			else:
-				log(self, "denied request for %s" % resource, 3)
+				log(self, "denied request for %s (unknown filetype)" % resource, 3)
 				self.writeHTTP(sock, 403)
 				return
 		else:
@@ -484,13 +487,40 @@ class HTTP_Server:
 		elif(method == "GET"):
 			try:
 				resourceFile = open("%s/%s" % (self.webRoot, resource), "rb")
-				resourceData = resourceFile.read()
-				resourceFile.close()
-			except:
+			except IOError:
 				self.writeHTTP(sock, 404)
 				log(self, "couldn't find %s" % resource, 3)
 				return
-			self.writeHTTP(sock, 200, {"Content-Type": mimeType}, resourceData)
+			if('range' in headers):
+				# content-range requests allow clients to get partial files
+				log(self, "Range request: %s" % headers['range'])
+				unit, range = headers['range'].split('=')
+				if(unit != 'bytes'):
+					log(self, 'Unknown Content-Range Unit: %s' % unit)
+					self.writeHTTP(sock, 400, {}, "Unknown Range Unit")
+					return
+				start, end = range.split('-')
+				# get the size of the file
+				resourceFile.seek(0, os.SEEK_END)
+				size = resourceFile.tell()
+				if(start == ''):
+					# -n gets the last n bytes
+					start = size - int(end)
+					end = size - 1
+				elif(end == ''):
+					# n- gets all bytes after n
+					start = int(start)
+					end = size - 1
+				else:
+					start = int(start)
+					end = int(end)
+				resourceFile.seek(start)
+				resourceData = resourceFile.read(end - start + 1)
+				self.writeHTTP(sock, 206, {"Content-Type": mimeType, "Content-Range": "bytes %d-%d/%d" % (start, end, size)}, resourceData)
+			else:
+				resourceData = resourceFile.read()
+				self.writeHTTP(sock, 200, {"Content-Type": mimeType}, resourceData)
+			resourceFile.close()
 			log(self, "served %s" % resource, 3)
 		elif(method == "POST" and resource == "/file-upload"):
 			if("authkey" in getOptions and self.isAuthorized(getOptions["authkey"]) > 1):
