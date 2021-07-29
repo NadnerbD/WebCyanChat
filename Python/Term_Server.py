@@ -664,7 +664,7 @@ class Terminal:
 			pos = self.getPos()
 			rep = (pos[1] + 1, pos[0] + 1)
 			log(self, "Cursor position report: %r" % (rep,), 2)
-			return b"\033[%d;%dR" % rep
+			return bytes("\033[%d;%dR" % rep, 'ascii')
 
 	def OSCommand(self, args):
 		if(len(args) > 1 and args[0] == 0):
