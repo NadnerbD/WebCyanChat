@@ -126,8 +126,7 @@ class CC_Server(object):
 		
 		def sendWelcome(self, target, message):
 			for line in message:
-				if(len(line) > 0):
-					target.send("40|%d%s" % (target.version, line))
+				target.send("40|%d%s" % (target.version, line))
 		
 		def sendIgnore(self, sender, target):
 			self.accessLock.acquire()
@@ -343,7 +342,7 @@ class CC_Server(object):
 		if(not filename):
 			filename = self.prefs["welcome_file"]
 		welcomeFile = open(filename, 'r')
-		self.welcomeMessage = readTo(welcomeFile, "\n\n", ['\r'])
+		self.welcomeMessage = readTo(welcomeFile, "\n\n\n", ['\r'])[0:-3]
 		welcomeParams = welcomeFile.read()
 		welcomeFile.close()
 		welcomeParams = parseToDict(welcomeParams, ':', '\n')
