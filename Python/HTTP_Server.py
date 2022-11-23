@@ -63,10 +63,12 @@ class HTTP_Server:
 		"ico": "image/x-icon", \
 		"js": "text/javascript", \
 		"css": "text/css", \
+		"txt": "text/plain", \
 		"jpg": "image/jpeg", \
 		"jpeg": "image/jpeg", \
 		"png": "image/png", \
 		"gif": "image/gif", \
+		"bmp": "image/bmp", \
 		"mkv": "video/x-matroska", \
 	}
 	class sessionList:
